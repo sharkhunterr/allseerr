@@ -5,10 +5,8 @@ import {
   MediaType,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
-import type Media from '@server/entity/Media';
 import { GameMedia } from '@server/entity/GameMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
-import notificationManager, { Notification } from '@server/lib/notifications';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -212,19 +210,6 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
 
     await requestRepo.save(request);
 
-    notificationManager.sendNotification(Notification.MEDIA_PENDING, {
-      subject: `New Game Request: ${body.title} (${body.platformName})`,
-      message: `${req.user!.displayName} requested "${body.title}" for ${body.platformName}. Games are added manually.`,
-      media: {
-        mediaType: MediaType.GAME,
-        tmdbId: body.igdbId,
-        tvdbId: 0,
-        status: MediaStatus.PENDING,
-        status4k: MediaStatus.UNKNOWN,
-      } as unknown as Media,
-      request,
-    });
-
     logger.info(`Game request created: ${body.title} (${body.platformName})`, {
       label: 'game',
       requestId: request.id,
@@ -279,35 +264,7 @@ gameRoutes.put(
 
     if (body.status === MediaRequestStatus.APPROVED) {
       // No download dispatch — game ROM workflow is manual (FR-017, FR-034)
-      notificationManager.sendNotification(Notification.MEDIA_APPROVED, {
-        subject: `Approved (awaiting addition): Game request`,
-        message: body.adminNote
-          ? `Your game request has been approved. Admin note: ${body.adminNote}`
-          : 'Your game request has been approved. The game will be added manually.',
-        media: {
-          mediaType: MediaType.GAME,
-          tmdbId: 0,
-          tvdbId: 0,
-          status: MediaStatus.PENDING,
-          status4k: MediaStatus.UNKNOWN,
-        },
-        request,
-      });
     } else if (body.status === MediaRequestStatus.DECLINED) {
-      notificationManager.sendNotification(Notification.MEDIA_DECLINED, {
-        subject: 'Game request declined',
-        message: body.reason
-          ? `Your game request was declined: ${body.reason}`
-          : 'Your game request was declined.',
-        media: {
-          mediaType: MediaType.GAME,
-          tmdbId: 0,
-          tvdbId: 0,
-          status: MediaStatus.UNKNOWN,
-          status4k: MediaStatus.UNKNOWN,
-        },
-        request,
-      });
     }
 
     return res.status(200).json(request);

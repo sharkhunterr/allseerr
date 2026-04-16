@@ -8,10 +8,6 @@ import { getRepository } from '@server/datasource';
 import { AudiobookMedia } from '@server/entity/AudiobookMedia';
 import { BookMedia } from '@server/entity/BookMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
-import type Media from '@server/entity/Media';
-import notificationManager, {
-  Notification,
-} from '@server/lib/notifications';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import { BookDownloadService } from '@server/lib/services/BookDownloadService';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -245,20 +241,6 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
 
     await requestRepo.save(request);
 
-    // Send notification
-    notificationManager.sendNotification(Notification.MEDIA_PENDING, {
-      subject: `New ${isBook ? 'Book' : 'Audiobook'} Request: ${body.title}`,
-      message: `${req.user!.displayName} requested "${body.title}" by ${body.authorName}`,
-      media: {
-        mediaType: body.mediaType,
-        tmdbId: 0,
-        tvdbId: 0,
-        status: MediaStatus.PENDING,
-        status4k: MediaStatus.UNKNOWN,
-      } as unknown as Media,
-      request,
-    });
-
     // Auto-approval check
     const autoApprovePermission = isBook
       ? Permission.AUTO_APPROVE
@@ -275,22 +257,6 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
       await downloadService.dispatch(
         media as BookMedia & AudiobookMedia,
         body.mediaType
-      );
-
-      notificationManager.sendNotification(
-        Notification.MEDIA_AUTO_APPROVED,
-        {
-          subject: `Auto-approved: ${body.title}`,
-          message: `"${body.title}" by ${body.authorName} was auto-approved`,
-          media: {
-            mediaType: body.mediaType,
-            tmdbId: 0,
-            tvdbId: 0,
-            status: MediaStatus.PROCESSING,
-            status4k: MediaStatus.UNKNOWN,
-          } as unknown as Media,
-          request,
-        }
       );
     }
 
@@ -400,33 +366,7 @@ bookRoutes.put(
         const downloadService = new BookDownloadService();
         await downloadService.dispatch(media, mediaType);
       }
-      notificationManager.sendNotification(Notification.MEDIA_APPROVED, {
-        subject: `Approved: ${title}`,
-        message: `"${title}" has been approved`,
-        media: {
-          mediaType,
-          tmdbId: 0,
-          tvdbId: 0,
-          status: MediaStatus.PROCESSING,
-          status4k: MediaStatus.UNKNOWN,
-        } as unknown as Media,
-        request,
-      });
     } else if (body.status === MediaRequestStatus.DECLINED) {
-      notificationManager.sendNotification(Notification.MEDIA_DECLINED, {
-        subject: `Declined: ${title}`,
-        message: body.reason
-          ? `"${title}" was declined: ${body.reason}`
-          : `"${title}" was declined`,
-        media: {
-          mediaType,
-          tmdbId: 0,
-          tvdbId: 0,
-          status: MediaStatus.UNKNOWN,
-          status4k: MediaStatus.UNKNOWN,
-        } as unknown as Media,
-        request,
-      });
     }
 
     logger.info(
