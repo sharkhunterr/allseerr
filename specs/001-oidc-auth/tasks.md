@@ -4,8 +4,8 @@
 
 ## Phase 1 — Setup & Dependencies
 
-- [ ] T001 [P] Install `openid-client` dependency via pnpm. Run `pnpm add openid-client` and verify it appears in `package.json` dependencies. File: `package.json`
-- [ ] T002 [P] Install `openid-client` type definitions if needed (check if the package ships its own types; if not, `pnpm add -D @types/openid-client`). File: `package.json`
+- [x] T001 [P] Install `openid-client` dependency via pnpm. Run `pnpm add openid-client` and verify it appears in `package.json` dependencies. File: `package.json`
+- [x] T002 [P] Install `openid-client` type definitions if needed (check if the package ships its own types; if not, `pnpm add -D @types/openid-client`). File: `package.json`
 
 ## Phase 2 — Foundation (Data Model & Types)
 
