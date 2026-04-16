@@ -36,6 +36,7 @@ import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
+import { getMusicRoutes } from './music';
 import personRoutes from './person';
 import requestRoutes from './request';
 import searchRoutes from './search';
@@ -172,6 +173,12 @@ router.use('/service', isAuthenticated(), serviceRoutes);
 router.use('/issue', isAuthenticated(), issueRoutes);
 router.use('/issueComment', isAuthenticated(), issueCommentRoutes);
 router.use('/auth', authRoutes);
+
+// Music routes: conditionally registered based on ENABLE_MUSIC flag (FR-014)
+const musicRouter = getMusicRoutes();
+if (musicRouter) {
+  router.use('/music', musicRouter);
+}
 router.use(
   '/overrideRule',
   isAuthenticated(Permission.ADMIN),
