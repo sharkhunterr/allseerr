@@ -239,7 +239,9 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
 
       // add canRemove prop if user has permission
       if (req.user?.hasPermission(Permission.MANAGE_REQUESTS)) {
-        mappedRequests = mappedRequests.map((r) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mappedRequests = (mappedRequests as any[]).map((r: any) => {
+          if (!r) return r;
           switch (r.type) {
             case MediaType.MOVIE: {
               return {
@@ -263,6 +265,8 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
                 ),
               };
             }
+            default:
+              return { ...r, canRemove: true };
           }
         });
       }
@@ -274,7 +278,8 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
           results: requestCount,
           page: Math.ceil(skip / pageSize) + 1,
         },
-        results: mappedRequests,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        results: mappedRequests as any,
         serviceErrors: {
           radarr: radarrServers
             .filter((s) => !s.profiles)

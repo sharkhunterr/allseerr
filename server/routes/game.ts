@@ -34,7 +34,7 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
   }
 
   const settings = getSettings();
-  const igdbSettings = (settings as Record<string, unknown>).igdb as
+  const igdbSettings = (settings as unknown as Record<string, unknown>).igdb as
     | { clientId: string; clientSecret: string }
     | undefined;
 
@@ -277,7 +277,7 @@ gameRoutes.put(
  */
 gameRoutes.get('/platforms', isAuthenticated(), async (_req, res) => {
   const settings = getSettings();
-  const igdbSettings = (settings as Record<string, unknown>).igdb as
+  const igdbSettings = (settings as unknown as Record<string, unknown>).igdb as
     | { clientId: string; clientSecret: string }
     | undefined;
 
