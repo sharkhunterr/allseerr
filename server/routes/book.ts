@@ -8,6 +8,7 @@ import { getRepository } from '@server/datasource';
 import { AudiobookMedia } from '@server/entity/AudiobookMedia';
 import { BookMedia } from '@server/entity/BookMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
+import type Media from '@server/entity/Media';
 import notificationManager, {
   Notification,
 } from '@server/lib/notifications';
@@ -227,7 +228,8 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           status: MediaStatus.PENDING,
         });
       }
-      await mediaRepo.save(media as BookMedia & AudiobookMedia);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await mediaRepo.save(media as any);
     }
 
     // Create request
@@ -253,7 +255,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
         tvdbId: 0,
         status: MediaStatus.PENDING,
         status4k: MediaStatus.UNKNOWN,
-      },
+      } as unknown as Media,
       request,
     });
 
@@ -286,7 +288,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
             tvdbId: 0,
             status: MediaStatus.PROCESSING,
             status4k: MediaStatus.UNKNOWN,
-          },
+          } as unknown as Media,
           request,
         }
       );
@@ -407,7 +409,7 @@ bookRoutes.put(
           tvdbId: 0,
           status: MediaStatus.PROCESSING,
           status4k: MediaStatus.UNKNOWN,
-        },
+        } as unknown as Media,
         request,
       });
     } else if (body.status === MediaRequestStatus.DECLINED) {
@@ -422,7 +424,7 @@ bookRoutes.put(
           tvdbId: 0,
           status: MediaStatus.UNKNOWN,
           status4k: MediaStatus.UNKNOWN,
-        },
+        } as unknown as Media,
         request,
       });
     }

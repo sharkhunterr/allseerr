@@ -5,6 +5,7 @@ import {
   MediaType,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import type Media from '@server/entity/Media';
 import { GameMedia } from '@server/entity/GameMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import notificationManager, { Notification } from '@server/lib/notifications';
@@ -220,7 +221,7 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
         tvdbId: 0,
         status: MediaStatus.PENDING,
         status4k: MediaStatus.UNKNOWN,
-      },
+      } as unknown as Media,
       request,
     });
 
