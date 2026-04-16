@@ -137,8 +137,8 @@ Legend:
 
 ### Book Availability Scanner
 
-- [ ] T350 [US2] Create `BookAvailabilityScanner` in `server/lib/services/BookAvailabilityScanner.ts` — scheduled job that runs per-instance at `scanIntervalSeconds` interval; queries all enabled `LibraryServerInstance` entities; for each instance, loads all `BookMedia`/`AudiobookMedia` with status != AVAILABLE that have pending/approved requests; calls `BookMatchingService.match()` for each; on match: updates `BookMedia.status` to `AVAILABLE`, sets `libraryServerId`, `libraryServerUrl`, `libraryServerInstanceId`; updates `LibraryServerInstance.lastScan` timestamp (FR-018, FR-030, FR-042)
-- [ ] T351 [US2] Register `BookAvailabilityScanner` as a scheduled job in `server/index.ts` or appropriate job scheduler — start on server boot; respect per-instance `scanIntervalSeconds`; log scan results
+- [x] T350 [US2] Create `BookAvailabilityScanner` in `server/lib/services/BookAvailabilityScanner.ts` — scheduled job that runs per-instance at `scanIntervalSeconds` interval; queries all enabled `LibraryServerInstance` entities; for each instance, loads all `BookMedia`/`AudiobookMedia` with status != AVAILABLE that have pending/approved requests; calls `BookMatchingService.match()` for each; on match: updates `BookMedia.status` to `AVAILABLE`, sets `libraryServerId`, `libraryServerUrl`, `libraryServerInstanceId`; updates `LibraryServerInstance.lastScan` timestamp (FR-018, FR-030, FR-042)
+- [x] T351 [US2] Register `BookAvailabilityScanner` as a scheduled job in `server/index.ts` or appropriate job scheduler — start on server boot; respect per-instance `scanIntervalSeconds`; log scan results
 
 ### Settings Routes for Library Servers
 
@@ -151,7 +151,7 @@ Legend:
 
 ### Availability Route
 
-- [ ] T370 [US2] Create `GET /api/v1/book/:id/availability` route in `server/routes/book.ts` — checks all configured library servers for the given OpenLibrary work key; returns `{ available, servers[] }` per contracts/book-api.md (FR-005, FR-019)
+- [x] T370 [US2] Create `GET /api/v1/book/:id/availability` route in `server/routes/book.ts` — checks all configured library servers for the given OpenLibrary work key; returns `{ available, servers[] }` per contracts/book-api.md (FR-005, FR-019)
 
 ---
 
@@ -159,19 +159,19 @@ Legend:
 
 ### Request Submission
 
-- [ ] T400 [US4] Create `POST /api/v1/book/request` route in `server/routes/book.ts` — accepts `BookRequestBody` per contracts/book-api.md; validates required fields (`mediaType`, `openLibraryId`, `title`, `authorName`, `foreignBookId`); permission check: `REQUEST` or `REQUEST_BOOK` for books, `REQUEST` or `REQUEST_AUDIOBOOK` for audiobooks (FR-031); duplicate detection via `foreignBookId` lookup in `BookMedia`/`AudiobookMedia` + existing pending/approved requests — return 409 with `existingRequestId` (FR-010); create or reuse `BookMedia`/`AudiobookMedia` entity; create `MediaRequest` with `type` set to BOOK or AUDIOBOOK and link via `bookMedia`/`audiobookMedia` relation (FR-008, FR-009)
-- [ ] T401 [US4] [US5] Implement auto-approval logic in book request route — check `AUTO_APPROVE_BOOK`/`AUTO_APPROVE_AUDIOBOOK` permission on requesting user; if auto-approved, set status to APPROVED and call `BookDownloadService.dispatch()` immediately (FR-016, FR-033)
-- [ ] T402 [US4] Implement request quota enforcement for books/audiobooks — extend existing quota logic pattern from `MediaRequest.request()` to count book and audiobook requests separately per user (FR-032)
+- [x] T400 [US4] Create `POST /api/v1/book/request` route in `server/routes/book.ts` — accepts `BookRequestBody` per contracts/book-api.md; validates required fields (`mediaType`, `openLibraryId`, `title`, `authorName`, `foreignBookId`); permission check: `REQUEST` or `REQUEST_BOOK` for books, `REQUEST` or `REQUEST_AUDIOBOOK` for audiobooks (FR-031); duplicate detection via `foreignBookId` lookup in `BookMedia`/`AudiobookMedia` + existing pending/approved requests — return 409 with `existingRequestId` (FR-010); create or reuse `BookMedia`/`AudiobookMedia` entity; create `MediaRequest` with `type` set to BOOK or AUDIOBOOK and link via `bookMedia`/`audiobookMedia` relation (FR-008, FR-009)
+- [x] T401 [US4] [US5] Implement auto-approval logic in book request route — check `AUTO_APPROVE_BOOK`/`AUTO_APPROVE_AUDIOBOOK` permission on requesting user; if auto-approved, set status to APPROVED and call `BookDownloadService.dispatch()` immediately (FR-016, FR-033)
+- [x] T402 [US4] Implement request quota enforcement for books/audiobooks — extend existing quota logic pattern from `MediaRequest.request()` to count book and audiobook requests separately per user (FR-032)
 
 ### Request Management
 
-- [ ] T410 [US5] Create `GET /api/v1/book/request` route in `server/routes/book.ts` — list book/audiobook requests with filters: `type`, `status`, `page`, `limit`, `userId`, `sort`, `order`; `MANAGE_REQUESTS` for all requests, own requests for any user; returns paginated results per contracts/book-api.md (FR-012, FR-013)
-- [ ] T411 [US5] Create `PUT /api/v1/book/request/:id` route in `server/routes/book.ts` — update request status (APPROVED, DECLINED, FAILED, COMPLETED); requires `MANAGE_REQUESTS`; on APPROVED: call `BookDownloadService.dispatch()`; on DECLINED: include optional `reason` in notification (FR-014, FR-015, FR-017)
-- [ ] T412 [US5] Create `DELETE /api/v1/book/request/:id` route in `server/routes/book.ts` — delete request; `MANAGE_REQUESTS` or own request while PENDING
+- [x] T410 [US5] Create `GET /api/v1/book/request` route in `server/routes/book.ts` — list book/audiobook requests with filters: `type`, `status`, `page`, `limit`, `userId`, `sort`, `order`; `MANAGE_REQUESTS` for all requests, own requests for any user; returns paginated results per contracts/book-api.md (FR-012, FR-013)
+- [x] T411 [US5] Create `PUT /api/v1/book/request/:id` route in `server/routes/book.ts` — update request status (APPROVED, DECLINED, FAILED, COMPLETED); requires `MANAGE_REQUESTS`; on APPROVED: call `BookDownloadService.dispatch()`; on DECLINED: include optional `reason` in notification (FR-014, FR-015, FR-017)
+- [x] T412 [US5] Create `DELETE /api/v1/book/request/:id` route in `server/routes/book.ts` — delete request; `MANAGE_REQUESTS` or own request while PENDING
 
 ### Notifications
 
-- [ ] T420 [US4] [US5] Integrate book/audiobook requests with existing notification system — dispatch `Notification.MEDIA_PENDING` on new request, `Notification.MEDIA_APPROVED` on approval, `Notification.MEDIA_DECLINED` on decline, `Notification.MEDIA_AVAILABLE` when scanner marks available; include book metadata (title, author, cover URL) in notification payload; reuse existing `notificationManager` dispatch pattern from `server/lib/notifications/index.ts` (FR-011, FR-017, FR-020)
+- [x] T420 [US4] [US5] Integrate book/audiobook requests with existing notification system — dispatch `Notification.MEDIA_PENDING` on new request, `Notification.MEDIA_APPROVED` on approval, `Notification.MEDIA_DECLINED` on decline, `Notification.MEDIA_AVAILABLE` when scanner marks available; include book metadata (title, author, cover URL) in notification payload; reuse existing `notificationManager` dispatch pattern from `server/lib/notifications/index.ts` (FR-011, FR-017, FR-020)
 
 ---
 
