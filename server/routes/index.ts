@@ -38,6 +38,7 @@ import mediaRoutes from './media';
 import movieRoutes from './movie';
 import bookRoutes from './book';
 import gameRoutes from './game';
+import { getMusicRoutes } from './music';
 import personRoutes from './person';
 import requestRoutes from './request';
 import searchRoutes from './search';
@@ -176,6 +177,12 @@ router.use('/issueComment', isAuthenticated(), issueCommentRoutes);
 router.use('/auth', authRoutes);
 router.use('/book', bookRoutes);
 router.use('/game', gameRoutes);
+
+// Music routes: conditionally registered based on ENABLE_MUSIC flag (FR-014)
+const musicRouter = getMusicRoutes();
+if (musicRouter) {
+  router.use('/music', musicRouter);
+}
 router.use(
   '/overrideRule',
   isAuthenticated(Permission.ADMIN),
