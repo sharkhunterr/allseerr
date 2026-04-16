@@ -48,7 +48,7 @@ Legend:
 
 ### Settings
 
-- [ ] T060 Add `DownloadManagerSettings` and `LibraryServerSettings` interfaces and `downloadManagers: DownloadManagerSettings[]`, `libraryServers: LibraryServerSettings[]` defaults to `AllSettings` in `server/lib/settings/index.ts` — defaults are empty arrays, no modification to existing settings fields
+- [x] T060 Add `DownloadManagerSettings` and `LibraryServerSettings` interfaces and `downloadManagers: DownloadManagerSettings[]`, `libraryServers: LibraryServerSettings[]` defaults to `AllSettings` in `server/lib/settings/index.ts` — defaults are empty arrays, no modification to existing settings fields
 
 ### Permissions
 
@@ -65,8 +65,8 @@ Legend:
 
 ### Book Search Service
 
-- [ ] T110 [US3] Create `BookSearchService` in `server/lib/services/BookSearchService.ts` — calls `OpenLibraryAPI.searchBooks()`, maps results to `BookSearchResult[]`, merges with local `BookMedia` availability status from database (status overlay: check if `foreignBookId` exists in `book_media` table and overlay `mediaStatus`/`requestStatus`); handles pagination (FR-007: 20+ per page)
-- [ ] T111 [US3] Add audiobook filtering logic to `BookSearchService` — when `type=audiobook`, filter OpenLibrary results by `physical_format` containing "Audio" or publisher names matching known audiobook publishers per research.md audiobook detection strategy
+- [x] T110 [US3] Create `BookSearchService` in `server/lib/services/BookSearchService.ts` — calls `OpenLibraryAPI.searchBooks()`, maps results to `BookSearchResult[]`, merges with local `BookMedia` availability status from database (status overlay: check if `foreignBookId` exists in `book_media` table and overlay `mediaStatus`/`requestStatus`); handles pagination (FR-007: 20+ per page)
+- [x] T111 [US3] Add audiobook filtering logic to `BookSearchService` — when `type=audiobook`, filter OpenLibrary results by `physical_format` containing "Audio" or publisher names matching known audiobook publishers per research.md audiobook detection strategy
 
 ### Search Routes
 
@@ -75,8 +75,8 @@ Legend:
 
 ### Search Bar Integration
 
-- [ ] T130 [US3] Add `isbn:` search provider to `server/lib/search.ts` — pattern `/(?<=isbn:)[\dXx-]+/`; calls `OpenLibraryAPI.getByISBN()`; returns results mapped to unified search format with `media_type: 'book'` (FR-001)
-- [ ] T131 [US3] Add `book:` search provider to `server/lib/search.ts` — pattern `/(?<=book:).+/`; calls `BookSearchService.search()`; returns results in unified format
+- [x] T130 [US3] Add `isbn:` search provider to `server/lib/search.ts` — pattern `/(?<=isbn:)[\dXx-]+/`; calls `OpenLibraryAPI.getByISBN()`; returns results mapped to unified search format with `media_type: 'book'` (FR-001)
+- [x] T131 [US3] Add `book:` search provider to `server/lib/search.ts` — pattern `/(?<=book:).+/`; calls `BookSearchService.search()`; returns results in unified format
 
 ### Route Registration
 
@@ -211,15 +211,15 @@ Legend:
 
 ### Request Dashboard Integration
 
-- [ ] T630 [US5] Add book/audiobook type badges to existing request management dashboard — show "Book" or "Audiobook" badge on requests with `type = 'book'` or `type = 'audiobook'`; approve/decline buttons call `PUT /api/v1/book/request/:id`; add media type filter to request list (FR-013, FR-014)
-- [ ] T631 [US4] Add book/audiobook requests to user profile request list — filter by media type; show book cover, title, author, status; link to book detail page (FR-012)
+- [x] T630 [US5] Add book/audiobook type badges to existing request management dashboard — show "Book" or "Audiobook" badge on requests with `type = 'book'` or `type = 'audiobook'`; approve/decline buttons call `PUT /api/v1/book/request/:id`; add media type filter to request list (FR-013, FR-014)
+- [x] T631 [US4] Add book/audiobook requests to user profile request list — filter by media type; show book cover, title, author, status; link to book detail page (FR-012)
 
 ---
 
 ## Phase 9 — Permissions and Quotas UI [US10]
 
-- [ ] T700 [US10] Add `REQUEST_BOOK`, `REQUEST_AUDIOBOOK`, `AUTO_APPROVE_BOOK`, `AUTO_APPROVE_AUDIOBOOK` permission checkboxes to user permission editing UI in `src/components/Settings/SettingsUsers/index.tsx` or equivalent user management component — follow existing pattern for `REQUEST_MOVIE`/`REQUEST_TV` toggles (FR-031)
-- [ ] T701 [US10] Add separate book and audiobook quota fields to user settings UI — allow admin to set independent request limits for books and audiobooks per user; follow existing movie/TV quota pattern from `UserSettings` entity (FR-032, FR-033)
+- [x] T700 [US10] Add `REQUEST_BOOK`, `REQUEST_AUDIOBOOK`, `AUTO_APPROVE_BOOK`, `AUTO_APPROVE_AUDIOBOOK` permission checkboxes to user permission editing UI in `src/components/Settings/SettingsUsers/index.tsx` or equivalent user management component — follow existing pattern for `REQUEST_MOVIE`/`REQUEST_TV` toggles (FR-031)
+- [x] T701 [US10] Add separate book and audiobook quota fields to user settings UI — allow admin to set independent request limits for books and audiobooks per user; follow existing movie/TV quota pattern from `UserSettings` entity (FR-032, FR-033)
 
 ---
 
@@ -228,11 +228,11 @@ Legend:
 ### Error Handling
 
 - [x] T800 [P] Add graceful error handling for OpenLibrary unavailability in `server/api/openlibrary/index.ts` — return clear error message to frontend; serve cached results if available; log warning (Edge Case: metadata source unreachable)
-- [ ] T801 [P] Add download manager rejection handling in `server/lib/services/BookDownloadService.ts` — catch "already monitored" or other rejection responses from Bindery/Readarr; update request status to reflect rejection reason; notify admin (Edge Case: download manager rejects request)
-- [ ] T802 [P] Handle book available in multiple library servers in `server/lib/services/BookAvailabilityScanner.ts` — mark available if found in any server; store all server URLs for detail page display (Edge Case: book in multiple servers)
-- [ ] T803 [P] Handle library server removal in `server/routes/settings/bookSettings.ts` DELETE route — retain existing request statuses; stop availability checks for removed server; show warning to admin (Edge Case: server removed while requests reference it)
+- [x] T801 [P] Add download manager rejection handling in `server/lib/services/BookDownloadService.ts` — catch "already monitored" or other rejection responses from Bindery/Readarr; update request status to reflect rejection reason; notify admin (Edge Case: download manager rejects request)
+- [x] T802 [P] Handle book available in multiple library servers in `server/lib/services/BookAvailabilityScanner.ts` — mark available if found in any server; store all server URLs for detail page display (Edge Case: book in multiple servers)
+- [x] T803 [P] Handle library server removal in `server/routes/settings/bookSettings.ts` DELETE route — retain existing request statuses; stop availability checks for removed server; show warning to admin (Edge Case: server removed while requests reference it)
 - [x] T804 [P] Handle no download manager configured in `server/routes/book.ts` POST request route — allow request to be stored as PENDING but show warning to admin that no download manager is available (Edge Case: request with no DM configured)
-- [ ] T805 [P] Add download failure detection in `server/lib/services/BookDownloadService.ts` — monitor download manager queue; mark request as FAILED with visible reason when download fails (FR-020)
+- [x] T805 [P] Add download failure detection in `server/lib/services/BookDownloadService.ts` — monitor download manager queue; mark request as FAILED with visible reason when download fails (FR-020)
 
 ### Validation and Safety
 
@@ -241,9 +241,9 @@ Legend:
 
 ### Integration Verification
 
-- [ ] T820 Verify existing movie/TV request workflow is unaffected — run existing test suites in `server/routes/request.test.ts` and `server/routes/auth.test.ts`; confirm no regressions from MediaType enum extension or MediaRequest relation additions (SC-003, FR-034)
-- [ ] T821 Verify MediaRequest entity correctly handles polymorphic relations — test that movie requests have `media` set and `bookMedia`/`audiobookMedia` null; book requests have `bookMedia` set and others null; eager loading works for all three types
-- [ ] T822 Verify notification payloads include book metadata — test that MEDIA_PENDING, MEDIA_APPROVED, MEDIA_DECLINED, MEDIA_AVAILABLE notifications carry title, author, cover URL for book/audiobook requests
+- [x] T820 Verify existing movie/TV request workflow is unaffected — run existing test suites in `server/routes/request.test.ts` and `server/routes/auth.test.ts`; confirm no regressions from MediaType enum extension or MediaRequest relation additions (SC-003, FR-034)
+- [x] T821 Verify MediaRequest entity correctly handles polymorphic relations — test that movie requests have `media` set and `bookMedia`/`audiobookMedia` null; book requests have `bookMedia` set and others null; eager loading works for all three types
+- [x] T822 Verify notification payloads include book metadata — test that MEDIA_PENDING, MEDIA_APPROVED, MEDIA_DECLINED, MEDIA_AVAILABLE notifications carry title, author, cover URL for book/audiobook requests
 
 ---
 

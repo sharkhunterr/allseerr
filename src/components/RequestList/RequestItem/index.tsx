@@ -89,7 +89,13 @@ const RequestItemError = ({
                 requestData?.type
                   ? requestData?.type === 'movie'
                     ? globalMessages.movie
-                    : globalMessages.tvshow
+                    : requestData?.type === 'book'
+                      ? globalMessages.book
+                      : requestData?.type === 'audiobook'
+                        ? globalMessages.audiobook
+                        : requestData?.type === 'game'
+                          ? globalMessages.game
+                          : globalMessages.tvshow
                   : globalMessages.request
               ),
             })}

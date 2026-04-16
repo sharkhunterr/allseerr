@@ -1,3 +1,4 @@
+import OpenLibraryAPI from '@server/api/openlibrary';
 import TheMovieDb from '@server/api/themoviedb';
 import type {
   TmdbMovieDetails,
@@ -209,6 +210,63 @@ searchProviders.push({
       total_pages: 1,
       total_results: results.length,
       results,
+    };
+  },
+});
+
+// isbn: search provider — look up a book by ISBN via OpenLibrary (FR-001)
+searchProviders.push({
+  pattern: new RegExp(/(?<=isbn:)[\dXx-]+/),
+  search: async ({ id }) => {
+    const openLibrary = new OpenLibraryAPI();
+    const result = await openLibrary.searchByISBN(id.replace(/-/g, ''));
+
+    if (!result) {
+      return { page: 1, total_pages: 1, total_results: 0, results: [] };
+    }
+
+    return {
+      page: 1,
+      total_pages: 1,
+      total_results: 1,
+      results: [
+        {
+          id: 0,
+          media_type: 'book' as const,
+          title: result.title,
+          name: result.title,
+          overview: `By ${result.authorName}`,
+          poster_path: result.coverUrl ?? null,
+          release_date: result.year ? `${result.year}-01-01` : undefined,
+        } as unknown as TmdbMovieResult,
+      ],
+    };
+  },
+});
+
+// book: search provider — free-text book search via OpenLibrary
+searchProviders.push({
+  pattern: new RegExp(/(?<=book:).+/),
+  search: async ({ id: query }) => {
+    const openLibrary = new OpenLibraryAPI();
+    const { results } = await openLibrary.search(query, 1, 20);
+
+    return {
+      page: 1,
+      total_pages: 1,
+      total_results: results.length,
+      results: results.map(
+        (r) =>
+          ({
+            id: 0,
+            media_type: 'book' as const,
+            title: r.title,
+            name: r.title,
+            overview: `By ${r.authorName}`,
+            poster_path: r.coverUrl ?? null,
+            release_date: r.year ? `${r.year}-01-01` : undefined,
+          }) as unknown as TmdbMovieResult
+      ),
     };
   },
 });
