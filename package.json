@@ -1,5 +1,6 @@
 {
-  "name": "seerr",
+  "name": "allseerr",
+  "description": "Unified media request manager — movies, TV, books, audiobooks, games & music",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.24.0",

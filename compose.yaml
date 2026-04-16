@@ -1,5 +1,7 @@
 services:
-  seerr:
+  allseerr:
+    container_name: allseerr
+    image: sharkhunterr/allseerr:latest
     build:
       context: .
       dockerfile: Dockerfile.local
