@@ -61,9 +61,11 @@ interface GameResult {
   }[];
   releaseYear?: number;
   developer?: string;
+  publisher?: string;
   coverUrl?: string;
   genre?: string;
   userRating?: number;
+  summary?: string;
 }
 
 interface GameSearchResponse {

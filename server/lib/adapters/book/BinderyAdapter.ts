@@ -9,7 +9,6 @@ import type {
   RootFolder,
   SubmissionResult,
 } from '@server/lib/adapters/interfaces';
-import cacheManager from '@server/lib/cache';
 import logger from '@server/logger';
 
 interface BinderyConfig {
@@ -33,7 +32,6 @@ export class BinderyAdapter extends ExternalAPI implements DownloadManagerAdapte
     const baseUrl = `${protocol}://${config.hostname}:${config.port}${config.baseUrl || ''}/api/v1`;
 
     super(baseUrl, {}, {
-      nodeCache: cacheManager.getCache('bindery'),
       headers: { 'X-Api-Key': config.apiKey },
     });
   }

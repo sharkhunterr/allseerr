@@ -9,7 +9,6 @@ import type {
   RootFolder,
   SubmissionResult,
 } from '@server/lib/adapters/interfaces';
-import cacheManager from '@server/lib/cache';
 import logger from '@server/logger';
 
 interface ReadarrBookResult {
@@ -53,9 +52,7 @@ export class ReadarrAdapter extends ExternalAPI implements DownloadManagerAdapte
     const protocol = config.useSsl ? 'https' : 'http';
     const baseUrl = `${protocol}://${config.hostname}:${config.port}${config.baseUrl || ''}/api/v1`;
 
-    super(baseUrl, { apikey: config.apiKey }, {
-      nodeCache: cacheManager.getCache('readarr'),
-    });
+    super(baseUrl, { apikey: config.apiKey }, {});
 
     this.apiKey = config.apiKey;
   }

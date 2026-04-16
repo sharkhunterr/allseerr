@@ -223,9 +223,9 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           status: MediaStatus.PENDING,
         });
       }
-      if (isBook) {
+      if (isBook && media) {
         await bookMediaRepo.save(media as BookMedia);
-      } else {
+      } else if (media) {
         await audiobookMediaRepo.save(media as AudiobookMedia);
       }
     }
