@@ -32,6 +32,8 @@ const defaultSettings = {
   newPlexLogin: true,
   youtubeUrl: '',
   plexClientIdentifier: '',
+  oidcEnabled: false,
+  oidcProviderName: 'OIDC',
 };
 
 export const SettingsContext = React.createContext<SettingsContextProps>({

@@ -5,5 +5,11 @@ import 'express-session';
 declare module 'express-session' {
   interface SessionData {
     userId: number;
+    /** Unix timestamp in seconds; set only for OIDC sessions */
+    oidcTokenExpiry?: number;
+    /** OIDC state parameter for CSRF protection during auth flow */
+    oidcState?: string;
+    /** OIDC nonce for token replay protection */
+    oidcNonce?: string;
   }
 }

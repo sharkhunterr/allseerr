@@ -22,6 +22,20 @@ export const checkUser: Middleware = async (req, _res, next) => {
 
     user = await userRepository.findOne({ where: { id: userId } });
   } else if (req.session?.userId) {
+    // Check OIDC token expiry: if the OIDC token has expired,
+    // destroy the session and treat the user as unauthenticated.
+    // Non-OIDC sessions (no oidcTokenExpiry) are completely unaffected.
+    if (
+      req.session.oidcTokenExpiry &&
+      Math.floor(Date.now() / 1000) > req.session.oidcTokenExpiry
+    ) {
+      req.session.destroy(() => {
+        // Session destroyed; user will be treated as unauthenticated
+      });
+      req.user = undefined;
+      return next();
+    }
+
     const userRepository = getRepository(User);
 
     user = await userRepository.findOne({

@@ -1,0 +1,2 @@
+- [Allseerr project identity](project_allseerr.md) — Fork of Seerr for multi-media requests; phased delivery P0-P3; constitution governs all dev
+- [Libreseerr reference](reference_libreseerr.md) — zamnzim's Libreseerr is the reference for book/audiobook search+matching in Allseerr

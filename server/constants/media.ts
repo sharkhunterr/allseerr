@@ -9,6 +9,8 @@ export enum MediaRequestStatus {
 export enum MediaType {
   MOVIE = 'movie',
   TV = 'tv',
+  BOOK = 'book',
+  AUDIOBOOK = 'audiobook',
 }
 
 export enum MediaStatus {

@@ -214,6 +214,8 @@ interface FullPublicSettings extends PublicSettings {
   newPlexLogin: boolean;
   youtubeUrl: string;
   plexClientIdentifier: string;
+  oidcEnabled: boolean;
+  oidcProviderName: string;
 }
 
 export interface NotificationAgentConfig {
@@ -361,6 +363,23 @@ export type JobId =
   | 'availability-sync'
   | 'process-blocklisted-tags';
 
+export interface OidcGroupMapping {
+  oidcGroup: string;
+  permissions: number;
+}
+
+export interface OidcSettings {
+  enabled: boolean;
+  issuerUrl: string;
+  clientId: string;
+  clientSecret: string;
+  displayName: string;
+  autoCreateUsers: boolean;
+  groupClaimName: string;
+  defaultPermissions: number;
+  groupMappings: OidcGroupMapping[];
+}
+
 export interface AllSettings {
   clientId: string;
   sessionSecret?: string;
@@ -377,6 +396,7 @@ export interface AllSettings {
   jobs: Record<JobId, JobSettings>;
   network: NetworkSettings;
   metadataSettings: MetadataSettings;
+  oidc: OidcSettings;
   migrations: string[];
 }
 
@@ -614,6 +634,17 @@ class Settings {
         },
         apiRequestTimeout: 10000,
       },
+      oidc: {
+        enabled: false,
+        issuerUrl: '',
+        clientId: '',
+        clientSecret: '',
+        displayName: 'OIDC',
+        autoCreateUsers: true,
+        groupClaimName: 'groups',
+        defaultPermissions: Permission.REQUEST,
+        groupMappings: [],
+      },
       migrations: [],
     };
     if (initialSettings) {
@@ -680,6 +711,14 @@ class Settings {
     this.data.sonarr = data;
   }
 
+  get oidc(): OidcSettings {
+    return this.data.oidc;
+  }
+
+  set oidc(data: OidcSettings) {
+    this.data.oidc = mergeSettings(this.data.oidc, data);
+  }
+
   get public(): PublicSettings {
     return this.data.public;
   }
@@ -721,6 +760,11 @@ class Settings {
       newPlexLogin: this.data.main.newPlexLogin,
       youtubeUrl: this.data.main.youtubeUrl,
       plexClientIdentifier: this.data.clientId,
+      oidcEnabled:
+        this.data.oidc.enabled &&
+        !!this.data.oidc.issuerUrl &&
+        !!this.data.oidc.clientId,
+      oidcProviderName: this.data.oidc.displayName || 'OIDC',
     };
   }
 

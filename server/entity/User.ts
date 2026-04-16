@@ -48,6 +48,7 @@ export class User {
     'jellyfinDeviceId',
     'jellyfinAuthToken',
     'plexToken',
+    'oidcSub',
     'settings',
   ];
 
@@ -100,6 +101,9 @@ export class User {
 
   @Column({ type: 'varchar', nullable: true, select: false })
   public plexToken?: string | null;
+
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  public oidcSub?: string | null;
 
   @Column({ type: 'integer', default: 0 })
   public permissions = 0;

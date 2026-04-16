@@ -7,6 +7,7 @@ import PageTitle from '@app/components/Common/PageTitle';
 import LanguagePicker from '@app/components/Layout/LanguagePicker';
 import JellyfinLogin from '@app/components/Login/JellyfinLogin';
 import LocalLogin from '@app/components/Login/LocalLogin';
+import OidcLoginButton from '@app/components/Login/OidcLoginButton';
 import PlexLoginButton from '@app/components/Login/PlexLoginButton';
 import useSettings from '@app/hooks/useSettings';
 import { useUser } from '@app/hooks/useUser';
@@ -29,7 +30,26 @@ const messages = defineMessages('components.Login', {
   signinwithjellyfin: 'Use your {mediaServerName} account',
   signinwithoverseerr: 'Use your {applicationTitle} account',
   orsigninwith: 'Or sign in with',
+  oidcProviderError: 'The identity provider returned an error: {message}',
+  oidcStateMismatch:
+    'Authentication failed due to a state mismatch. Please try again.',
+  oidcMissingEmail:
+    'Your identity provider did not return an email address. Please configure it to include the email claim.',
+  oidcNoAccount:
+    'No account found for your identity. Please contact an administrator to create your account.',
+  oidcTokenError: 'Authentication failed during token exchange. Please try again.',
+  oidcProviderUnreachable:
+    'Could not reach the identity provider. Please try again later.',
 });
+
+const oidcErrorMessages: Record<string, keyof typeof messages> = {
+  oidc_provider_error: 'oidcProviderError',
+  oidc_state_mismatch: 'oidcStateMismatch',
+  oidc_missing_email: 'oidcMissingEmail',
+  oidc_no_account: 'oidcNoAccount',
+  oidc_token_error: 'oidcTokenError',
+  oidc_provider_unreachable: 'oidcProviderUnreachable',
+};
 
 const Login = () => {
   const intl = useIntl();
@@ -39,6 +59,24 @@ const Login = () => {
 
   const [error, setError] = useState('');
   const [isProcessing, setProcessing] = useState(false);
+
+  // Handle OIDC error query parameters
+  useEffect(() => {
+    const errorCode = router.query.error as string | undefined;
+    if (errorCode && errorCode in oidcErrorMessages) {
+      const messageKey = oidcErrorMessages[errorCode];
+      const msg = messages[messageKey];
+      if (msg) {
+        setError(
+          intl.formatMessage(msg, {
+            message: (router.query.message as string) || errorCode,
+          })
+        );
+      }
+      // Clean the URL to avoid showing error on refresh
+      router.replace('/login', undefined, { shallow: true });
+    }
+  }, [router.query.error, intl, router]);
   const [authToken, setAuthToken] = useState<string | undefined>(undefined);
   const [mediaServerLogin, setMediaServerLogin] = useState(
     settings.currentSettings.mediaServerLogin
@@ -147,6 +185,12 @@ const Login = () => {
           </Button>
         ))
       )),
+    settings.currentSettings.oidcEnabled && (
+      <OidcLoginButton
+        key="oidc"
+        oidcProviderName={settings.currentSettings.oidcProviderName}
+      />
+    ),
   ].filter((o): o is JSX.Element => !!o);
 
   return (

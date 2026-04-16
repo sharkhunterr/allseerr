@@ -6,6 +6,7 @@ import { UserType } from '@server/constants/user';
 import { getRepository } from '@server/datasource';
 import { User } from '@server/entity/User';
 import { startJobs } from '@server/job/schedule';
+import { OidcAdapter } from '@server/lib/adapters/oidc/OidcAdapter';
 import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -15,8 +16,10 @@ import { ApiError } from '@server/types/error';
 import { getAppVersion } from '@server/utils/appVersion';
 import { getHostname } from '@server/utils/getHostname';
 import axios from 'axios';
+import { randomBytes } from 'crypto';
 import { Router } from 'express';
 import net from 'net';
+import { ILike } from 'typeorm';
 import validator from 'validator';
 
 const authRoutes = Router();
@@ -814,6 +817,188 @@ authRoutes.post('/reset-password/:guid', async (req, res, next) => {
   });
 
   return res.status(200).json({ status: 'ok' });
+});
+
+// OIDC Authentication Routes (T120-T123)
+
+authRoutes.get('/oidc/login', async (req, res) => {
+  const settings = getSettings();
+
+  if (
+    !settings.oidc.enabled ||
+    !settings.oidc.issuerUrl ||
+    !settings.oidc.clientId
+  ) {
+    return res.status(404).json({
+      status: 404,
+      message: 'OIDC authentication is not configured.',
+    });
+  }
+
+  try {
+    const state = randomBytes(32).toString('hex');
+    const nonce = randomBytes(32).toString('hex');
+
+    req.session.oidcState = state;
+    req.session.oidcNonce = nonce;
+
+    const redirectUri = `${settings.main.applicationUrl}/api/v1/auth/oidc/callback`;
+
+    const adapter = new OidcAdapter({
+      issuerUrl: settings.oidc.issuerUrl,
+      clientId: settings.oidc.clientId,
+      clientSecret: settings.oidc.clientSecret,
+    });
+
+    const authUrl = await adapter.getAuthorizationUrl(
+      redirectUri,
+      state,
+      nonce
+    );
+
+    return res.redirect(authUrl);
+  } catch (e) {
+    logger.error('OIDC login initiation failed', {
+      label: 'oidc',
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to initiate OIDC login.',
+    });
+  }
+});
+
+authRoutes.get('/oidc/callback', async (req, res) => {
+  const settings = getSettings();
+  const userRepository = getRepository(User);
+
+  // Handle provider errors
+  if (req.query.error) {
+    const errorDesc =
+      (req.query.error_description as string) || (req.query.error as string);
+    return res.redirect(
+      `/login?error=oidc_provider_error&message=${encodeURIComponent(errorDesc)}`
+    );
+  }
+
+  // Validate state
+  if (!req.session.oidcState || req.query.state !== req.session.oidcState) {
+    return res.redirect('/login?error=oidc_state_mismatch');
+  }
+
+  const redirectUri = `${settings.main.applicationUrl}/api/v1/auth/oidc/callback`;
+
+  try {
+    const adapter = new OidcAdapter({
+      issuerUrl: settings.oidc.issuerUrl,
+      clientId: settings.oidc.clientId,
+      clientSecret: settings.oidc.clientSecret,
+    });
+
+    const result = await adapter.handleCallback(
+      redirectUri,
+      req.query as Record<string, string>,
+      {
+        state: req.session.oidcState,
+        nonce: req.session.oidcNonce ?? '',
+      },
+      settings.oidc.groupClaimName
+    );
+
+    // Clean up OIDC session params
+    delete req.session.oidcState;
+    delete req.session.oidcNonce;
+
+    // User lookup: try oidcSub first, then email
+    let user = await userRepository.findOne({
+      where: { oidcSub: result.sub },
+    });
+
+    if (!user && result.email) {
+      user = await userRepository.findOne({
+        where: { email: ILike(result.email) },
+      });
+
+      if (user) {
+        // Link existing user to OIDC identity
+        user.oidcSub = result.sub;
+        await userRepository.save(user);
+        logger.info(`Linked existing user ${user.email} to OIDC sub ${result.sub}`, {
+          label: 'oidc',
+        });
+      }
+    }
+
+    if (!user) {
+      if (!result.email) {
+        return res.redirect('/login?error=oidc_missing_email');
+      }
+
+      if (!settings.oidc.autoCreateUsers) {
+        return res.redirect('/login?error=oidc_no_account');
+      }
+
+      // Create new OIDC user
+      user = new User({
+        userType: UserType.OIDC,
+        email: result.email,
+        oidcSub: result.sub,
+        username: result.name || result.email,
+        avatar: result.picture || '',
+        permissions: settings.oidc.defaultPermissions,
+      });
+      await userRepository.save(user);
+      logger.info(`Created new OIDC user: ${user.email}`, { label: 'oidc' });
+    }
+
+    // Apply OIDC group-to-permission mapping (T200)
+    if (settings.oidc.groupMappings.length > 0 && result.groups) {
+      let resolvedPermissions = 0;
+      let matched = false;
+
+      for (const group of result.groups) {
+        const mapping = settings.oidc.groupMappings.find(
+          (m) => m.oidcGroup === group
+        );
+        if (mapping) {
+          resolvedPermissions |= mapping.permissions;
+          matched = true;
+        }
+      }
+
+      if (matched) {
+        user.permissions = resolvedPermissions;
+      } else {
+        user.permissions = settings.oidc.defaultPermissions;
+      }
+      await userRepository.save(user);
+    }
+
+    // Set session
+    req.session.userId = user.id;
+    req.session.oidcTokenExpiry = result.idTokenExpiry;
+
+    return res.redirect('/');
+  } catch (e) {
+    logger.error('OIDC callback failed', {
+      label: 'oidc',
+      error: e instanceof Error ? e.message : String(e),
+    });
+
+    // Clean up OIDC session params on error
+    delete req.session.oidcState;
+    delete req.session.oidcNonce;
+
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    if (message.includes('email claim')) {
+      return res.redirect('/login?error=oidc_missing_email');
+    }
+    if (message.includes('token exchange')) {
+      return res.redirect('/login?error=oidc_token_error');
+    }
+    return res.redirect('/login?error=oidc_provider_unreachable');
+  }
 });
 
 export default authRoutes;
