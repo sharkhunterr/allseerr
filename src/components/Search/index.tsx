@@ -1,5 +1,6 @@
 import AudiobookCard from '@app/components/AudiobookCard';
 import BookCard from '@app/components/BookCard';
+import GameCard from '@app/components/GameCard';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
@@ -249,54 +250,19 @@ const Search = () => {
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {gameResults.map((game) => (
-                <div
+                <GameCard
                   key={game.igdbId}
-                  className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg bg-gray-800 shadow-md ring-1 ring-gray-700"
-                >
-                  <div className="relative aspect-[2/3] w-full overflow-hidden bg-gray-700">
-                    {game.coverUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={game.coverUrl}
-                        alt={game.title}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-gray-500">
-                        Game
-                      </div>
-                    )}
-                    <div className="absolute bottom-2 right-2">
-                      <span className="rounded bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
-                        Game
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex flex-1 flex-col p-3">
-                    <h3 className="truncate text-sm font-semibold text-white">
-                      {game.title}
-                    </h3>
-                    <p className="truncate text-xs text-gray-400">
-                      {game.platforms
-                        ?.map((p) => p.name)
-                        .join(', ')}
-                    </p>
-                    <div className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-                      {game.releaseYear && <span>{game.releaseYear}</span>}
-                      {game.developer && (
-                        <>
-                          <span>&middot;</span>
-                          <span className="truncate">{game.developer}</span>
-                        </>
-                      )}
-                    </div>
-                    {game.userRating && (
-                      <div className="mt-1 text-xs text-yellow-400">
-                        {game.userRating}%
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  igdbId={game.igdbId}
+                  title={game.title}
+                  platforms={game.platforms}
+                  releaseYear={game.releaseYear}
+                  developer={game.developer}
+                  publisher={game.publisher}
+                  genre={game.genre}
+                  userRating={game.userRating}
+                  coverUrl={game.coverUrl}
+                  summary={game.summary}
+                />
               ))}
             </div>
           )}
