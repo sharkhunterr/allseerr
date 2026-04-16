@@ -37,6 +37,7 @@ import issueCommentRoutes from './issueComment';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
 import bookRoutes from './book';
+import gameRoutes from './game';
 import personRoutes from './person';
 import requestRoutes from './request';
 import searchRoutes from './search';
@@ -174,6 +175,7 @@ router.use('/issue', isAuthenticated(), issueRoutes);
 router.use('/issueComment', isAuthenticated(), issueCommentRoutes);
 router.use('/auth', authRoutes);
 router.use('/book', bookRoutes);
+router.use('/game', gameRoutes);
 router.use(
   '/overrideRule',
   isAuthenticated(Permission.ADMIN),

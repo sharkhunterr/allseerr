@@ -11,6 +11,7 @@ export enum MediaType {
   TV = 'tv',
   BOOK = 'book',
   AUDIOBOOK = 'audiobook',
+  GAME = 'game',
 }
 
 export enum MediaStatus {
