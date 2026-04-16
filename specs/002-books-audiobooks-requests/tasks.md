@@ -88,16 +88,16 @@ Legend:
 
 ### Bindery Adapter
 
-- [ ] T200 [US1] Create `BinderyAdapter` in `server/lib/adapters/book/BinderyAdapter.ts` — implements `DownloadManagerAdapter`; extends `ExternalAPI`; methods: `testConnection()` (GET `/api/v1/system/status`), `addBook(foreignBookId, foreignAuthorId, qualityProfileId, rootFolderPath)` (POST `/api/v1/book`), `getProfiles()` (GET `/api/v1/qualityprofile`), `getRootFolders()` (GET `/api/v1/rootfolder`), `getQueue()` (GET `/api/v1/queue`), `getBookStatus(id)` (GET `/api/v1/book/{id}`); auth via `X-Api-Key` header; 1-hour cache for profiles/rootfolders (FR-021, FR-024)
-- [ ] T201 [US1] Create `BinderyAudiobookAdapter` in `server/lib/adapters/audiobook/BinderyAudiobookAdapter.ts` — extends `BinderyAdapter` or implements `DownloadManagerAdapter` separately; same API as Bindery but with audiobook-specific quality profiles and root folders; shares connection config (FR-023)
+- [x] T200 [US1] Create `BinderyAdapter` in `server/lib/adapters/book/BinderyAdapter.ts` — implements `DownloadManagerAdapter`; extends `ExternalAPI`; methods: `testConnection()` (GET `/api/v1/system/status`), `addBook(foreignBookId, foreignAuthorId, qualityProfileId, rootFolderPath)` (POST `/api/v1/book`), `getProfiles()` (GET `/api/v1/qualityprofile`), `getRootFolders()` (GET `/api/v1/rootfolder`), `getQueue()` (GET `/api/v1/queue`), `getBookStatus(id)` (GET `/api/v1/book/{id}`); auth via `X-Api-Key` header; 1-hour cache for profiles/rootfolders (FR-021, FR-024)
+- [x] T201 [US1] Create `BinderyAudiobookAdapter` in `server/lib/adapters/audiobook/BinderyAudiobookAdapter.ts` — extends `BinderyAdapter` or implements `DownloadManagerAdapter` separately; same API as Bindery but with audiobook-specific quality profiles and root folders; shares connection config (FR-023)
 
 ### Readarr Adapter
 
-- [ ] T210 [US1] Create `ReadarrAdapter` in `server/lib/adapters/book/ReadarrAdapter.ts` — implements `DownloadManagerAdapter`; follows `ServarrBase` pattern from `server/api/servarr/base.ts`; methods: `testConnection()`, `addBook(foreignBookId, author, editions, qualityProfileId, metadataProfileId, rootFolderPath)` per Readarr API format from research.md, `lookupByISBN(isbn)`, `lookupByTitle(title)`, `getProfiles()`, `getMetadataProfiles()`, `getRootFolders()`, `getQueue()`, `getTags()`; auth via `apikey` query param (FR-022, FR-024, FR-025)
+- [x] T210 [US1] Create `ReadarrAdapter` in `server/lib/adapters/book/ReadarrAdapter.ts` — implements `DownloadManagerAdapter`; follows `ServarrBase` pattern from `server/api/servarr/base.ts`; methods: `testConnection()`, `addBook(foreignBookId, author, editions, qualityProfileId, metadataProfileId, rootFolderPath)` per Readarr API format from research.md, `lookupByISBN(isbn)`, `lookupByTitle(title)`, `getProfiles()`, `getMetadataProfiles()`, `getRootFolders()`, `getQueue()`, `getTags()`; auth via `apikey` query param (FR-022, FR-024, FR-025)
 
 ### Book Download Service
 
-- [ ] T220 [US1] [US5] Create `BookDownloadService` in `server/lib/services/BookDownloadService.ts` — accepts a `BookMedia` or `AudiobookMedia` and `DownloadManagerInstance` config; implements Bindery-first, Readarr-fallback cascade: try primary (non-fallback) instance first, on connection error catch typed error and attempt fallback instance; logs failures; updates `BookMedia.downloadManagerExternalId` and `downloadManagerInstanceId` on success (FR-015, FR-037)
+- [x] T220 [US1] [US5] Create `BookDownloadService` in `server/lib/services/BookDownloadService.ts` — accepts a `BookMedia` or `AudiobookMedia` and `DownloadManagerInstance` config; implements Bindery-first, Readarr-fallback cascade: try primary (non-fallback) instance first, on connection error catch typed error and attempt fallback instance; logs failures; updates `BookMedia.downloadManagerExternalId` and `downloadManagerInstanceId` on success (FR-015, FR-037)
 
 ### Settings Routes for Download Managers
 
@@ -117,23 +117,23 @@ Legend:
 
 ### Audiobookshelf Adapter
 
-- [ ] T300 [P] [US2] Create `AudiobookshelfAdapter` in `server/lib/adapters/audiobook/AudiobookshelfAdapter.ts` — implements `BookLibraryAdapter`; extends `ExternalAPI`; auth via Bearer token or API key; methods: `testConnection()` (GET `/api/ping`), `getLibraries()` (GET `/api/libraries`), `searchByISBN(isbn)` (GET `/api/libraries/{id}/search?q={isbn}`), `searchByTitleAuthor(title, author)`, `searchByASIN(asin)`, `getItem(id)` (GET `/api/items/{id}`); returns `LibraryBookResult` with `title`, `authorName`, `narratorName`, `isbn`, `asin`, `duration`, `serverUrl` (FR-026, FR-029)
+- [x] T300 [P] [US2] Create `AudiobookshelfAdapter` in `server/lib/adapters/audiobook/AudiobookshelfAdapter.ts` — implements `BookLibraryAdapter`; extends `ExternalAPI`; auth via Bearer token or API key; methods: `testConnection()` (GET `/api/ping`), `getLibraries()` (GET `/api/libraries`), `searchByISBN(isbn)` (GET `/api/libraries/{id}/search?q={isbn}`), `searchByTitleAuthor(title, author)`, `searchByASIN(asin)`, `getItem(id)` (GET `/api/items/{id}`); returns `LibraryBookResult` with `title`, `authorName`, `narratorName`, `isbn`, `asin`, `duration`, `serverUrl` (FR-026, FR-029)
 
 ### Calibre-Web Adapter
 
-- [ ] T310 [P] [US2] Create `CalibreWebAdapter` in `server/lib/adapters/book/CalibreWebAdapter.ts` — implements `BookLibraryAdapter`; extends `ExternalAPI`; auth via session or HTTP Basic; methods: `testConnection()` (GET `/opds` validates Atom XML), `searchByISBN(isbn)` (GET `/opds/search/isbn:{isbn}` + parse Atom XML), `searchByTitleAuthor(title, author)` (GET `/opds/search/{title}+{author}`), `getBookById(id)` (GET `/ajax/book/{id}`); OPDS XML parsing for search results (FR-026, FR-029)
+- [x] T310 [P] [US2] Create `CalibreWebAdapter` in `server/lib/adapters/book/CalibreWebAdapter.ts` — implements `BookLibraryAdapter`; extends `ExternalAPI`; auth via session or HTTP Basic; methods: `testConnection()` (GET `/opds` validates Atom XML), `searchByISBN(isbn)` (GET `/opds/search/isbn:{isbn}` + parse Atom XML), `searchByTitleAuthor(title, author)` (GET `/opds/search/{title}+{author}`), `getBookById(id)` (GET `/ajax/book/{id}`); OPDS XML parsing for search results (FR-026, FR-029)
 
 ### Kavita Adapter
 
-- [ ] T320 [P] [US2] Create `KavitaAdapter` in `server/lib/adapters/book/KavitaAdapter.ts` — implements `BookLibraryAdapter`; extends `ExternalAPI`; auth via JWT from `POST /api/Plugin/authenticate?apiKey={key}&pluginName=Allseerr`; cache JWT token; methods: `testConnection()` (authenticate + GET `/api/Server/server-info`), `searchByISBN(isbn)` (search by title then verify ISBN from `/api/Series/{id}/metadata`), `searchByTitleAuthor(title, author)` (GET `/api/Series/search?queryString={query}`), `getMetadata(seriesId)` (GET `/api/Series/{id}/metadata`); returns `LibraryBookResult` (FR-026, FR-029)
+- [x] T320 [P] [US2] Create `KavitaAdapter` in `server/lib/adapters/book/KavitaAdapter.ts` — implements `BookLibraryAdapter`; extends `ExternalAPI`; auth via JWT from `POST /api/Plugin/authenticate?apiKey={key}&pluginName=Allseerr`; cache JWT token; methods: `testConnection()` (authenticate + GET `/api/Server/server-info`), `searchByISBN(isbn)` (search by title then verify ISBN from `/api/Series/{id}/metadata`), `searchByTitleAuthor(title, author)` (GET `/api/Series/search?queryString={query}`), `getMetadata(seriesId)` (GET `/api/Series/{id}/metadata`); returns `LibraryBookResult` (FR-026, FR-029)
 
 ### Grimmory Adapter (Stub)
 
-- [ ] T330 [P] [US2] Create `GrimmoryAdapter` stub in `server/lib/adapters/book/GrimmoryAdapter.ts` — implements `BookLibraryAdapter` with `testConnection()` and all search methods; methods throw `NotImplementedError` with descriptive message; include TODO comments for future implementation when API docs are available (risk: API documentation sparse per plan.md)
+- [x] T330 [P] [US2] Create `GrimmoryAdapter` stub in `server/lib/adapters/book/GrimmoryAdapter.ts` — implements `BookLibraryAdapter` with `testConnection()` and all search methods; methods throw `NotImplementedError` with descriptive message; include TODO comments for future implementation when API docs are available (risk: API documentation sparse per plan.md)
 
 ### Book Matching Service
 
-- [ ] T340 [US2] Create `BookMatchingService` in `server/lib/services/BookMatchingService.ts` — implements ISBN cascade matching algorithm from research.md section 5: (1) try `adapter.searchByISBN(isbn13)`, (2) try `adapter.searchByISBN(isbn10)`, (3) try `adapter.searchByASIN(asin)` for audiobooks, (4) fallback `adapter.searchByTitleAuthor(title, authorName)` using first result (no fuzzy scoring); returns `LibraryBookResult | null`; same algorithm for books and audiobooks per FR-039, FR-040, FR-041
+- [x] T340 [US2] Create `BookMatchingService` in `server/lib/services/BookMatchingService.ts` — implements ISBN cascade matching algorithm from research.md section 5: (1) try `adapter.searchByISBN(isbn13)`, (2) try `adapter.searchByISBN(isbn10)`, (3) try `adapter.searchByASIN(asin)` for audiobooks, (4) fallback `adapter.searchByTitleAuthor(title, authorName)` using first result (no fuzzy scoring); returns `LibraryBookResult | null`; same algorithm for books and audiobooks per FR-039, FR-040, FR-041
 
 ### Book Availability Scanner
 
