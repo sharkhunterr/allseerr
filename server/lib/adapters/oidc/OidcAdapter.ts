@@ -1,6 +1,5 @@
 import logger from '@server/logger';
-import type { Client, Issuer as OidcIssuer, TokenSet } from 'openid-client';
-import { Issuer } from 'openid-client';
+import * as oidc from 'openid-client';
 
 export interface OidcAuthResult {
   sub: string;
@@ -26,32 +25,33 @@ interface OidcAdapterConfig {
 
 export class OidcAdapter {
   private config: OidcAdapterConfig;
-  private cachedIssuer?: OidcIssuer;
-  private cachedClient?: Client;
+  private cachedConfig?: oidc.Configuration;
 
   constructor(config: OidcAdapterConfig) {
     this.config = config;
   }
 
   /**
-   * Fetches the OIDC discovery document and caches the Issuer instance.
-   * Clears cache on error to force re-fetch on retry.
+   * Discovers the OIDC provider and creates a Configuration instance.
+   * Caches the result. Clears cache on error to force re-fetch on retry.
    */
-  async discover(): Promise<OidcIssuer> {
-    if (this.cachedIssuer) {
-      return this.cachedIssuer;
+  async getConfiguration(): Promise<oidc.Configuration> {
+    if (this.cachedConfig) {
+      return this.cachedConfig;
     }
 
     try {
-      this.cachedIssuer = await Issuer.discover(this.config.issuerUrl);
+      this.cachedConfig = await oidc.discovery(
+        new URL(this.config.issuerUrl),
+        this.config.clientId,
+        this.config.clientSecret
+      );
       logger.info('OIDC discovery completed successfully', {
         label: 'oidc',
-        issuer: this.cachedIssuer.metadata.issuer,
       });
-      return this.cachedIssuer;
+      return this.cachedConfig;
     } catch (e) {
-      this.cachedIssuer = undefined;
-      this.cachedClient = undefined;
+      this.cachedConfig = undefined;
       logger.error('OIDC discovery failed', {
         label: 'oidc',
         issuerUrl: this.config.issuerUrl,
@@ -65,20 +65,6 @@ export class OidcAdapter {
     }
   }
 
-  private async getClient(): Promise<Client> {
-    if (this.cachedClient) {
-      return this.cachedClient;
-    }
-
-    const issuer = await this.discover();
-    this.cachedClient = new issuer.Client({
-      client_id: this.config.clientId,
-      client_secret: this.config.clientSecret,
-      response_types: ['code'],
-    });
-    return this.cachedClient;
-  }
-
   /**
    * Generates the authorization URL for redirecting the user to the IdP.
    */
@@ -87,14 +73,14 @@ export class OidcAdapter {
     state: string,
     nonce: string
   ): Promise<string> {
-    const client = await this.getClient();
-    return client.authorizationUrl({
+    const config = await this.getConfiguration();
+    const url = oidc.buildAuthorizationUrl(config, {
       redirect_uri: redirectUri,
       scope: 'openid email profile',
       state,
       nonce,
-      response_type: 'code',
     });
+    return url.href;
   }
 
   /**
@@ -103,17 +89,17 @@ export class OidcAdapter {
    */
   async handleCallback(
     redirectUri: string,
-    callbackParams: Record<string, string>,
+    callbackUrl: URL,
     checks: { state: string; nonce: string },
     groupClaimName: string
   ): Promise<OidcAuthResult> {
-    const client = await this.getClient();
+    const config = await this.getConfiguration();
 
-    let tokenSet: TokenSet;
+    let tokens: oidc.TokenEndpointResponse;
     try {
-      tokenSet = await client.callback(redirectUri, callbackParams, {
-        state: checks.state,
-        nonce: checks.nonce,
+      tokens = await oidc.authorizationCodeGrant(config, callbackUrl, {
+        expectedState: checks.state,
+        expectedNonce: checks.nonce,
       });
     } catch (e) {
       logger.error('OIDC token exchange failed', {
@@ -127,9 +113,14 @@ export class OidcAdapter {
       );
     }
 
-    const claims = tokenSet.claims();
+    const claims = tokens.claims();
 
-    if (!claims.email) {
+    if (!claims) {
+      throw new Error('OIDC provider did not return ID token claims.');
+    }
+
+    const email = claims.email as string | undefined;
+    if (!email) {
       logger.warn('OIDC token missing email claim', {
         label: 'oidc',
         sub: claims.sub,
@@ -151,7 +142,11 @@ export class OidcAdapter {
     } else {
       // Try userinfo endpoint as fallback
       try {
-        const userinfo = await client.userinfo(tokenSet);
+        const userinfo = await oidc.fetchUserInfo(
+          config,
+          tokens.access_token,
+          claims.sub
+        );
         const userinfoGroups = userinfo[groupClaimName];
         if (Array.isArray(userinfoGroups)) {
           groups = userinfoGroups as string[];
@@ -170,7 +165,7 @@ export class OidcAdapter {
 
     return {
       sub: claims.sub,
-      email: claims.email as string,
+      email,
       name: claims.name as string | undefined,
       picture: claims.picture as string | undefined,
       groups,
@@ -179,8 +174,7 @@ export class OidcAdapter {
   }
 
   /**
-   * Tests OIDC configuration without saving. Validates discovery document
-   * and optionally tests client credentials.
+   * Tests OIDC configuration without saving. Validates discovery document.
    */
   static async testConnection(config: {
     issuerUrl: string;
@@ -188,10 +182,18 @@ export class OidcAdapter {
     clientSecret: string;
   }): Promise<OidcTestResult> {
     try {
-      const issuer = await Issuer.discover(config.issuerUrl);
+      const oidcConfig = await oidc.discovery(
+        new URL(config.issuerUrl),
+        config.clientId,
+        config.clientSecret
+      );
 
-      const metadata = issuer.metadata;
-      if (!metadata.authorization_endpoint || !metadata.token_endpoint) {
+      const serverMetadata = oidcConfig.serverMetadata();
+
+      if (
+        !serverMetadata.authorization_endpoint ||
+        !serverMetadata.token_endpoint
+      ) {
         return {
           status: 'error',
           message:
@@ -201,30 +203,15 @@ export class OidcAdapter {
         };
       }
 
-      // Try client credentials grant to validate client ID/secret
-      try {
-        const client = new issuer.Client({
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-        });
-        await client.grant({ grant_type: 'client_credentials' });
-      } catch {
-        // Many IdPs don't support client_credentials grant;
-        // discovery success is sufficient
-        logger.debug(
-          'OIDC client_credentials grant not supported (non-fatal)',
-          { label: 'oidc' }
-        );
-      }
-
       return {
         status: 'success',
-        message: `Successfully connected to OIDC provider at ${metadata.issuer}`,
+        message: `Successfully connected to OIDC provider at ${serverMetadata.issuer}`,
         details: {
-          issuer: metadata.issuer as string,
-          authorizationEndpoint: metadata.authorization_endpoint as string,
-          tokenEndpoint: metadata.token_endpoint as string,
-          jwksUri: (metadata.jwks_uri as string) ?? 'not provided',
+          issuer: serverMetadata.issuer as string,
+          authorizationEndpoint:
+            serverMetadata.authorization_endpoint as string,
+          tokenEndpoint: serverMetadata.token_endpoint as string,
+          jwksUri: (serverMetadata.jwks_uri as string) ?? 'not provided',
         },
       };
     } catch (e) {

@@ -896,9 +896,14 @@ authRoutes.get('/oidc/callback', async (req, res) => {
       clientSecret: settings.oidc.clientSecret,
     });
 
+    // Build the full callback URL from the request for openid-client v6
+    const callbackUrl = new URL(
+      `${redirectUri}?${new URLSearchParams(req.query as Record<string, string>).toString()}`
+    );
+
     const result = await adapter.handleCallback(
       redirectUri,
-      req.query as Record<string, string>,
+      callbackUrl,
       {
         state: req.session.oidcState,
         nonce: req.session.oidcNonce ?? '',
@@ -924,9 +929,12 @@ authRoutes.get('/oidc/callback', async (req, res) => {
         // Link existing user to OIDC identity
         user.oidcSub = result.sub;
         await userRepository.save(user);
-        logger.info(`Linked existing user ${user.email} to OIDC sub ${result.sub}`, {
-          label: 'oidc',
-        });
+        logger.info(
+          `Linked existing user ${user.email} to OIDC sub ${result.sub}`,
+          {
+            label: 'oidc',
+          }
+        );
       }
     }
 
