@@ -13,7 +13,7 @@ Legend:
 
 ## Phase 1 — Setup and Configuration
 
-- [ ] T001 [P] Create feature branch `002-books-audiobooks-requests` from `develop`
+- [x] T001 [P] Create feature branch `002-books-audiobooks-requests` from `develop`
 - [x] T002 [P] Add `BOOK = 'book'` and `AUDIOBOOK = 'audiobook'` to `MediaType` enum in `server/constants/media.ts` (2 additive lines, no existing values modified)
 
 ---
@@ -207,7 +207,7 @@ Legend:
 
 ### Search UI Tabs
 
-- [ ] T620 [US3] Extend search results page to add media type tabs — add "Books" and "Audiobooks" tab alongside existing content; "Books" tab calls `GET /api/v1/book/search?type=book`; "Audiobooks" tab calls `GET /api/v1/book/search?type=audiobook`; render `BookCard` or `AudiobookCard` based on tab; maintain existing movie/TV behavior unchanged (FR-001, FR-002, FR-034)
+- [x] T620 [US3] Extend search results page to add media type tabs — add "Books" and "Audiobooks" tab alongside existing content; "Books" tab calls `GET /api/v1/book/search?type=book`; "Audiobooks" tab calls `GET /api/v1/book/search?type=audiobook`; render `BookCard` or `AudiobookCard` based on tab; maintain existing movie/TV behavior unchanged (FR-001, FR-002, FR-034)
 
 ### Request Dashboard Integration
 
@@ -227,17 +227,17 @@ Legend:
 
 ### Error Handling
 
-- [ ] T800 [P] Add graceful error handling for OpenLibrary unavailability in `server/api/openlibrary/index.ts` — return clear error message to frontend; serve cached results if available; log warning (Edge Case: metadata source unreachable)
+- [x] T800 [P] Add graceful error handling for OpenLibrary unavailability in `server/api/openlibrary/index.ts` — return clear error message to frontend; serve cached results if available; log warning (Edge Case: metadata source unreachable)
 - [ ] T801 [P] Add download manager rejection handling in `server/lib/services/BookDownloadService.ts` — catch "already monitored" or other rejection responses from Bindery/Readarr; update request status to reflect rejection reason; notify admin (Edge Case: download manager rejects request)
 - [ ] T802 [P] Handle book available in multiple library servers in `server/lib/services/BookAvailabilityScanner.ts` — mark available if found in any server; store all server URLs for detail page display (Edge Case: book in multiple servers)
 - [ ] T803 [P] Handle library server removal in `server/routes/settings/bookSettings.ts` DELETE route — retain existing request statuses; stop availability checks for removed server; show warning to admin (Edge Case: server removed while requests reference it)
-- [ ] T804 [P] Handle no download manager configured in `server/routes/book.ts` POST request route — allow request to be stored as PENDING but show warning to admin that no download manager is available (Edge Case: request with no DM configured)
+- [x] T804 [P] Handle no download manager configured in `server/routes/book.ts` POST request route — allow request to be stored as PENDING but show warning to admin that no download manager is available (Edge Case: request with no DM configured)
 - [ ] T805 [P] Add download failure detection in `server/lib/services/BookDownloadService.ts` — monitor download manager queue; mark request as FAILED with visible reason when download fails (FR-020)
 
 ### Validation and Safety
 
-- [ ] T810 Add input validation to all book API routes in `server/routes/book.ts` — validate `query` length, `page`/`limit` ranges, `openLibraryId` format, `isbn` format (10 or 13 digits), `mediaType` enum values; return 400 with descriptive messages
-- [ ] T811 Add input validation to all settings routes in `server/routes/settings/bookSettings.ts` — validate `hostname`, `port` range, `apiKey` non-empty, `type` enum values, `scanIntervalSeconds` minimum (30s), `mediaTypes` valid enum values
+- [x] T810 Add input validation to all book API routes in `server/routes/book.ts` — validate `query` length, `page`/`limit` ranges, `openLibraryId` format, `isbn` format (10 or 13 digits), `mediaType` enum values; return 400 with descriptive messages
+- [x] T811 Add input validation to all settings routes in `server/routes/settings/bookSettings.ts` — validate `hostname`, `port` range, `apiKey` non-empty, `type` enum values, `scanIntervalSeconds` minimum (30s), `mediaTypes` valid enum values
 
 ### Integration Verification
 

@@ -1,5 +1,8 @@
+import AudiobookCard from '@app/components/AudiobookCard';
+import BookCard from '@app/components/BookCard';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
+import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import useDiscover from '@app/hooks/useDiscover';
 import ErrorPage from '@app/pages/_error';
@@ -9,18 +12,76 @@ import type {
   PersonResult,
   TvResult,
 } from '@server/models/Search';
+import axios from 'axios';
 import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Search', {
   search: 'Search',
   searchresults: 'Search Results',
+  tabAll: 'Movies & TV',
+  tabBooks: 'Books',
+  tabAudiobooks: 'Audiobooks',
+  tabGames: 'Games',
+  noResults: 'No results found.',
 });
+
+type MediaTab = 'all' | 'books' | 'audiobooks' | 'games';
+
+interface BookResult {
+  openLibraryId: string;
+  title: string;
+  authorName: string;
+  coverUrl?: string;
+  year?: number;
+  publisher?: string;
+  seriesName?: string;
+  seriesPosition?: number;
+  mediaStatus?: number | null;
+  narratorName?: string;
+  durationSeconds?: number;
+}
+
+interface BookSearchResponse {
+  page: number;
+  totalPages: number;
+  totalResults: number;
+  results: BookResult[];
+}
+
+interface GameResult {
+  igdbId: number;
+  title: string;
+  platforms: Array<{
+    id: number;
+    name: string;
+    mediaStatus?: number | null;
+  }>;
+  releaseYear?: number;
+  developer?: string;
+  coverUrl?: string;
+  genre?: string;
+  userRating?: number;
+}
+
+interface GameSearchResponse {
+  results: GameResult[];
+  totalResults: number;
+}
 
 const Search = () => {
   const intl = useIntl();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<MediaTab>('all');
+  const [bookResults, setBookResults] = useState<BookResult[]>([]);
+  const [gameResults, setGameResults] = useState<GameResult[]>([]);
+  const [isLoadingBooks, setIsLoadingBooks] = useState(false);
+  const [isLoadingGames, setIsLoadingGames] = useState(false);
 
+  const query = (router.query.query as string) ?? '';
+
+  // Movie/TV search (existing)
   const {
     isLoadingInitialData,
     isEmpty,
@@ -31,15 +92,52 @@ const Search = () => {
     error,
   } = useDiscover<MovieResult | TvResult | PersonResult>(
     `/api/v1/search`,
-    {
-      query: router.query.query,
-    },
+    { query: router.query.query },
     { hideAvailable: false, hideBlocklisted: false }
   );
 
-  if (error) {
+  // Book search
+  useEffect(() => {
+    if (activeTab === 'books' || activeTab === 'audiobooks') {
+      const type = activeTab === 'audiobooks' ? 'audiobook' : 'book';
+      setIsLoadingBooks(true);
+      axios
+        .get<BookSearchResponse>('/api/v1/book/search', {
+          params: { query, type, limit: 40 },
+        })
+        .then((res) => setBookResults(res.data.results))
+        .catch(() => setBookResults([]))
+        .finally(() => setIsLoadingBooks(false));
+    }
+  }, [query, activeTab]);
+
+  // Game search
+  useEffect(() => {
+    if (activeTab === 'games') {
+      setIsLoadingGames(true);
+      axios
+        .get<GameSearchResponse>('/api/v1/game/search', {
+          params: { query, limit: 40 },
+        })
+        .then((res) => setGameResults(res.data.results))
+        .catch(() => setGameResults([]))
+        .finally(() => setIsLoadingGames(false));
+    }
+  }, [query, activeTab]);
+
+  if (error && activeTab === 'all') {
     return <ErrorPage statusCode={500} />;
   }
+
+  const tabs: Array<{ key: MediaTab; label: string }> = [
+    { key: 'all', label: intl.formatMessage(messages.tabAll) },
+    { key: 'books', label: intl.formatMessage(messages.tabBooks) },
+    {
+      key: 'audiobooks',
+      label: intl.formatMessage(messages.tabAudiobooks),
+    },
+    { key: 'games', label: intl.formatMessage(messages.tabGames) },
+  ];
 
   return (
     <>
@@ -47,15 +145,163 @@ const Search = () => {
       <div className="mb-5 mt-1">
         <Header>{intl.formatMessage(messages.searchresults)}</Header>
       </div>
-      <ListView
-        items={titles}
-        isEmpty={isEmpty}
-        isLoading={
-          isLoadingInitialData || (isLoadingMore && (titles?.length ?? 0) > 0)
-        }
-        isReachingEnd={isReachingEnd}
-        onScrollBottom={fetchMore}
-      />
+
+      {/* Media Type Tabs */}
+      <div className="mb-6 flex border-b border-gray-600">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            className={`px-4 py-2 text-sm font-medium transition ${
+              activeTab === tab.key
+                ? 'border-b-2 border-indigo-500 text-indigo-400'
+                : 'text-gray-400 hover:text-gray-300'
+            }`}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Movies & TV (existing) */}
+      {activeTab === 'all' && (
+        <ListView
+          items={titles}
+          isEmpty={isEmpty}
+          isLoading={
+            isLoadingInitialData ||
+            (isLoadingMore && (titles?.length ?? 0) > 0)
+          }
+          isReachingEnd={isReachingEnd}
+          onScrollBottom={fetchMore}
+        />
+      )}
+
+      {/* Books */}
+      {activeTab === 'books' && (
+        <div>
+          {isLoadingBooks ? (
+            <LoadingSpinner />
+          ) : bookResults.length === 0 ? (
+            <p className="py-8 text-center text-gray-400">
+              {intl.formatMessage(messages.noResults)}
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {bookResults.map((book) => (
+                <BookCard
+                  key={book.openLibraryId}
+                  openLibraryId={book.openLibraryId}
+                  title={book.title}
+                  authorName={book.authorName}
+                  coverUrl={book.coverUrl}
+                  year={book.year}
+                  publisher={book.publisher}
+                  seriesName={book.seriesName}
+                  seriesPosition={book.seriesPosition}
+                  mediaStatus={book.mediaStatus ?? undefined}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Audiobooks */}
+      {activeTab === 'audiobooks' && (
+        <div>
+          {isLoadingBooks ? (
+            <LoadingSpinner />
+          ) : bookResults.length === 0 ? (
+            <p className="py-8 text-center text-gray-400">
+              {intl.formatMessage(messages.noResults)}
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {bookResults.map((book) => (
+                <AudiobookCard
+                  key={book.openLibraryId}
+                  openLibraryId={book.openLibraryId}
+                  title={book.title}
+                  authorName={book.authorName}
+                  narratorName={book.narratorName}
+                  durationSeconds={book.durationSeconds}
+                  coverUrl={book.coverUrl}
+                  year={book.year}
+                  publisher={book.publisher}
+                  mediaStatus={book.mediaStatus ?? undefined}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Games */}
+      {activeTab === 'games' && (
+        <div>
+          {isLoadingGames ? (
+            <LoadingSpinner />
+          ) : gameResults.length === 0 ? (
+            <p className="py-8 text-center text-gray-400">
+              {intl.formatMessage(messages.noResults)}
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {gameResults.map((game) => (
+                <div
+                  key={game.igdbId}
+                  className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg bg-gray-800 shadow-md ring-1 ring-gray-700"
+                >
+                  <div className="relative aspect-[2/3] w-full overflow-hidden bg-gray-700">
+                    {game.coverUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={game.coverUrl}
+                        alt={game.title}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-gray-500">
+                        Game
+                      </div>
+                    )}
+                    <div className="absolute bottom-2 right-2">
+                      <span className="rounded bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
+                        Game
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-1 flex-col p-3">
+                    <h3 className="truncate text-sm font-semibold text-white">
+                      {game.title}
+                    </h3>
+                    <p className="truncate text-xs text-gray-400">
+                      {game.platforms
+                        ?.map((p) => p.name)
+                        .join(', ')}
+                    </p>
+                    <div className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                      {game.releaseYear && <span>{game.releaseYear}</span>}
+                      {game.developer && (
+                        <>
+                          <span>&middot;</span>
+                          <span className="truncate">{game.developer}</span>
+                        </>
+                      )}
+                    </div>
+                    {game.userRating && (
+                      <div className="mt-1 text-xs text-yellow-400">
+                        {game.userRating}%
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 };
