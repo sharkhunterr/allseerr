@@ -164,15 +164,14 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
   }
 
   const isBook = body.mediaType === MediaType.BOOK;
-  const mediaRepo = isBook
-    ? getRepository(BookMedia)
-    : getRepository(AudiobookMedia);
+  const bookMediaRepo = getRepository(BookMedia);
+  const audiobookMediaRepo = getRepository(AudiobookMedia);
   const requestRepo = getRepository(MediaRequest);
 
   // Duplicate detection: check if already requested
-  const existingMedia = await mediaRepo.findOne({
-    where: { foreignBookId: body.foreignBookId },
-  });
+  const existingMedia = isBook
+    ? await bookMediaRepo.findOne({ where: { foreignBookId: body.foreignBookId } })
+    : await audiobookMediaRepo.findOne({ where: { foreignBookId: body.foreignBookId } });
 
   if (existingMedia) {
     const existingRequest = await requestRepo.findOne({
@@ -224,8 +223,11 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           status: MediaStatus.PENDING,
         });
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await mediaRepo.save(media as any);
+      if (isBook) {
+        await bookMediaRepo.save(media as BookMedia);
+      } else {
+        await audiobookMediaRepo.save(media as AudiobookMedia);
+      }
     }
 
     // Create request
