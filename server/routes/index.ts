@@ -36,6 +36,7 @@ import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
+import bookRoutes from './book';
 import personRoutes from './person';
 import requestRoutes from './request';
 import searchRoutes from './search';
@@ -172,6 +173,7 @@ router.use('/service', isAuthenticated(), serviceRoutes);
 router.use('/issue', isAuthenticated(), issueRoutes);
 router.use('/issueComment', isAuthenticated(), issueCommentRoutes);
 router.use('/auth', authRoutes);
+router.use('/book', bookRoutes);
 router.use(
   '/overrideRule',
   isAuthenticated(Permission.ADMIN),

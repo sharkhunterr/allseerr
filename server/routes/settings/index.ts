@@ -41,6 +41,7 @@ import semver from 'semver';
 import { URL } from 'url';
 import metadataRoutes from './metadata';
 import notificationRoutes from './notifications';
+import bookSettingsRoutes from './bookSettings';
 import oidcRoutes from './oidc';
 import radarrRoutes from './radarr';
 import sonarrRoutes from './sonarr';
@@ -53,6 +54,7 @@ settingsRoutes.use('/sonarr', sonarrRoutes);
 settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 settingsRoutes.use('/oidc', oidcRoutes);
+settingsRoutes.use('/book', bookSettingsRoutes);
 
 const filteredMainSettings = (
   user: User,

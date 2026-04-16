@@ -7,6 +7,8 @@ import {
   MediaType,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import { AudiobookMedia } from '@server/entity/AudiobookMedia';
+import { BookMedia } from '@server/entity/BookMedia';
 import OverrideRule from '@server/entity/OverrideRule';
 import type { MediaRequestBody } from '@server/interfaces/api/requestInterfaces';
 import notificationManager, { Notification } from '@server/lib/notifications';
@@ -524,6 +526,12 @@ export class MediaRequest {
   })
   @Index()
   public media: Media;
+
+  @ManyToOne(() => BookMedia, { nullable: true, eager: true, onDelete: 'SET NULL' })
+  public bookMedia?: BookMedia | null;
+
+  @ManyToOne(() => AudiobookMedia, { nullable: true, eager: true, onDelete: 'SET NULL' })
+  public audiobookMedia?: AudiobookMedia | null;
 
   @ManyToOne(() => User, (user) => user.requests, {
     eager: true,

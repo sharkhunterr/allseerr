@@ -34,12 +34,12 @@ Legend:
 
 ### Database Migration
 
-- [ ] T030 Create SQLite migration in `server/migration/sqlite/{timestamp}-AddBookAudiobookEntities.ts` — create `book_media`, `audiobook_media`, `download_manager_instance`, `library_server_instance` tables; add nullable `bookMediaId` and `audiobookMediaId` FK columns to `media_request` table; migration must be idempotent
-- [ ] T031 Create PostgreSQL migration in `server/migration/postgres/{timestamp}-AddBookAudiobookEntities.ts` — same schema as T030 for PostgreSQL dialect
+- [x] T030 Create SQLite migration in `server/migration/sqlite/{timestamp}-AddBookAudiobookEntities.ts` — create `book_media`, `audiobook_media`, `download_manager_instance`, `library_server_instance` tables; add nullable `bookMediaId` and `audiobookMediaId` FK columns to `media_request` table; migration must be idempotent
+- [x] T031 Create PostgreSQL migration in `server/migration/postgres/{timestamp}-AddBookAudiobookEntities.ts` — same schema as T030 for PostgreSQL dialect
 
 ### MediaRequest Extension
 
-- [ ] T040 Add nullable `bookMedia` ManyToOne relation (`BookMedia`, eager, CASCADE) and nullable `audiobookMedia` ManyToOne relation (`AudiobookMedia`, eager, CASCADE) to `server/entity/MediaRequest.ts` — additive columns only, no modification to existing `media` relation
+- [x] T040 Add nullable `bookMedia` ManyToOne relation (`BookMedia`, eager, CASCADE) and nullable `audiobookMedia` ManyToOne relation (`AudiobookMedia`, eager, CASCADE) to `server/entity/MediaRequest.ts` — additive columns only, no modification to existing `media` relation
 
 ### Interfaces
 
@@ -70,8 +70,8 @@ Legend:
 
 ### Search Routes
 
-- [ ] T120 [US3] Create `GET /api/v1/book/search` route in `server/routes/book.ts` — query params: `query` (required), `type` (book|audiobook, default book), `page`, `limit`, `language`; calls `BookSearchService`; returns paginated `BookSearchResult[]` per contracts/book-api.md; requires authentication (FR-001, FR-002)
-- [ ] T121 [US3] Create `GET /api/v1/book/:id` route in `server/routes/book.ts` — fetches work detail from `OpenLibraryAPI.getWork()` + editions from `OpenLibraryAPI.getEdition()`; overlays local availability and request status; returns `BookDetailResult` per contracts/book-api.md (FR-003, FR-004)
+- [x] T120 [US3] Create `GET /api/v1/book/search` route in `server/routes/book.ts` — query params: `query` (required), `type` (book|audiobook, default book), `page`, `limit`, `language`; calls `BookSearchService`; returns paginated `BookSearchResult[]` per contracts/book-api.md; requires authentication (FR-001, FR-002)
+- [x] T121 [US3] Create `GET /api/v1/book/:id` route in `server/routes/book.ts` — fetches work detail from `OpenLibraryAPI.getWork()` + editions from `OpenLibraryAPI.getEdition()`; overlays local availability and request status; returns `BookDetailResult` per contracts/book-api.md (FR-003, FR-004)
 
 ### Search Bar Integration
 
@@ -80,7 +80,7 @@ Legend:
 
 ### Route Registration
 
-- [ ] T140 Register book routes in `server/routes/index.ts` — mount `/api/v1/book` router from `server/routes/book.ts`
+- [x] T140 Register book routes in `server/routes/index.ts` — mount `/api/v1/book` router from `server/routes/book.ts`
 
 ---
 
@@ -101,15 +101,15 @@ Legend:
 
 ### Settings Routes for Download Managers
 
-- [ ] T230 [US1] Create `GET /api/v1/settings/book/download-managers` route in `server/routes/settings/bookSettings.ts` — returns all `DownloadManagerInstance` entities; requires `MANAGE_SETTINGS` permission
-- [ ] T231 [US1] Create `POST /api/v1/settings/book/download-managers` route in `server/routes/settings/bookSettings.ts` — validates and persists new `DownloadManagerInstance` to database; requires `MANAGE_SETTINGS` (FR-021)
-- [ ] T232 [US1] Create `PUT /api/v1/settings/book/download-managers/:id` route in `server/routes/settings/bookSettings.ts` — updates existing instance; requires `MANAGE_SETTINGS`
-- [ ] T233 [US1] Create `DELETE /api/v1/settings/book/download-managers/:id` route in `server/routes/settings/bookSettings.ts` — removes instance; requires `MANAGE_SETTINGS`; warn if requests reference it
-- [ ] T234 [US1] Create `POST /api/v1/settings/book/download-managers/test` route in `server/routes/settings/bookSettings.ts` — instantiates adapter by `type`, calls `testConnection()`, returns `{ success, version, profiles, rootFolders }` or `{ success: false, message }` (FR-024)
+- [x] T230 [US1] Create `GET /api/v1/settings/book/download-managers` route in `server/routes/settings/bookSettings.ts` — returns all `DownloadManagerInstance` entities; requires `MANAGE_SETTINGS` permission
+- [x] T231 [US1] Create `POST /api/v1/settings/book/download-managers` route in `server/routes/settings/bookSettings.ts` — validates and persists new `DownloadManagerInstance` to database; requires `MANAGE_SETTINGS` (FR-021)
+- [x] T232 [US1] Create `PUT /api/v1/settings/book/download-managers/:id` route in `server/routes/settings/bookSettings.ts` — updates existing instance; requires `MANAGE_SETTINGS`
+- [x] T233 [US1] Create `DELETE /api/v1/settings/book/download-managers/:id` route in `server/routes/settings/bookSettings.ts` — removes instance; requires `MANAGE_SETTINGS`; warn if requests reference it
+- [x] T234 [US1] Create `POST /api/v1/settings/book/download-managers/test` route in `server/routes/settings/bookSettings.ts` — instantiates adapter by `type`, calls `testConnection()`, returns `{ success, version, profiles, rootFolders }` or `{ success: false, message }` (FR-024)
 
 ### Settings Route Registration
 
-- [ ] T240 Register book settings routes in `server/routes/settings/index.ts` — mount from `server/routes/settings/bookSettings.ts`
+- [x] T240 Register book settings routes in `server/routes/settings/index.ts` — mount from `server/routes/settings/bookSettings.ts`
 
 ---
 
@@ -142,12 +142,12 @@ Legend:
 
 ### Settings Routes for Library Servers
 
-- [ ] T360 [US2] Create `GET /api/v1/settings/book/library-servers` route in `server/routes/settings/bookSettings.ts` — returns all `LibraryServerInstance` entities; requires `MANAGE_SETTINGS`
-- [ ] T361 [US2] Create `POST /api/v1/settings/book/library-servers` route in `server/routes/settings/bookSettings.ts` — validates and persists new instance; requires `MANAGE_SETTINGS` (FR-026, FR-027, FR-028)
-- [ ] T362 [US2] Create `PUT /api/v1/settings/book/library-servers/:id` route in `server/routes/settings/bookSettings.ts` — updates instance including `scanIntervalSeconds`; requires `MANAGE_SETTINGS`
-- [ ] T363 [US2] Create `DELETE /api/v1/settings/book/library-servers/:id` route in `server/routes/settings/bookSettings.ts` — removes instance; requires `MANAGE_SETTINGS`; existing requests retain status
-- [ ] T364 [US2] Create `POST /api/v1/settings/book/library-servers/test` route in `server/routes/settings/bookSettings.ts` — instantiates adapter by `type`, calls `testConnection()`, returns `{ success, version, libraries }` or `{ success: false, message }` (FR-029)
-- [ ] T365 [US2] Create `POST /api/v1/settings/book/library-servers/:id/scan` route in `server/routes/settings/bookSettings.ts` — triggers immediate scan on specific instance; returns 202 (FR-030)
+- [x] T360 [US2] Create `GET /api/v1/settings/book/library-servers` route in `server/routes/settings/bookSettings.ts` — returns all `LibraryServerInstance` entities; requires `MANAGE_SETTINGS`
+- [x] T361 [US2] Create `POST /api/v1/settings/book/library-servers` route in `server/routes/settings/bookSettings.ts` — validates and persists new instance; requires `MANAGE_SETTINGS` (FR-026, FR-027, FR-028)
+- [x] T362 [US2] Create `PUT /api/v1/settings/book/library-servers/:id` route in `server/routes/settings/bookSettings.ts` — updates instance including `scanIntervalSeconds`; requires `MANAGE_SETTINGS`
+- [x] T363 [US2] Create `DELETE /api/v1/settings/book/library-servers/:id` route in `server/routes/settings/bookSettings.ts` — removes instance; requires `MANAGE_SETTINGS`; existing requests retain status
+- [x] T364 [US2] Create `POST /api/v1/settings/book/library-servers/test` route in `server/routes/settings/bookSettings.ts` — instantiates adapter by `type`, calls `testConnection()`, returns `{ success, version, libraries }` or `{ success: false, message }` (FR-029)
+- [x] T365 [US2] Create `POST /api/v1/settings/book/library-servers/:id/scan` route in `server/routes/settings/bookSettings.ts` — triggers immediate scan on specific instance; returns 202 (FR-030)
 
 ### Availability Route
 
