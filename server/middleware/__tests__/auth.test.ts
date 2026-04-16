@@ -14,7 +14,7 @@ jest.mock('@server/lib/settings', () => ({
   }),
 }));
 
-import { checkUser } from '../auth';
+import { checkUser } from '@server/middleware/auth';
 
 describe('checkUser middleware - OIDC token expiry', () => {
   const mockNext = jest.fn();
@@ -31,7 +31,8 @@ describe('checkUser middleware - OIDC token expiry', () => {
       locale: undefined,
     }) as unknown as Parameters<typeof checkUser>[0];
 
-  const createMockRes = () => ({}) as unknown as Parameters<typeof checkUser>[1];
+  const createMockRes = () =>
+    ({}) as unknown as Parameters<typeof checkUser>[1];
 
   beforeEach(() => {
     jest.clearAllMocks();

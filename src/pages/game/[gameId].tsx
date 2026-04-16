@@ -2,9 +2,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import defineMessages from '@app/utils/defineMessages';
-import {
-  ExclamationTriangleIcon,
-} from '@heroicons/react/24/outline';
+import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
 import axios from 'axios';
 import type { NextPage } from 'next';
@@ -37,13 +35,13 @@ const messages = defineMessages('pages.GameDetail', {
 interface GameDetailData {
   igdbId: number;
   title: string;
-  platforms: Array<{
+  platforms: {
     id: number;
     name: string;
     abbreviation?: string;
     mediaStatus?: MediaStatus | null;
     gameMediaId?: number | null;
-  }>;
+  }[];
   releaseYear?: number;
   developer?: string;
   publisher?: string;
@@ -64,9 +62,7 @@ const GameDetailPage: NextPage = () => {
   const { addToast } = useToasts();
   const { gameId } = router.query;
 
-  const [selectedPlatform, setSelectedPlatform] = useState<number | null>(
-    null
-  );
+  const [selectedPlatform, setSelectedPlatform] = useState<number | null>(null);
   const [note, setNote] = useState('');
   const [isRequesting, setIsRequesting] = useState(false);
 
@@ -206,9 +202,7 @@ const GameDetailPage: NextPage = () => {
 
           {/* Summary */}
           {game.summary && (
-            <p className="mt-4 leading-relaxed text-gray-300">
-              {game.summary}
-            </p>
+            <p className="mt-4 leading-relaxed text-gray-300">{game.summary}</p>
           )}
 
           {/* Manual workflow warning */}

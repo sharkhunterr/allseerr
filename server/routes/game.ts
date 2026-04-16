@@ -7,10 +7,8 @@ import {
 import { getRepository } from '@server/datasource';
 import { GameMedia } from '@server/entity/GameMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
-import notificationManager, {
-  Notification,
-} from '@server/lib/notifications';
-import { Permission, hasPermission } from '@server/lib/permissions';
+import notificationManager, { Notification } from '@server/lib/notifications';
+import { Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -142,7 +140,12 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
     note?: string;
   };
 
-  if (!body.igdbId || !body.platformIgdbId || !body.title || !body.platformName) {
+  if (
+    !body.igdbId ||
+    !body.platformIgdbId ||
+    !body.title ||
+    !body.platformName
+  ) {
     return res.status(400).json({
       status: 400,
       message: 'igdbId, platformIgdbId, platformName, and title are required.',
@@ -258,7 +261,9 @@ gameRoutes.put(
     });
 
     if (!request) {
-      return res.status(404).json({ status: 404, message: 'Request not found.' });
+      return res
+        .status(404)
+        .json({ status: 404, message: 'Request not found.' });
     }
 
     const body = req.body as {
@@ -333,7 +338,7 @@ gameRoutes.get('/platforms', isAuthenticated(), async (_req, res) => {
   try {
     const platforms = await igdb.getPlatforms();
     return res.status(200).json(platforms);
-  } catch (e) {
+  } catch {
     return res.status(500).json({
       status: 500,
       message: 'Failed to fetch platforms.',

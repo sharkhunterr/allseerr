@@ -39,7 +39,6 @@ const AudiobookCard = ({
   durationSeconds,
   coverUrl,
   year,
-  publisher,
   mediaStatus,
 }: AudiobookCardProps) => {
   const intl = useIntl();
@@ -86,9 +85,7 @@ const AudiobookCard = ({
         </div>
 
         <div className="flex flex-1 flex-col p-3">
-          <h3 className="truncate text-sm font-semibold text-white">
-            {title}
-          </h3>
+          <h3 className="truncate text-sm font-semibold text-white">{title}</h3>
           <p className="truncate text-xs text-gray-400">{authorName}</p>
           {narratorName && (
             <p className="truncate text-xs text-indigo-400">
@@ -98,9 +95,7 @@ const AudiobookCard = ({
             </p>
           )}
           <div className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-            {durationSeconds && (
-              <span>{formatDuration(durationSeconds)}</span>
-            )}
+            {durationSeconds && <span>{formatDuration(durationSeconds)}</span>}
             {year && (
               <>
                 {durationSeconds && <span>&middot;</span>}

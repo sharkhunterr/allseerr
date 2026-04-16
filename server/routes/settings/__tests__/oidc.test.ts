@@ -35,9 +35,9 @@ jest.mock('@server/logger', () => ({
 }));
 
 import { OidcAdapter } from '@server/lib/adapters/oidc/OidcAdapter';
+import oidcRoutes from '@server/routes/settings/oidc';
 import express from 'express';
 import request from 'supertest';
-import oidcRoutes from '../oidc';
 
 const app = express();
 app.use(express.json());
@@ -74,13 +74,11 @@ describe('OIDC Settings Routes', () => {
     });
 
     it('should validate issuer URL format', async () => {
-      const res = await request(app)
-        .put('/oidc')
-        .send({
-          enabled: true,
-          issuerUrl: 'not-a-url',
-          clientId: 'test',
-        });
+      const res = await request(app).put('/oidc').send({
+        enabled: true,
+        issuerUrl: 'not-a-url',
+        clientId: 'test',
+      });
       expect(res.status).toBe(400);
       expect(res.body.message).toContain('http');
     });
@@ -101,13 +99,11 @@ describe('OIDC Settings Routes', () => {
         message: 'Connected!',
       });
 
-      const res = await request(app)
-        .post('/oidc/test')
-        .send({
-          issuerUrl: 'https://idp.example.com',
-          clientId: 'test',
-          clientSecret: 'secret',
-        });
+      const res = await request(app).post('/oidc/test').send({
+        issuerUrl: 'https://idp.example.com',
+        clientId: 'test',
+        clientSecret: 'secret',
+      });
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
     });
@@ -118,12 +114,10 @@ describe('OIDC Settings Routes', () => {
         message: 'Discovery failed',
       });
 
-      const res = await request(app)
-        .post('/oidc/test')
-        .send({
-          issuerUrl: 'https://bad.example.com',
-          clientId: 'test',
-        });
+      const res = await request(app).post('/oidc/test').send({
+        issuerUrl: 'https://bad.example.com',
+        clientId: 'test',
+      });
       expect(res.status).toBe(400);
       expect(res.body.status).toBe('error');
     });

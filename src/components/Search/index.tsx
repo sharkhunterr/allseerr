@@ -1,10 +1,10 @@
 import AudiobookCard from '@app/components/AudiobookCard';
 import BookCard from '@app/components/BookCard';
-import GameCard from '@app/components/GameCard';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import GameCard from '@app/components/GameCard';
 import useDiscover from '@app/hooks/useDiscover';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
@@ -54,11 +54,11 @@ interface BookSearchResponse {
 interface GameResult {
   igdbId: number;
   title: string;
-  platforms: Array<{
+  platforms: {
     id: number;
     name: string;
     mediaStatus?: number | null;
-  }>;
+  }[];
   releaseYear?: number;
   developer?: string;
   coverUrl?: string;
@@ -130,7 +130,7 @@ const Search = () => {
     return <ErrorPage statusCode={500} />;
   }
 
-  const tabs: Array<{ key: MediaTab; label: string }> = [
+  const tabs: { key: MediaTab; label: string }[] = [
     { key: 'all', label: intl.formatMessage(messages.tabAll) },
     { key: 'books', label: intl.formatMessage(messages.tabBooks) },
     {
@@ -170,8 +170,7 @@ const Search = () => {
           items={titles}
           isEmpty={isEmpty}
           isLoading={
-            isLoadingInitialData ||
-            (isLoadingMore && (titles?.length ?? 0) > 0)
+            isLoadingInitialData || (isLoadingMore && (titles?.length ?? 0) > 0)
           }
           isReachingEnd={isReachingEnd}
           onScrollBottom={fetchMore}
