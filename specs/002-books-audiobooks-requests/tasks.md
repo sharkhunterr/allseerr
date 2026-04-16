@@ -43,8 +43,8 @@ Legend:
 
 ### Interfaces
 
-- [ ] T050 [P] Create `server/interfaces/api/bookInterfaces.ts` — define `BookSearchResult`, `BookDetailResult`, `AudiobookSearchResult`, `BookRequestBody`, `BookAvailabilityResult`, `LibraryBookResult` interfaces with full typing per contracts/book-api.md
-- [ ] T051 Extend `MediaRequestBody` in `server/interfaces/api/requestInterfaces.ts` — add optional fields: `openLibraryId?: string`, `isbn?: string`, `foreignBookId?: string`, `foreignAuthorId?: string`, `note?: string`, `preferredFormat?: string`
+- [x] T050 [P] Create `server/interfaces/api/bookInterfaces.ts` — define `BookSearchResult`, `BookDetailResult`, `AudiobookSearchResult`, `BookRequestBody`, `BookAvailabilityResult`, `LibraryBookResult` interfaces with full typing per contracts/book-api.md
+- [x] T051 Extend `MediaRequestBody` in `server/interfaces/api/requestInterfaces.ts` — add optional fields: `openLibraryId?: string`, `isbn?: string`, `foreignBookId?: string`, `foreignAuthorId?: string`, `note?: string`, `preferredFormat?: string`
 
 ### Settings
 
@@ -52,7 +52,7 @@ Legend:
 
 ### Permissions
 
-- [ ] T070 Audit existing permission flag values in `server/lib/permissions.ts` for available bit slots (current max is `VIEW_BLOCKLIST = 1073741824` at 2^30); add `REQUEST_BOOK = 536870912` (2^29 — available slot) and `REQUEST_AUDIOBOOK` (requires slot investigation — may need 2^31 or separate column); add `AUTO_APPROVE_BOOK` and `AUTO_APPROVE_AUDIOBOOK` flags using remaining available slots
+- [x] T070 Audit existing permission flag values in `server/lib/permissions.ts` for available bit slots (current max is `VIEW_BLOCKLIST = 1073741824` at 2^30); add `REQUEST_BOOK = 536870912` (2^29 — available slot) and `REQUEST_AUDIOBOOK` (requires slot investigation — may need 2^31 or separate column); add `AUTO_APPROVE_BOOK` and `AUTO_APPROVE_AUDIOBOOK` flags using remaining available slots
 
 ---
 
@@ -60,8 +60,8 @@ Legend:
 
 ### OpenLibrary API Client
 
-- [ ] T100 [P] [US3] Create OpenLibrary response type interfaces in `server/api/openlibrary/interfaces.ts` — `OpenLibrarySearchResponse`, `OpenLibraryWork`, `OpenLibraryEdition`, `OpenLibraryAuthor`, `OpenLibrarySearchDoc` per research.md response formats
-- [ ] T101 [US3] Create `OpenLibraryAPI` class in `server/api/openlibrary/index.ts` — extends `ExternalAPI` from `server/api/externalapi.ts`; implements `searchBooks(query, page, limit)`, `getWork(olid)`, `getEdition(olid)`, `getByISBN(isbn)`, `searchAuthors(query)`; rate limit at 1 req/3s; 5-min cache TTL; User-Agent header `Allseerr/{version}`; recommended fields filter per research.md
+- [x] T100 [P] [US3] Create OpenLibrary response type interfaces in `server/api/openlibrary/interfaces.ts` — `OpenLibrarySearchResponse`, `OpenLibraryWork`, `OpenLibraryEdition`, `OpenLibraryAuthor`, `OpenLibrarySearchDoc` per research.md response formats
+- [x] T101 [US3] Create `OpenLibraryAPI` class in `server/api/openlibrary/index.ts` — extends `ExternalAPI` from `server/api/externalapi.ts`; implements `searchBooks(query, page, limit)`, `getWork(olid)`, `getEdition(olid)`, `getByISBN(isbn)`, `searchAuthors(query)`; rate limit at 1 req/3s; 5-min cache TTL; User-Agent header `Allseerr/{version}`; recommended fields filter per research.md
 
 ### Book Search Service
 
@@ -179,17 +179,17 @@ Legend:
 
 ### Download Manager Settings
 
-- [ ] T500 [US1] Create `src/components/Settings/BooksAudiobooks/index.tsx` — settings page entry point with tabs for "Download Managers" and "Library Servers"; register in settings navigation
-- [ ] T501 [US1] Create `src/components/Settings/BooksAudiobooks/DownloadManagerSettings.tsx` — CRUD UI for download manager instances; form fields: name, type (Bindery/Readarr dropdown), hostname, port, API key, SSL toggle, base URL, external URL, media types (book/audiobook checkboxes), quality profile dropdown (populated from test response), root folder dropdown, default/fallback toggles; "Test Connection" button calling `POST /api/v1/settings/book/download-managers/test`; save/delete buttons; follow `RadarrModal` pattern from `src/components/Settings/RadarrModal/index.tsx` (FR-021, FR-022, FR-023, FR-024, FR-025)
+- [x] T500 [US1] Create `src/components/Settings/BooksAudiobooks/index.tsx` — settings page entry point with tabs for "Download Managers" and "Library Servers"; register in settings navigation
+- [x] T501 [US1] Create `src/components/Settings/BooksAudiobooks/DownloadManagerSettings.tsx` — CRUD UI for download manager instances; form fields: name, type (Bindery/Readarr dropdown), hostname, port, API key, SSL toggle, base URL, external URL, media types (book/audiobook checkboxes), quality profile dropdown (populated from test response), root folder dropdown, default/fallback toggles; "Test Connection" button calling `POST /api/v1/settings/book/download-managers/test`; save/delete buttons; follow `RadarrModal` pattern from `src/components/Settings/RadarrModal/index.tsx` (FR-021, FR-022, FR-023, FR-024, FR-025)
 
 ### Library Server Settings
 
-- [ ] T510 [US2] Create `src/components/Settings/BooksAudiobooks/LibraryServerSettings.tsx` — CRUD UI for library server instances; form fields: name, type (Grimmory/Audiobookshelf/Calibre-Web/Kavita dropdown), hostname, port, API key, SSL toggle, base URL, external URL, media types checkboxes, scan interval (seconds, default 300), library selection (populated from test response), enabled toggle; "Test Connection" button; "Scan Now" button calling `POST /api/v1/settings/book/library-servers/:id/scan`; follow same modal pattern as download manager settings (FR-026, FR-027, FR-028, FR-029, FR-042)
+- [x] T510 [US2] Create `src/components/Settings/BooksAudiobooks/LibraryServerSettings.tsx` — CRUD UI for library server instances; form fields: name, type (Grimmory/Audiobookshelf/Calibre-Web/Kavita dropdown), hostname, port, API key, SSL toggle, base URL, external URL, media types checkboxes, scan interval (seconds, default 300), library selection (populated from test response), enabled toggle; "Test Connection" button; "Scan Now" button calling `POST /api/v1/settings/book/library-servers/:id/scan`; follow same modal pattern as download manager settings (FR-026, FR-027, FR-028, FR-029, FR-042)
 
 ### Settings Page Registration
 
-- [ ] T520 Register "Books & Audiobooks" section in settings navigation — add entry in settings layout/sidebar linking to the new settings page; place after existing Radarr/Sonarr entries in `src/components/Settings/SettingsLayout.tsx`
-- [ ] T521 Create settings page route in `src/pages/settings/books-audiobooks.tsx` — renders `BooksAudiobooks/index.tsx` component
+- [x] T520 Register "Books & Audiobooks" section in settings navigation — add entry in settings layout/sidebar linking to the new settings page; place after existing Radarr/Sonarr entries in `src/components/Settings/SettingsLayout.tsx`
+- [x] T521 Create settings page route in `src/pages/settings/books-audiobooks.tsx` — renders `BooksAudiobooks/index.tsx` component
 
 ---
 
@@ -197,13 +197,13 @@ Legend:
 
 ### Book Card Component
 
-- [ ] T600 [P] [US3] Create `src/components/BookCard/index.tsx` — displays book search result: cover image (from OpenLibrary cover URL), title, author(s), year, publisher, page count, format badge, series info; availability badge ("Available" / "Requested" / "Request" button); click navigates to book detail page; follow pattern of existing media cards in the codebase (FR-003, FR-005, FR-035)
-- [ ] T601 [P] [US3] Create `src/components/AudiobookCard/index.tsx` — displays audiobook search result: cover image, title, author, narrator (prominent), duration (formatted), publisher, ASIN badge; availability badge; same click-through pattern (FR-004, FR-035)
+- [x] T600 [P] [US3] Create `src/components/BookCard/index.tsx` — displays book search result: cover image (from OpenLibrary cover URL), title, author(s), year, publisher, page count, format badge, series info; availability badge ("Available" / "Requested" / "Request" button); click navigates to book detail page; follow pattern of existing media cards in the codebase (FR-003, FR-005, FR-035)
+- [x] T601 [P] [US3] Create `src/components/AudiobookCard/index.tsx` — displays audiobook search result: cover image, title, author, narrator (prominent), duration (formatted), publisher, ASIN badge; availability badge; same click-through pattern (FR-004, FR-035)
 
 ### Book Detail Page
 
-- [ ] T610 [US3] [US4] Create `src/components/BookDetail/index.tsx` — book detail page: large cover, title, author(s), description, edition list, series info, subjects; request button (disabled if already available or requested, shows status); optional note input field (FR-009); preferred format selector for audiobooks (FR-036); direct link to library server when available (FR-019); existing request display with status (FR-010)
-- [ ] T611 [US3] Create `src/pages/book/[bookId].tsx` — Next.js dynamic route for book detail; fetches from `GET /api/v1/book/:id`; renders `BookDetail` component
+- [x] T610 [US3] [US4] Create `src/components/BookDetail/index.tsx` — book detail page: large cover, title, author(s), description, edition list, series info, subjects; request button (disabled if already available or requested, shows status); optional note input field (FR-009); preferred format selector for audiobooks (FR-036); direct link to library server when available (FR-019); existing request display with status (FR-010)
+- [x] T611 [US3] Create `src/pages/book/[bookId].tsx` — Next.js dynamic route for book detail; fetches from `GET /api/v1/book/:id`; renders `BookDetail` component
 
 ### Search UI Tabs
 

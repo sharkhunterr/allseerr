@@ -20,6 +20,7 @@ const messages = defineMessages('components.Settings', {
   menuAbout: 'About',
   menuMetadataProviders: 'Metadata Providers',
   menuOidc: 'OIDC',
+  menuBooksAudiobooks: 'Books & Audiobooks',
 });
 
 type SettingsLayoutProps = {
@@ -44,6 +45,11 @@ const SettingsLayout = ({ children }: SettingsLayoutProps) => {
       text: intl.formatMessage(messages.menuOidc),
       route: '/settings/oidc',
       regex: /^\/settings\/oidc/,
+    },
+    {
+      text: intl.formatMessage(messages.menuBooksAudiobooks),
+      route: '/settings/books-audiobooks',
+      regex: /^\/settings\/books-audiobooks/,
     },
     settings.currentSettings.mediaServerType === MediaServerType.PLEX
       ? {

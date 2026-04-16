@@ -29,6 +29,8 @@ export enum Permission {
   WATCHLIST_VIEW = 134217728,
   MANAGE_BLOCKLIST = 268435456,
   VIEW_BLOCKLIST = 1073741824,
+  REQUEST_BOOK = 536870912,
+  REQUEST_AUDIOBOOK = 2147483648,
 }
 
 export interface PermissionCheckOptions {
