@@ -95,7 +95,7 @@ export class OidcAdapter {
   ): Promise<OidcAuthResult> {
     const config = await this.getConfiguration();
 
-    let tokens: oidc.TokenEndpointResponse;
+    let tokens: Awaited<ReturnType<typeof oidc.authorizationCodeGrant>>;
     try {
       tokens = await oidc.authorizationCodeGrant(config, callbackUrl, {
         expectedState: checks.state,
