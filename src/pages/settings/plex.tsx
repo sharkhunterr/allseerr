@@ -1,16 +1,13 @@
-import SettingsLayout from '@app/components/Settings/SettingsLayout';
-import SettingsPlex from '@app/components/Settings/SettingsPlex';
-import useRouteGuard from '@app/hooks/useRouteGuard';
-import { Permission } from '@app/hooks/useUser';
 import type { NextPage } from 'next';
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
 
-const PlexSettingsPage: NextPage = () => {
-  useRouteGuard(Permission.ADMIN);
-  return (
-    <SettingsLayout>
-      <SettingsPlex />
-    </SettingsLayout>
-  );
+const LegacyPlexPage: NextPage = () => {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/settings/media-servers');
+  }, [router]);
+  return null;
 };
 
-export default PlexSettingsPage;
+export default LegacyPlexPage;

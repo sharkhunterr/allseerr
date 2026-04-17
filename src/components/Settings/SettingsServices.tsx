@@ -6,6 +6,10 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
+import SubTabs from '@app/components/Common/SubTabs';
+import DownloadManagerSettings from '@app/components/Settings/BooksAudiobooks/DownloadManagerSettings';
+import LibraryServerSettings from '@app/components/Settings/BooksAudiobooks/LibraryServerSettings';
+import SettingsGames from '@app/components/Settings/Games';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
 import OverrideRuleTiles from '@app/components/Settings/OverrideRule/OverrideRuleTiles';
 import RadarrModal from '@app/components/Settings/RadarrModal';
@@ -203,7 +207,7 @@ const ServerInstance = ({
   );
 };
 
-const SettingsServices = () => {
+const MoviesAndTVServices = () => {
   const intl = useIntl();
   const {
     data: radarrData,
@@ -260,12 +264,6 @@ const SettingsServices = () => {
 
   return (
     <>
-      <PageTitle
-        title={[
-          intl.formatMessage(messages.services),
-          intl.formatMessage(globalMessages.settings),
-        ]}
-      />
       <div className="mb-6">
         <h3 className="heading">
           {intl.formatMessage(messages.radarrsettings)}
@@ -553,6 +551,51 @@ const SettingsServices = () => {
           sonarrServices={sonarrData}
         />
       )}
+    </>
+  );
+};
+
+const SettingsServices = () => {
+  const intl = useIntl();
+  const [activeTab, setActiveTab] = useState<
+    'movies-tv' | 'books' | 'audiobooks' | 'games'
+  >('movies-tv');
+
+  const tabs: { key: typeof activeTab; label: string }[] = [
+    { key: 'movies-tv', label: `${intl.formatMessage(globalMessages.movies)} & ${intl.formatMessage(globalMessages.tvshows)}` },
+    { key: 'books', label: intl.formatMessage(globalMessages.book) },
+    { key: 'audiobooks', label: intl.formatMessage(globalMessages.audiobook) },
+    { key: 'games', label: intl.formatMessage(globalMessages.game) },
+  ];
+
+  return (
+    <>
+      <PageTitle
+        title={[
+          intl.formatMessage(messages.services),
+          intl.formatMessage(globalMessages.settings),
+        ]}
+      />
+      <div className="mb-6">
+        <h3 className="heading">
+          {intl.formatMessage(messages.services)}
+        </h3>
+      </div>
+      <SubTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+      {activeTab === 'movies-tv' && <MoviesAndTVServices />}
+      {activeTab === 'books' && (
+        <div className="space-y-8">
+          <DownloadManagerSettings mediaTypeFilter="book" />
+          <LibraryServerSettings mediaTypeFilter="book" />
+        </div>
+      )}
+      {activeTab === 'audiobooks' && (
+        <div className="space-y-8">
+          <DownloadManagerSettings mediaTypeFilter="audiobook" />
+          <LibraryServerSettings mediaTypeFilter="audiobook" />
+        </div>
+      )}
+      {activeTab === 'games' && <SettingsGames embedded />}
     </>
   );
 };

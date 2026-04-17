@@ -74,7 +74,7 @@ const defaultSettings: GameSettings = {
   },
 };
 
-const SettingsGames = () => {
+const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
   const intl = useIntl();
   const { addToast } = useToasts();
   const [igdbTestResult, setIgdbTestResult] = useState<{
@@ -139,20 +139,24 @@ const SettingsGames = () => {
 
   return (
     <>
-      <PageTitle
-        title={[
-          intl.formatMessage(messages.games),
-          intl.formatMessage(globalMessages.settings),
-        ]}
-      />
-      <div className="mb-6">
-        <h3 className="heading">
-          {intl.formatMessage(messages.gamesSettings)}
-        </h3>
-        <p className="description">
-          {intl.formatMessage(messages.gamesDescription)}
-        </p>
-      </div>
+      {!embedded && (
+        <>
+          <PageTitle
+            title={[
+              intl.formatMessage(messages.games),
+              intl.formatMessage(globalMessages.settings),
+            ]}
+          />
+          <div className="mb-6">
+            <h3 className="heading">
+              {intl.formatMessage(messages.gamesSettings)}
+            </h3>
+            <p className="description">
+              {intl.formatMessage(messages.gamesDescription)}
+            </p>
+          </div>
+        </>
+      )}
 
       <Formik
         initialValues={{

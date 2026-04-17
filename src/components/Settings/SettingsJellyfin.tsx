@@ -86,11 +86,13 @@ interface SyncStatus {
 interface SettingsJellyfinProps {
   isSetupSettings?: boolean;
   onComplete?: () => void;
+  embedded?: boolean;
 }
 
 const SettingsJellyfin: React.FC<SettingsJellyfinProps> = ({
   onComplete,
   isSetupSettings,
+  embedded,
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const toasts = useToasts();
@@ -265,20 +267,22 @@ const SettingsJellyfin: React.FC<SettingsJellyfinProps> = ({
 
   return (
     <>
-      <div className="mb-6">
-        <h3 className="heading">
-          {intl.formatMessage(
-            messages.jellyfinlibraries,
-            mediaServerFormatValues
-          )}
-        </h3>
-        <p className="description">
-          {intl.formatMessage(
-            messages.jellyfinlibrariesDescription,
-            mediaServerFormatValues
-          )}
-        </p>
-      </div>
+      {!embedded && (
+        <div className="mb-6">
+          <h3 className="heading">
+            {intl.formatMessage(
+              messages.jellyfinlibraries,
+              mediaServerFormatValues
+            )}
+          </h3>
+          <p className="description">
+            {intl.formatMessage(
+              messages.jellyfinlibrariesDescription,
+              mediaServerFormatValues
+            )}
+          </p>
+        </div>
+      )}
       <div className="section">
         <Button onClick={() => syncLibraries()} disabled={isSyncing}>
           <svg

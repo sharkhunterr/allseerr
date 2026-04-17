@@ -1,16 +1,13 @@
-import SettingsLayout from '@app/components/Settings/SettingsLayout';
-import SettingsGames from '@app/components/Settings/Games';
-import useRouteGuard from '@app/hooks/useRouteGuard';
-import { Permission } from '@app/hooks/useUser';
 import type { NextPage } from 'next';
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
 
-const SettingsGamesPage: NextPage = () => {
-  useRouteGuard(Permission.ADMIN);
-  return (
-    <SettingsLayout>
-      <SettingsGames />
-    </SettingsLayout>
-  );
+const LegacyGamesPage: NextPage = () => {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/settings/services');
+  }, [router]);
+  return null;
 };
 
-export default SettingsGamesPage;
+export default LegacyGamesPage;
