@@ -1,3 +1,4 @@
+import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import defineMessages from '@app/utils/defineMessages';
@@ -339,7 +340,7 @@ const DownloadManagerSettings = ({
             >
               <BeakerIcon className="mr-1 h-4 w-4" />
               {isTesting ? (
-                <LoadingSpinner />
+                <Spinner />
               ) : (
                 intl.formatMessage(messages.testConnection)
               )}

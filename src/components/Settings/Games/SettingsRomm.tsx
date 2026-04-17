@@ -1,5 +1,5 @@
+import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
-import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -233,7 +233,7 @@ const SettingsRomm = () => {
               >
                 <BeakerIcon className="mr-1 h-4 w-4" />
                 {isTesting ? (
-                  <LoadingSpinner />
+                  <Spinner />
                 ) : (
                   intl.formatMessage(messages.testConnection)
                 )}
