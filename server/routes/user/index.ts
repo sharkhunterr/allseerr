@@ -456,6 +456,9 @@ router.get<{ id: string }, UserRequestsResponse>(
         .leftJoinAndSelect('request.seasons', 'seasons')
         .leftJoinAndSelect('request.modifiedBy', 'modifiedBy')
         .leftJoinAndSelect('request.requestedBy', 'requestedBy')
+        .leftJoinAndSelect('request.gameMedia', 'gameMedia')
+        .leftJoinAndSelect('request.bookMedia', 'bookMedia')
+        .leftJoinAndSelect('request.audiobookMedia', 'audiobookMedia')
         .andWhere('requestedBy.id = :id', {
           id: user.id,
         })
