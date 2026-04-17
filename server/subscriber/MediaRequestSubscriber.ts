@@ -952,8 +952,40 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     manager: EntityManager,
     entity: MediaRequest
   ): Promise<void> {
-    // Skip for non-TMDB media types (games, books, audiobooks)
+    // Handle non-TMDB media types (games, books, audiobooks)
     if (!entity.media) {
+      if (entity.gameMedia) {
+        const { GameMedia } = await import('@server/entity/GameMedia');
+        const gm = await manager.findOne(GameMedia, {
+          where: { id: entity.gameMedia.id },
+        });
+        if (gm && gm.status !== MediaStatus.AVAILABLE) {
+          gm.status = MediaStatus.UNKNOWN;
+          await manager.save(gm);
+        }
+      }
+      if (entity.bookMedia) {
+        const { BookMedia } = await import('@server/entity/BookMedia');
+        const bm = await manager.findOne(BookMedia, {
+          where: { id: entity.bookMedia.id },
+        });
+        if (bm && bm.status !== MediaStatus.AVAILABLE) {
+          bm.status = MediaStatus.UNKNOWN;
+          await manager.save(bm);
+        }
+      }
+      if (entity.audiobookMedia) {
+        const { AudiobookMedia } = await import(
+          '@server/entity/AudiobookMedia'
+        );
+        const am = await manager.findOne(AudiobookMedia, {
+          where: { id: entity.audiobookMedia.id },
+        });
+        if (am && am.status !== MediaStatus.AVAILABLE) {
+          am.status = MediaStatus.UNKNOWN;
+          await manager.save(am);
+        }
+      }
       return;
     }
 
