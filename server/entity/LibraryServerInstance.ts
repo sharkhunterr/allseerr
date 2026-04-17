@@ -53,6 +53,14 @@ export class LibraryServerInstance {
   @Column({ type: 'integer', nullable: true })
   public lastScanTimestamp?: number | null;
 
+  /**
+   * Per-library media type mapping for servers that host multiple libraries
+   * (e.g., Audiobookshelf with both book and audiobook libraries).
+   * JSON-serialized array of { libraryId, name, mediaType }.
+   */
+  @Column({ type: 'text', nullable: true })
+  public libraryMapping?: string | null;
+
   @CreateDateColumn()
   public createdAt: Date;
 

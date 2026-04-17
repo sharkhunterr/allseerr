@@ -362,11 +362,29 @@ export type JobId =
   | 'image-cache-cleanup'
   | 'availability-sync'
   | 'process-blocklisted-tags'
-  | 'romm-scan';
+  | 'romm-scan'
+  | 'audiobookshelf-scan';
 
 export interface OidcGroupMapping {
   oidcGroup: string;
   permissions: number;
+}
+
+export interface AudiobookshelfLibraryMapping {
+  libraryId: string;
+  name: string;
+  mediaType: 'book' | 'audiobook' | 'ignore';
+}
+
+export interface BookSettings {
+  audiobookshelf: {
+    url: string;
+    publicUrl: string;
+    apiKey: string;
+    pollIntervalMinutes: number;
+    enabled: boolean;
+    libraries: AudiobookshelfLibraryMapping[];
+  };
 }
 
 export interface GameSettings {
@@ -414,6 +432,7 @@ export interface AllSettings {
   network: NetworkSettings;
   metadataSettings: MetadataSettings;
   game: GameSettings;
+  book: BookSettings;
   oidc: OidcSettings;
   migrations: string[];
 }
@@ -633,6 +652,9 @@ class Settings {
         'romm-scan': {
           schedule: '0 */15 * * * *',
         },
+        'audiobookshelf-scan': {
+          schedule: '0 */15 * * * *',
+        },
       },
       network: {
         csrfProtection: false,
@@ -668,6 +690,16 @@ class Settings {
           password: '',
           pollIntervalMinutes: 15,
           enabled: false,
+        },
+      },
+      book: {
+        audiobookshelf: {
+          url: '',
+          publicUrl: '',
+          apiKey: '',
+          pollIntervalMinutes: 15,
+          enabled: false,
+          libraries: [],
         },
       },
       oidc: {
@@ -753,6 +785,14 @@ class Settings {
 
   set game(data: GameSettings) {
     this.data.game = mergeSettings(this.data.game, data);
+  }
+
+  get book(): BookSettings {
+    return this.data.book;
+  }
+
+  set book(data: BookSettings) {
+    this.data.book = mergeSettings(this.data.book, data);
   }
 
   get oidc(): OidcSettings {

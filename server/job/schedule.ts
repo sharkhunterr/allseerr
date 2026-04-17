@@ -8,6 +8,7 @@ import {
   jellyfinFullScanner,
   jellyfinRecentScanner,
 } from '@server/lib/scanners/jellyfin';
+import { audiobookshelfScanner } from '@server/lib/scanners/audiobookshelf';
 import { plexFullScanner, plexRecentScanner } from '@server/lib/scanners/plex';
 import { radarrScanner } from '@server/lib/scanners/radarr';
 import { rommScanner } from '@server/lib/scanners/romm';
@@ -275,6 +276,23 @@ export const startJobs = (): void => {
     }),
     running: () => rommScanner.status().running,
     cancelFn: () => rommScanner.cancel(),
+  });
+
+  // Run Audiobookshelf scan every 15 minutes
+  scheduledJobs.push({
+    id: 'audiobookshelf-scan',
+    name: 'Audiobookshelf Library Scan',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['audiobookshelf-scan'].schedule,
+    job: schedule.scheduleJob(jobs['audiobookshelf-scan'].schedule, () => {
+      logger.info('Starting scheduled job: Audiobookshelf Library Scan', {
+        label: 'Jobs',
+      });
+      audiobookshelfScanner.run();
+    }),
+    running: () => audiobookshelfScanner.status().running,
+    cancelFn: () => audiobookshelfScanner.cancel(),
   });
 
   logger.info('Scheduled jobs loaded', { label: 'Jobs' });

@@ -11,7 +11,8 @@ export type AvailableCacheIds =
   | 'plextv'
   | 'plexwatchlist'
   | 'tvdb'
-  | 'romm';
+  | 'romm'
+  | 'audiobookshelf';
 
 const DEFAULT_TTL = 300;
 const DEFAULT_CHECK_PERIOD = 120;
@@ -77,6 +78,10 @@ class CacheManager {
       checkPeriod: 60 * 30,
     }),
     romm: new Cache('romm', 'ROMM Games', {
+      stdTtl: 86400,
+      checkPeriod: 60 * 30,
+    }),
+    audiobookshelf: new Cache('audiobookshelf', 'Audiobookshelf Library', {
       stdTtl: 86400,
       checkPeriod: 60 * 30,
     }),
