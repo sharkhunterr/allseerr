@@ -1,4 +1,3 @@
-import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
 import globalMessages from '@app/i18n/globalMessages';
@@ -158,35 +157,41 @@ const SettingsIgdb = () => {
               </div>
             )}
 
-            <div className="mt-3">
-              <Button
-                buttonType="default"
-                type="button"
-                disabled={isTesting || !values.igdbClientId}
-                onClick={() =>
-                  testIgdb(values.igdbClientId, values.igdbClientSecret)
-                }
-              >
-                <BeakerIcon className="mr-1 h-4 w-4" />
-                {isTesting ? (
-                  <Spinner />
-                ) : (
-                  intl.formatMessage(messages.testConnection)
-                )}
-              </Button>
-            </div>
           </div>
 
           <div className="actions">
             <div className="flex justify-end">
-              <Button
-                buttonType="primary"
-                type="submit"
-                disabled={isSubmitting}
-              >
-                <ArrowDownOnSquareIcon className="mr-1 h-5 w-5" />
-                {intl.formatMessage(globalMessages.save)}
-              </Button>
+              <span className="ml-3 inline-flex rounded-md shadow-sm">
+                <Button
+                  buttonType="warning"
+                  type="button"
+                  disabled={isTesting || !values.igdbClientId}
+                  onClick={() =>
+                    testIgdb(values.igdbClientId, values.igdbClientSecret)
+                  }
+                >
+                  <BeakerIcon />
+                  <span>
+                    {isTesting
+                      ? intl.formatMessage(globalMessages.testing)
+                      : intl.formatMessage(globalMessages.test)}
+                  </span>
+                </Button>
+              </span>
+              <span className="ml-3 inline-flex rounded-md shadow-sm">
+                <Button
+                  buttonType="primary"
+                  type="submit"
+                  disabled={isSubmitting || isTesting}
+                >
+                  <ArrowDownOnSquareIcon />
+                  <span>
+                    {isSubmitting
+                      ? intl.formatMessage(globalMessages.saving)
+                      : intl.formatMessage(globalMessages.save)}
+                  </span>
+                </Button>
+              </span>
             </div>
           </div>
         </Form>
