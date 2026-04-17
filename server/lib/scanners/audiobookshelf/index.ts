@@ -117,7 +117,6 @@ class AudiobookshelfScanner {
         this.totalSize += items.length;
 
         const isBook = library.mediaType === 'book';
-        const repo = isBook ? bookRepo : audiobookRepo;
 
         for (const item of items) {
           if (!this.running) break;
@@ -145,9 +144,15 @@ class AudiobookshelfScanner {
           }
 
           if (!existing && meta.authorName) {
-            existing = await (repo as typeof bookRepo).findOne({
-              where: { title: meta.title, authorName: meta.authorName },
-            });
+            if (isBook) {
+              existing = await bookRepo.findOne({
+                where: { title: meta.title, authorName: meta.authorName },
+              });
+            } else {
+              existing = await audiobookRepo.findOne({
+                where: { title: meta.title, authorName: meta.authorName },
+              });
+            }
           }
 
           if (existing) {
@@ -160,7 +165,11 @@ class AudiobookshelfScanner {
               if (coverUrl && !existing.coverUrl) {
                 existing.coverUrl = coverUrl;
               }
-              await repo.save(existing as BookMedia & AudiobookMedia);
+              if (isBook) {
+                await bookRepo.save(existing as BookMedia);
+              } else {
+                await audiobookRepo.save(existing as AudiobookMedia);
+              }
               this.updatedItems++;
             }
           } else {
