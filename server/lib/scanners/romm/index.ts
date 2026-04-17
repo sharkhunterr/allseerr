@@ -72,6 +72,9 @@ class RommScanner {
       const gameMediaRepo = getRepository(GameMedia);
       let page = 1;
       let hasMore = true;
+      // Track seen igdbId+platformId across all pages to skip
+      // duplicate ROMs (hacks, regions, No-Intro variants, etc.)
+      const seen = new Set<string>();
 
       while (hasMore && this.running) {
         const result = await adapter.getGamesPage(page, PAGE_SIZE);
@@ -82,9 +85,6 @@ class RommScanner {
         const gamesWithIgdb = result.games.filter((g) => g.igdb_id);
 
         if (gamesWithIgdb.length > 0) {
-          // Deduplicate by igdbId+platformId within this page
-          const seen = new Set<string>();
-
           for (const game of gamesWithIgdb) {
             const platformId = game.platform_id ?? 0;
             const key = `${game.igdb_id}:${platformId}`;
