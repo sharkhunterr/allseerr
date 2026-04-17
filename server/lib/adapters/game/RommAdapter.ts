@@ -97,32 +97,26 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
   }
 
   /**
-   * Get all games from ROMM for matching.
+   * Get a page of games from ROMM.
    */
-  async getGames(): Promise<RommGame[]> {
+  async getGamesPage(
+    page = 1,
+    pageSize = 100
+  ): Promise<{ games: RommGame[]; hasMore: boolean }> {
     try {
       const response = await this.axios.get('/roms', {
-        params: { limit: 10000 },
+        params: { limit: pageSize, offset: (page - 1) * pageSize },
       });
-      return response.data ?? [];
+      const games: RommGame[] = response.data ?? [];
+      return { games, hasMore: games.length === pageSize };
     } catch (e) {
-      logger.error('ROMM get games failed', {
+      logger.error('ROMM get games page failed', {
         label: 'romm',
+        page,
         error: e instanceof Error ? e.message : String(e),
       });
-      return [];
+      return { games: [], hasMore: false };
     }
-  }
-
-  /**
-   * Get games added since a specific timestamp.
-   */
-  async getNewGamesSince(
-    timestamp: number
-  ): Promise<RommGame[]> {
-    const allGames = await this.getGames();
-    // ROMM may not support filtering by date; return all for now
-    return allGames;
   }
 
   /**
