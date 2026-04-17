@@ -10,8 +10,8 @@ import { BookMedia } from '@server/entity/BookMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import { BookDownloadService } from '@server/lib/services/BookDownloadService';
-import { isAuthenticated } from '@server/middleware/auth';
 import logger from '@server/logger';
+import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
 
 const bookRoutes = Router();
@@ -52,7 +52,8 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
 
         return {
           ...result,
-          mediaType: type === 'audiobook' ? MediaType.AUDIOBOOK : MediaType.BOOK,
+          mediaType:
+            type === 'audiobook' ? MediaType.AUDIOBOOK : MediaType.BOOK,
           mediaStatus: existing?.status ?? null,
           bookMediaId: existing?.id ?? null,
         };
@@ -170,8 +171,12 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
 
   // Duplicate detection: check if already requested
   const existingMedia = isBook
-    ? await bookMediaRepo.findOne({ where: { foreignBookId: body.foreignBookId } })
-    : await audiobookMediaRepo.findOne({ where: { foreignBookId: body.foreignBookId } });
+    ? await bookMediaRepo.findOne({
+        where: { foreignBookId: body.foreignBookId },
+      })
+    : await audiobookMediaRepo.findOne({
+        where: { foreignBookId: body.foreignBookId },
+      });
 
   if (existingMedia) {
     const existingRequest = await requestRepo.findOne({
@@ -233,6 +238,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
     // Create request
     const request = new MediaRequest();
     request.status = MediaRequestStatus.PENDING;
+    request.type = body.mediaType;
     request.requestedBy = req.user!;
 
     if (isBook) {
@@ -357,18 +363,13 @@ bookRoutes.put(
     await requestRepo.save(request);
 
     const media = request.bookMedia || request.audiobookMedia;
-    const mediaType = request.bookMedia
-      ? MediaType.BOOK
-      : MediaType.AUDIOBOOK;
-    const title = media?.title ?? 'Unknown';
-
+    const mediaType = request.bookMedia ? MediaType.BOOK : MediaType.AUDIOBOOK;
     // Handle status-specific actions
     if (body.status === MediaRequestStatus.APPROVED) {
       if (media) {
         const downloadService = new BookDownloadService();
         await downloadService.dispatch(media, mediaType);
       }
-    } else if (body.status === MediaRequestStatus.DECLINED) {
     }
 
     logger.info(
@@ -392,9 +393,7 @@ bookRoutes.delete('/request/:id', isAuthenticated(), async (req, res) => {
   });
 
   if (!request) {
-    return res
-      .status(404)
-      .json({ status: 404, message: 'Request not found.' });
+    return res.status(404).json({ status: 404, message: 'Request not found.' });
   }
 
   // Only admin or own pending request

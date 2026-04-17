@@ -818,6 +818,11 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
   }
 
   public async updateParentStatus(entity: MediaRequest): Promise<void> {
+    // Skip for non-TMDB media types (games, books, audiobooks)
+    if (!entity.media) {
+      return;
+    }
+
     const mediaRepository = getRepository(Media);
     const media = await mediaRepository.findOne({
       where: { id: entity.media.id },

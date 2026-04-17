@@ -9,6 +9,7 @@ import {
 import { getRepository } from '@server/datasource';
 import { AudiobookMedia } from '@server/entity/AudiobookMedia';
 import { BookMedia } from '@server/entity/BookMedia';
+import { GameMedia } from '@server/entity/GameMedia';
 import OverrideRule from '@server/entity/OverrideRule';
 import type { MediaRequestBody } from '@server/interfaces/api/requestInterfaces';
 import notificationManager, { Notification } from '@server/lib/notifications';
@@ -527,11 +528,26 @@ export class MediaRequest {
   @Index()
   public media: Media;
 
-  @ManyToOne(() => BookMedia, { nullable: true, eager: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => BookMedia, {
+    nullable: true,
+    eager: true,
+    onDelete: 'SET NULL',
+  })
   public bookMedia?: BookMedia | null;
 
-  @ManyToOne(() => AudiobookMedia, { nullable: true, eager: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => AudiobookMedia, {
+    nullable: true,
+    eager: true,
+    onDelete: 'SET NULL',
+  })
   public audiobookMedia?: AudiobookMedia | null;
+
+  @ManyToOne(() => GameMedia, {
+    nullable: true,
+    eager: true,
+    onDelete: 'SET NULL',
+  })
+  public gameMedia?: GameMedia | null;
 
   @ManyToOne(() => User, (user) => user.requests, {
     eager: true,
@@ -623,6 +639,11 @@ export class MediaRequest {
   @AfterInsert()
   public async notifyNewRequest(): Promise<void> {
     if (this.status === MediaRequestStatus.PENDING) {
+      // Skip TMDB notifications for non-TMDB media (games, books, audiobooks)
+      if (!this.media) {
+        return;
+      }
+
       const mediaRepository = getRepository(Media);
       const media = await mediaRepository.findOne({
         where: { id: this.media.id },
@@ -660,6 +681,11 @@ export class MediaRequest {
       this.status === MediaRequestStatus.APPROVED ||
       this.status === MediaRequestStatus.DECLINED
     ) {
+      // Skip TMDB notifications for non-TMDB media (games, books, audiobooks)
+      if (!this.media) {
+        return;
+      }
+
       const mediaRepository = getRepository(Media);
       const media = await mediaRepository.findOne({
         where: { id: this.media.id },

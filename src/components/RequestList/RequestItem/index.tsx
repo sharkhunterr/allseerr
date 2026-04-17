@@ -17,7 +17,11 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid';
-import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { RequestResultsResponse } from '@server/interfaces/api/requestInterfaces';
@@ -54,6 +58,11 @@ const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
   return (movie as MovieDetails).title !== undefined;
 };
 
+const isNonTmdbType = (type: string) =>
+  type === MediaType.GAME ||
+  type === MediaType.BOOK ||
+  type === MediaType.AUDIOBOOK;
+
 interface RequestItemErrorProps {
   requestData?: NonFunctionProperties<MediaRequest>;
   revalidateList: () => void;
@@ -67,17 +76,10 @@ const RequestItemError = ({
   const { hasPermission } = useUser();
 
   const deleteRequest = async () => {
-    await axios.delete(`/api/v1/media/${requestData?.media.id}`);
+    await axios.delete(`/api/v1/request/${requestData?.id}`);
     revalidateList();
     mutate('/api/v1/request/count');
   };
-
-  const { mediaUrl: plexUrl, mediaUrl4k: plexUrl4k } = useDeepLinks({
-    mediaUrl: requestData?.media?.mediaUrl,
-    mediaUrl4k: requestData?.media?.mediaUrl4k,
-    iOSPlexUrl: requestData?.media?.iOSPlexUrl,
-    iOSPlexUrl4k: requestData?.media?.iOSPlexUrl4k,
-  });
 
   return (
     <div className="flex h-64 w-full flex-col justify-center rounded-xl bg-gray-800 py-4 text-gray-400 shadow-md ring-1 ring-red-500 xl:h-28 xl:flex-row">
@@ -100,188 +102,10 @@ const RequestItemError = ({
               ),
             })}
           </div>
-          {requestData && hasPermission(Permission.MANAGE_REQUESTS) && (
-            <>
-              <div className="card-field">
-                <span className="card-field-name">
-                  {intl.formatMessage(messages.tmdbid)}
-                </span>
-                <span className="flex truncate text-sm text-gray-300">
-                  {requestData.media.tmdbId}
-                </span>
-              </div>
-              {requestData.media.tvdbId && (
-                <div className="card-field">
-                  <span className="card-field-name">
-                    {intl.formatMessage(messages.tvdbid)}
-                  </span>
-                  <span className="flex truncate text-sm text-gray-300">
-                    {requestData?.media.tvdbId}
-                  </span>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-        <div className="ml-4 mt-4 flex w-full flex-col justify-center overflow-hidden pr-4 text-sm sm:ml-2 sm:mt-0 xl:flex-1 xl:pr-0">
-          {requestData && (
-            <>
-              <div className="card-field">
-                <span className="card-field-name">
-                  {intl.formatMessage(globalMessages.status)}
-                </span>
-                {requestData.status === MediaRequestStatus.DECLINED ||
-                requestData.status === MediaRequestStatus.FAILED ? (
-                  <Badge badgeType="danger">
-                    {requestData.status === MediaRequestStatus.DECLINED
-                      ? intl.formatMessage(globalMessages.declined)
-                      : intl.formatMessage(globalMessages.failed)}
-                  </Badge>
-                ) : (
-                  <StatusBadge
-                    status={
-                      requestData.media[
-                        requestData.is4k ? 'status4k' : 'status'
-                      ]
-                    }
-                    downloadItem={
-                      requestData.media[
-                        requestData.is4k ? 'downloadStatus4k' : 'downloadStatus'
-                      ]
-                    }
-                    title={intl.formatMessage(messages.unknowntitle)}
-                    inProgress={
-                      (
-                        requestData.media[
-                          requestData.is4k
-                            ? 'downloadStatus4k'
-                            : 'downloadStatus'
-                        ] ?? []
-                      ).length > 0
-                    }
-                    is4k={requestData.is4k}
-                    mediaType={requestData.type}
-                    plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
-                    serviceUrl={
-                      requestData.is4k
-                        ? requestData.media.serviceUrl4k
-                        : requestData.media.serviceUrl
-                    }
-                  />
-                )}
-              </div>
-              <div className="card-field">
-                {hasPermission(
-                  [Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW],
-                  { type: 'or' }
-                ) ? (
-                  <>
-                    <span className="card-field-name">
-                      {intl.formatMessage(messages.requested)}
-                    </span>
-                    <span className="flex truncate text-sm text-gray-300">
-                      {intl.formatMessage(messages.modifieduserdate, {
-                        date: (
-                          <FormattedRelativeTime
-                            value={Math.floor(
-                              (new Date(requestData.createdAt).getTime() -
-                                Date.now()) /
-                                1000
-                            )}
-                            updateIntervalInSeconds={1}
-                            numeric="auto"
-                          />
-                        ),
-                        user: (
-                          <Link
-                            href={`/users/${requestData.requestedBy.id}`}
-                            className="group flex items-center truncate"
-                          >
-                            <span className="avatar-sm ml-1.5">
-                              <CachedImage
-                                type="avatar"
-                                src={requestData.requestedBy.avatar}
-                                alt=""
-                                className="avatar-sm object-cover"
-                                width={20}
-                                height={20}
-                              />
-                            </span>
-                            <span className="truncate text-sm group-hover:underline">
-                              {requestData.requestedBy.displayName}
-                            </span>
-                          </Link>
-                        ),
-                      })}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="card-field-name">
-                      {intl.formatMessage(messages.requesteddate)}
-                    </span>
-                    <span className="flex truncate text-sm text-gray-300">
-                      <FormattedRelativeTime
-                        value={Math.floor(
-                          (new Date(requestData.createdAt).getTime() -
-                            Date.now()) /
-                            1000
-                        )}
-                        updateIntervalInSeconds={1}
-                        numeric="auto"
-                      />
-                    </span>
-                  </>
-                )}
-              </div>
-              {requestData.modifiedBy && (
-                <div className="card-field">
-                  <span className="card-field-name">
-                    {intl.formatMessage(messages.modified)}
-                  </span>
-                  <span className="flex truncate text-sm text-gray-300">
-                    {intl.formatMessage(messages.modifieduserdate, {
-                      date: (
-                        <FormattedRelativeTime
-                          value={Math.floor(
-                            (new Date(requestData.updatedAt).getTime() -
-                              Date.now()) /
-                              1000
-                          )}
-                          updateIntervalInSeconds={1}
-                          numeric="auto"
-                        />
-                      ),
-                      user: (
-                        <Link
-                          href={`/users/${requestData.modifiedBy.id}`}
-                          className="group flex items-center truncate"
-                        >
-                          <span className="avatar-sm ml-1.5">
-                            <CachedImage
-                              type="avatar"
-                              src={requestData.modifiedBy.avatar}
-                              alt=""
-                              className="avatar-sm object-cover"
-                              width={20}
-                              height={20}
-                            />
-                          </span>
-                          <span className="truncate text-sm group-hover:underline">
-                            {requestData.modifiedBy.displayName}
-                          </span>
-                        </Link>
-                      ),
-                    })}
-                  </span>
-                </div>
-              )}
-            </>
-          )}
         </div>
       </div>
       <div className="z-10 mt-4 flex w-full flex-col justify-center pl-4 pr-4 xl:mt-0 xl:w-96 xl:items-end xl:pl-0">
-        {hasPermission(Permission.MANAGE_REQUESTS) && requestData?.media.id && (
+        {hasPermission(Permission.MANAGE_REQUESTS) && (
           <Button
             className="w-full"
             buttonType="danger"
@@ -294,6 +118,113 @@ const RequestItemError = ({
       </div>
     </div>
   );
+};
+
+/**
+ * Helper to get the status badge for non-TMDB request types.
+ * Uses the same Badge colors as StatusBadge for consistency.
+ */
+const NonTmdbStatusBadge = ({ status }: { status: MediaRequestStatus }) => {
+  const intl = useIntl();
+
+  switch (status) {
+    case MediaRequestStatus.PENDING:
+      return (
+        <Badge badgeType="warning">
+          {intl.formatMessage(globalMessages.pending)}
+        </Badge>
+      );
+    case MediaRequestStatus.APPROVED:
+      return (
+        <Badge badgeType="success">
+          {intl.formatMessage(globalMessages.approved)}
+        </Badge>
+      );
+    case MediaRequestStatus.DECLINED:
+      return (
+        <Badge badgeType="danger">
+          {intl.formatMessage(globalMessages.declined)}
+        </Badge>
+      );
+    case MediaRequestStatus.FAILED:
+      return (
+        <Badge badgeType="danger">
+          {intl.formatMessage(globalMessages.failed)}
+        </Badge>
+      );
+    default:
+      return (
+        <Badge badgeType="default">
+          {intl.formatMessage(globalMessages.pending)}
+        </Badge>
+      );
+  }
+};
+
+/**
+ * Get display info for non-TMDB requests (game, book, audiobook).
+ */
+const getNonTmdbInfo = (
+  request: RequestResultsResponse['results'][number]
+): { title: string; coverUrl?: string; href: string; typeLabel: string } => {
+  const gm = request.gameMedia as
+    | {
+        title: string;
+        coverUrl?: string;
+        igdbId: number;
+        platformName?: string;
+      }
+    | undefined;
+  const bm = request.bookMedia as
+    | {
+        title: string;
+        coverUrl?: string;
+        openLibraryId?: string;
+        foreignBookId?: string;
+      }
+    | undefined;
+  const am = request.audiobookMedia as
+    | {
+        title: string;
+        coverUrl?: string;
+        openLibraryId?: string;
+        foreignBookId?: string;
+      }
+    | undefined;
+
+  if (request.type === MediaType.GAME && gm) {
+    return {
+      title: gm.title,
+      coverUrl: gm.coverUrl,
+      href: `/game/${gm.igdbId}`,
+      typeLabel: 'Game',
+    };
+  }
+  if (request.type === MediaType.BOOK && bm) {
+    const bookId = (bm.openLibraryId || bm.foreignBookId || '').replace(
+      '/works/',
+      ''
+    );
+    return {
+      title: bm.title,
+      coverUrl: bm.coverUrl,
+      href: `/book/${bookId}`,
+      typeLabel: 'Book',
+    };
+  }
+  if (request.type === MediaType.AUDIOBOOK && am) {
+    const bookId = (am.openLibraryId || am.foreignBookId || '').replace(
+      '/works/',
+      ''
+    );
+    return {
+      title: am.title,
+      coverUrl: am.coverUrl,
+      href: `/book/${bookId}`,
+      typeLabel: 'Audiobook',
+    };
+  }
+  return { title: 'Unknown', href: '#', typeLabel: request.type };
 };
 
 interface RequestItemProps {
@@ -309,30 +240,39 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
   const intl = useIntl();
   const { user, hasPermission } = useUser();
   const [showEditModal, setShowEditModal] = useState(false);
-  const url =
-    request.type === 'movie'
+  const [updatingType, setUpdatingType] = useState<
+    'approve' | 'decline' | null
+  >(null);
+  const [isRetrying, setRetrying] = useState(false);
+
+  const isNonTmdb = isNonTmdbType(request.type);
+
+  // For TMDB types, fetch movie/tv details
+  const url = !isNonTmdb
+    ? request.type === 'movie'
       ? `/api/v1/movie/${request.media.tmdbId}`
-      : `/api/v1/tv/${request.media.tmdbId}`;
+      : `/api/v1/tv/${request.media.tmdbId}`
+    : null;
+
   const { data: title, error } = useSWR<MovieDetails | TvDetails>(
-    inView ? url : null
+    inView && url ? url : null
   );
+
   const { data: requestData, mutate: revalidate } = useSWR<
     NonFunctionProperties<MediaRequest>
   >(`/api/v1/request/${request.id}`, {
     fallbackData: request,
-    refreshInterval: refreshIntervalHelper(
-      {
-        downloadStatus: request.media.downloadStatus,
-        downloadStatus4k: request.media.downloadStatus4k,
-      },
-      15000
-    ),
+    refreshInterval:
+      !isNonTmdb && request.media
+        ? refreshIntervalHelper(
+            {
+              downloadStatus: request.media.downloadStatus,
+              downloadStatus4k: request.media.downloadStatus4k,
+            },
+            15000
+          )
+        : undefined,
   });
-
-  const [isRetrying, setRetrying] = useState(false);
-  const [updatingType, setUpdatingType] = useState<
-    'approve' | 'decline' | null
-  >(null);
 
   const modifyRequest = async (type: 'approve' | 'decline') => {
     setUpdatingType(type);
@@ -352,7 +292,6 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
 
   const deleteRequest = async () => {
     await axios.delete(`/api/v1/request/${request.id}`);
-
     revalidateList();
     mutate('/api/v1/request/count');
   };
@@ -369,7 +308,6 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
 
   const retryRequest = async () => {
     setRetrying(true);
-
     try {
       const result = await axios.post(`/api/v1/request/${request.id}/retry`);
       revalidate(result.data);
@@ -390,6 +328,295 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
     iOSPlexUrl4k: requestData?.media?.iOSPlexUrl4k,
   });
 
+  // Shared action buttons renderer
+  const renderActions = () => (
+    <div className="z-10 mt-4 flex w-full flex-col justify-center space-y-2 pl-4 pr-4 xl:mt-0 xl:w-96 xl:items-end xl:pl-0">
+      {requestData?.status === MediaRequestStatus.FAILED &&
+        hasPermission(Permission.MANAGE_REQUESTS) && (
+          <Button
+            className="w-full"
+            buttonType="primary"
+            disabled={isRetrying}
+            onClick={() => retryRequest()}
+          >
+            <ArrowPathIcon
+              className={isRetrying ? 'animate-spin' : ''}
+              style={{ animationDirection: 'reverse' }}
+            />
+            <span>
+              {intl.formatMessage(
+                isRetrying ? globalMessages.retrying : globalMessages.retry
+              )}
+            </span>
+          </Button>
+        )}
+      {requestData?.status !== MediaRequestStatus.PENDING &&
+        hasPermission(Permission.MANAGE_REQUESTS) && (
+          <>
+            <ConfirmButton
+              onClick={() => deleteRequest()}
+              confirmText={intl.formatMessage(globalMessages.areyousure)}
+              className="w-full"
+            >
+              <TrashIcon />
+              <span>{intl.formatMessage(messages.deleterequest)}</span>
+            </ConfirmButton>
+            {!isNonTmdb && request.canRemove && (
+              <ConfirmButton
+                onClick={() => deleteMediaFile()}
+                confirmText={intl.formatMessage(globalMessages.areyousure)}
+                className="w-full"
+              >
+                <TrashIcon />
+                <span>
+                  {intl.formatMessage(messages.removearr, {
+                    arr: request.type === 'movie' ? 'Radarr' : 'Sonarr',
+                  })}
+                </span>
+              </ConfirmButton>
+            )}
+          </>
+        )}
+      {requestData?.status === MediaRequestStatus.PENDING &&
+        hasPermission(Permission.MANAGE_REQUESTS) && (
+          <div className="flex w-full flex-row space-x-2">
+            <span className="w-full">
+              <Button
+                className="w-full"
+                buttonType="success"
+                onClick={() => modifyRequest('approve')}
+                disabled={updatingType !== null}
+              >
+                {updatingType === 'approve' ? <Spinner /> : <CheckIcon />}
+                <span>{intl.formatMessage(globalMessages.approve)}</span>
+              </Button>
+            </span>
+            <span className="w-full">
+              <Button
+                className="w-full"
+                buttonType="danger"
+                onClick={() => modifyRequest('decline')}
+                disabled={updatingType !== null}
+              >
+                {updatingType === 'decline' ? <Spinner /> : <XMarkIcon />}
+                <span>{intl.formatMessage(globalMessages.decline)}</span>
+              </Button>
+            </span>
+          </div>
+        )}
+      {requestData?.status === MediaRequestStatus.PENDING &&
+        !hasPermission(Permission.MANAGE_REQUESTS) &&
+        requestData.requestedBy.id === user?.id && (
+          <ConfirmButton
+            onClick={() => deleteRequest()}
+            confirmText={intl.formatMessage(globalMessages.areyousure)}
+            className="w-full"
+          >
+            <XMarkIcon />
+            <span>{intl.formatMessage(messages.cancelRequest)}</span>
+          </ConfirmButton>
+        )}
+    </div>
+  );
+
+  // Shared request metadata renderer (requested by, modified by)
+  const renderMetadata = () => (
+    <>
+      <div className="card-field">
+        {hasPermission([Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW], {
+          type: 'or',
+        }) ? (
+          <>
+            <span className="card-field-name">
+              {intl.formatMessage(messages.requested)}
+            </span>
+            <span className="flex truncate text-sm text-gray-300">
+              {intl.formatMessage(messages.modifieduserdate, {
+                date: (
+                  <FormattedRelativeTime
+                    value={Math.floor(
+                      (new Date(
+                        requestData?.createdAt ?? request.createdAt
+                      ).getTime() -
+                        Date.now()) /
+                        1000
+                    )}
+                    updateIntervalInSeconds={1}
+                    numeric="auto"
+                  />
+                ),
+                user: (
+                  <Link
+                    href={`/users/${requestData?.requestedBy.id ?? request.requestedBy.id}`}
+                    className="group flex items-center truncate"
+                  >
+                    <span className="avatar-sm ml-1.5">
+                      <CachedImage
+                        type="avatar"
+                        src={
+                          requestData?.requestedBy.avatar ??
+                          request.requestedBy.avatar
+                        }
+                        alt=""
+                        className="avatar-sm object-cover"
+                        width={20}
+                        height={20}
+                      />
+                    </span>
+                    <span className="truncate text-sm font-semibold group-hover:text-white group-hover:underline">
+                      {requestData?.requestedBy.displayName ??
+                        request.requestedBy.displayName}
+                    </span>
+                  </Link>
+                ),
+              })}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="card-field-name">
+              {intl.formatMessage(messages.requesteddate)}
+            </span>
+            <span className="flex truncate text-sm text-gray-300">
+              <FormattedRelativeTime
+                value={Math.floor(
+                  (new Date(
+                    requestData?.createdAt ?? request.createdAt
+                  ).getTime() -
+                    Date.now()) /
+                    1000
+                )}
+                updateIntervalInSeconds={1}
+                numeric="auto"
+              />
+            </span>
+          </>
+        )}
+      </div>
+      {(requestData?.modifiedBy ?? request.modifiedBy) && (
+        <div className="card-field">
+          <span className="card-field-name">
+            {intl.formatMessage(messages.modified)}
+          </span>
+          <span className="flex truncate text-sm text-gray-300">
+            {intl.formatMessage(messages.modifieduserdate, {
+              date: (
+                <FormattedRelativeTime
+                  value={Math.floor(
+                    (new Date(
+                      requestData?.updatedAt ?? request.updatedAt
+                    ).getTime() -
+                      Date.now()) /
+                      1000
+                  )}
+                  updateIntervalInSeconds={1}
+                  numeric="auto"
+                />
+              ),
+              user: (
+                <Link
+                  href={`/users/${(requestData?.modifiedBy ?? request.modifiedBy)?.id}`}
+                  className="group flex items-center truncate"
+                >
+                  <span className="avatar-sm ml-1.5">
+                    <CachedImage
+                      type="avatar"
+                      src={
+                        (requestData?.modifiedBy ?? request.modifiedBy)
+                          ?.avatar ?? ''
+                      }
+                      alt=""
+                      className="avatar-sm object-cover"
+                      width={20}
+                      height={20}
+                    />
+                  </span>
+                  <span className="truncate text-sm font-semibold group-hover:text-white group-hover:underline">
+                    {(requestData?.modifiedBy ?? request.modifiedBy)
+                      ?.displayName ?? ''}
+                  </span>
+                </Link>
+              ),
+            })}
+          </span>
+        </div>
+      )}
+    </>
+  );
+
+  // === Non-TMDB request rendering (game, book, audiobook) ===
+  if (isNonTmdb) {
+    const info = getNonTmdbInfo(request);
+
+    return (
+      <div
+        ref={ref}
+        className="relative flex w-full flex-col justify-between overflow-hidden rounded-xl bg-gray-800 py-2 text-gray-400 shadow-md ring-1 ring-gray-700 xl:h-28 xl:flex-row"
+      >
+        <div className="relative flex w-full flex-col justify-between overflow-hidden sm:flex-row">
+          <div className="relative z-10 flex w-full items-center overflow-hidden pl-4 pr-4 sm:pr-0 xl:w-7/12 2xl:w-2/3">
+            <Link
+              href={info.href}
+              className="relative h-auto w-12 flex-shrink-0 scale-100 transform-gpu overflow-hidden rounded-md transition duration-300 hover:scale-105"
+            >
+              {info.coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={info.coverUrl}
+                  alt={info.title}
+                  className="h-full w-full object-cover"
+                  style={{ width: '100%', height: 'auto' }}
+                />
+              ) : (
+                <div className="flex aspect-[2/3] w-full items-center justify-center rounded-md bg-gray-700 text-lg">
+                  {request.type === MediaType.GAME
+                    ? '🎮'
+                    : request.type === MediaType.AUDIOBOOK
+                      ? '🎧'
+                      : '📖'}
+                </div>
+              )}
+            </Link>
+            <div className="flex flex-col justify-center overflow-hidden pl-2 xl:pl-4">
+              <div className="pt-0.5 text-xs font-medium text-white sm:pt-1">
+                <Badge
+                  badgeType={
+                    request.type === MediaType.GAME
+                      ? 'success'
+                      : request.type === MediaType.AUDIOBOOK
+                        ? 'primary'
+                        : 'default'
+                  }
+                >
+                  {info.typeLabel}
+                </Badge>
+              </div>
+              <Link
+                href={info.href}
+                className="mr-2 min-w-0 truncate text-lg font-bold text-white hover:underline xl:text-xl"
+              >
+                {info.title}
+              </Link>
+            </div>
+          </div>
+          <div className="z-10 ml-4 mt-4 flex w-full flex-col justify-center gap-1 overflow-hidden pr-4 text-sm sm:ml-2 sm:mt-0 xl:flex-1 xl:pr-0">
+            <div className="card-field">
+              <span className="card-field-name">
+                {intl.formatMessage(globalMessages.status)}
+              </span>
+              <NonTmdbStatusBadge
+                status={requestData?.status ?? request.status}
+              />
+            </div>
+            {renderMetadata()}
+          </div>
+        </div>
+        {renderActions()}
+      </div>
+    );
+  }
+
+  // === TMDB request rendering (movie, tv) - original logic ===
   if (!title && !error) {
     return (
       <div
@@ -413,7 +640,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
       <RequestModal
         show={showEditModal}
         tmdbId={request.media.tmdbId}
-        type={request.type}
+        type={request.type as 'movie' | 'tv' | 'collection'}
         is4k={request.is4k}
         editRequest={request}
         onCancel={() => setShowEditModal(false)}
@@ -549,7 +776,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                   }
                   is4k={requestData.is4k}
                   tmdbId={requestData.media.tmdbId}
-                  mediaType={requestData.type}
+                  mediaType={requestData.type as 'movie' | 'tv'}
                   plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
                   serviceUrl={
                     requestData.is4k
@@ -559,112 +786,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                 />
               )}
             </div>
-            <div className="card-field">
-              {hasPermission(
-                [Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW],
-                { type: 'or' }
-              ) ? (
-                <>
-                  <span className="card-field-name">
-                    {intl.formatMessage(messages.requested)}
-                  </span>
-                  <span className="flex truncate text-sm text-gray-300">
-                    {intl.formatMessage(messages.modifieduserdate, {
-                      date: (
-                        <FormattedRelativeTime
-                          value={Math.floor(
-                            (new Date(requestData.createdAt).getTime() -
-                              Date.now()) /
-                              1000
-                          )}
-                          updateIntervalInSeconds={1}
-                          numeric="auto"
-                        />
-                      ),
-                      user: (
-                        <Link
-                          href={`/users/${requestData.requestedBy.id}`}
-                          className="group flex items-center truncate"
-                        >
-                          <span className="avatar-sm ml-1.5">
-                            <CachedImage
-                              type="avatar"
-                              src={requestData.requestedBy.avatar}
-                              alt=""
-                              className="avatar-sm object-cover"
-                              width={20}
-                              height={20}
-                            />
-                          </span>
-                          <span className="truncate text-sm font-semibold group-hover:text-white group-hover:underline">
-                            {requestData.requestedBy.displayName}
-                          </span>
-                        </Link>
-                      ),
-                    })}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="card-field-name">
-                    {intl.formatMessage(messages.requesteddate)}
-                  </span>
-                  <span className="flex truncate text-sm text-gray-300">
-                    <FormattedRelativeTime
-                      value={Math.floor(
-                        (new Date(requestData.createdAt).getTime() -
-                          Date.now()) /
-                          1000
-                      )}
-                      updateIntervalInSeconds={1}
-                      numeric="auto"
-                    />
-                  </span>
-                </>
-              )}
-            </div>
-            {requestData.modifiedBy && (
-              <div className="card-field">
-                <span className="card-field-name">
-                  {intl.formatMessage(messages.modified)}
-                </span>
-                <span className="flex truncate text-sm text-gray-300">
-                  {intl.formatMessage(messages.modifieduserdate, {
-                    date: (
-                      <FormattedRelativeTime
-                        value={Math.floor(
-                          (new Date(requestData.updatedAt).getTime() -
-                            Date.now()) /
-                            1000
-                        )}
-                        updateIntervalInSeconds={1}
-                        numeric="auto"
-                      />
-                    ),
-                    user: (
-                      <Link
-                        href={`/users/${requestData.modifiedBy.id}`}
-                        className="group flex items-center truncate"
-                      >
-                        <span className="avatar-sm ml-1.5">
-                          <CachedImage
-                            type="avatar"
-                            src={requestData.modifiedBy.avatar}
-                            alt=""
-                            className="avatar-sm object-cover"
-                            width={20}
-                            height={20}
-                          />
-                        </span>
-                        <span className="truncate text-sm font-semibold group-hover:text-white group-hover:underline">
-                          {requestData.modifiedBy.displayName}
-                        </span>
-                      </Link>
-                    ),
-                  })}
-                </span>
-              </div>
-            )}
+            {renderMetadata()}
             {request.profileName && (
               <div className="card-field">
                 <span className="card-field-name">
@@ -677,111 +799,25 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
             )}
           </div>
         </div>
-        <div className="z-10 mt-4 flex w-full flex-col justify-center space-y-2 pl-4 pr-4 xl:mt-0 xl:w-96 xl:items-end xl:pl-0">
-          {requestData.status === MediaRequestStatus.FAILED &&
-            hasPermission(Permission.MANAGE_REQUESTS) && (
-              <Button
-                className="w-full"
-                buttonType="primary"
-                disabled={isRetrying}
-                onClick={() => retryRequest()}
-              >
-                <ArrowPathIcon
-                  className={isRetrying ? 'animate-spin' : ''}
-                  style={{ animationDirection: 'reverse' }}
-                />
-                <span>
-                  {intl.formatMessage(
-                    isRetrying ? globalMessages.retrying : globalMessages.retry
-                  )}
-                </span>
-              </Button>
-            )}
-          {requestData.status !== MediaRequestStatus.PENDING &&
-            hasPermission(Permission.MANAGE_REQUESTS) && (
-              <>
-                <ConfirmButton
-                  onClick={() => deleteRequest()}
-                  confirmText={intl.formatMessage(globalMessages.areyousure)}
-                  className="w-full"
-                >
-                  <TrashIcon />
-                  <span>{intl.formatMessage(messages.deleterequest)}</span>
-                </ConfirmButton>
-                {request.canRemove && (
-                  <ConfirmButton
-                    onClick={() => deleteMediaFile()}
-                    confirmText={intl.formatMessage(globalMessages.areyousure)}
-                    className="w-full"
-                  >
-                    <TrashIcon />
-                    <span>
-                      {intl.formatMessage(messages.removearr, {
-                        arr: request.type === 'movie' ? 'Radarr' : 'Sonarr',
-                      })}
-                    </span>
-                  </ConfirmButton>
-                )}
-              </>
-            )}
-          {requestData.status === MediaRequestStatus.PENDING &&
-            hasPermission(Permission.MANAGE_REQUESTS) && (
-              <div className="flex w-full flex-row space-x-2">
-                <span className="w-full">
-                  <Button
-                    className="w-full"
-                    buttonType="success"
-                    onClick={() => modifyRequest('approve')}
-                    disabled={updatingType !== null}
-                  >
-                    {updatingType === 'approve' ? <Spinner /> : <CheckIcon />}
-                    <span>{intl.formatMessage(globalMessages.approve)}</span>
-                  </Button>
-                </span>
-                <span className="w-full">
-                  <Button
-                    className="w-full"
-                    buttonType="danger"
-                    onClick={() => modifyRequest('decline')}
-                    disabled={updatingType !== null}
-                  >
-                    {updatingType === 'decline' ? <Spinner /> : <XMarkIcon />}
-                    <span>{intl.formatMessage(globalMessages.decline)}</span>
-                  </Button>
-                </span>
-              </div>
-            )}
-          {requestData.status === MediaRequestStatus.PENDING &&
-            (hasPermission(Permission.MANAGE_REQUESTS) ||
-              (requestData.requestedBy.id === user?.id &&
-                (requestData.type === 'tv' ||
-                  hasPermission(Permission.REQUEST_ADVANCED)))) && (
-              <span className="w-full">
-                <Button
-                  className="w-full"
-                  buttonType="primary"
-                  onClick={() => setShowEditModal(true)}
-                  disabled={updatingType !== null}
-                >
-                  <PencilIcon />
-                  <span>{intl.formatMessage(messages.editrequest)}</span>
-                </Button>
-              </span>
-            )}
-          {requestData.status === MediaRequestStatus.PENDING &&
-            !hasPermission(Permission.MANAGE_REQUESTS) &&
-            requestData.requestedBy.id === user?.id && (
-              <ConfirmButton
-                onClick={() => deleteRequest()}
-                confirmText={intl.formatMessage(globalMessages.areyousure)}
-                className="w-full"
-              >
-                <XMarkIcon />
-                <span>{intl.formatMessage(messages.cancelRequest)}</span>
-              </ConfirmButton>
-            )}
-        </div>
+        {renderActions()}
       </div>
+      {requestData.status === MediaRequestStatus.PENDING &&
+        (hasPermission(Permission.MANAGE_REQUESTS) ||
+          (requestData.requestedBy.id === user?.id &&
+            (requestData.type === 'tv' ||
+              hasPermission(Permission.REQUEST_ADVANCED)))) && (
+          <span className="hidden w-full">
+            <Button
+              className="w-full"
+              buttonType="primary"
+              onClick={() => setShowEditModal(true)}
+              disabled={updatingType !== null}
+            >
+              <PencilIcon />
+              <span>{intl.formatMessage(messages.editrequest)}</span>
+            </Button>
+          </span>
+        )}
     </>
   );
 };

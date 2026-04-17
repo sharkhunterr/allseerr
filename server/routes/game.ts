@@ -34,9 +34,7 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
   }
 
   const settings = getSettings();
-  const igdbSettings = (settings as unknown as Record<string, unknown>).igdb as
-    | { clientId: string; clientSecret: string }
-    | undefined;
+  const igdbSettings = settings.game.igdb;
 
   if (!igdbSettings?.clientId || !igdbSettings?.clientSecret) {
     return res.status(503).json({
@@ -160,19 +158,14 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
   });
 
   if (existing) {
-    const existingRequest = await requestRepo
-      .createQueryBuilder('request')
-      .leftJoinAndSelect('request.requestedBy', 'requestedBy')
-      .where(
-        `request.id IN (SELECT mr.id FROM media_request mr WHERE mr."gameMediaId" = :gid)`,
-        { gid: existing.id }
-      )
-      .andWhere('request.status != :declined', {
-        declined: MediaRequestStatus.DECLINED,
-      })
-      .getOne();
+    const existingRequest = await requestRepo.findOne({
+      where: { gameMedia: { id: existing.id } },
+    });
 
-    if (existingRequest) {
+    if (
+      existingRequest &&
+      existingRequest.status !== MediaRequestStatus.DECLINED
+    ) {
       return res.status(409).json({
         status: 409,
         message: 'This game on this platform has already been requested.',
@@ -201,12 +194,12 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
       await gameMediaRepo.save(gameMedia);
     }
 
-    // Create request — no download step (FR-017, FR-034)
+    // Create request
     const request = new MediaRequest();
     request.status = MediaRequestStatus.PENDING;
+    request.type = MediaType.GAME;
     request.requestedBy = req.user!;
-    // Link via a generic approach — game uses the same pattern
-    // as books but with gameMedia relation
+    request.gameMedia = gameMedia;
 
     await requestRepo.save(request);
 
@@ -262,10 +255,7 @@ gameRoutes.put(
     request.modifiedBy = req.user;
     await requestRepo.save(request);
 
-    if (body.status === MediaRequestStatus.APPROVED) {
-      // No download dispatch — game ROM workflow is manual (FR-017, FR-034)
-    } else if (body.status === MediaRequestStatus.DECLINED) {
-    }
+    // No download dispatch — game ROM workflow is manual
 
     return res.status(200).json(request);
   }
@@ -277,9 +267,7 @@ gameRoutes.put(
  */
 gameRoutes.get('/platforms', isAuthenticated(), async (_req, res) => {
   const settings = getSettings();
-  const igdbSettings = (settings as unknown as Record<string, unknown>).igdb as
-    | { clientId: string; clientSecret: string }
-    | undefined;
+  const igdbSettings = settings.game.igdb;
 
   if (!igdbSettings?.clientId || !igdbSettings?.clientSecret) {
     return res.status(503).json({
@@ -300,6 +288,100 @@ gameRoutes.get('/platforms', isAuthenticated(), async (_req, res) => {
     return res.status(500).json({
       status: 500,
       message: 'Failed to fetch platforms.',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/game/:igdbId
+ * Get game details by IGDB ID.
+ * MUST be registered last to avoid catching /search, /request, /platforms.
+ */
+gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
+  const igdbId = parseInt(req.params.igdbId, 10);
+
+  if (isNaN(igdbId)) {
+    return res.status(400).json({
+      status: 400,
+      message: 'Invalid IGDB ID.',
+    });
+  }
+
+  const settings = getSettings();
+  const igdbSettings = settings.game.igdb;
+
+  if (!igdbSettings?.clientId || !igdbSettings?.clientSecret) {
+    return res.status(503).json({
+      status: 503,
+      message: 'IGDB credentials not configured.',
+    });
+  }
+
+  const igdb = new IgdbAPI({
+    clientId: igdbSettings.clientId,
+    clientSecret: igdbSettings.clientSecret,
+  });
+
+  try {
+    const game = await igdb.getGame(igdbId);
+
+    if (!game) {
+      return res.status(404).json({
+        status: 404,
+        message: 'Game not found.',
+      });
+    }
+
+    const gameMediaRepo = getRepository(GameMedia);
+    const developer = game.involved_companies?.find((c) => c.developer);
+    const publisher = game.involved_companies?.find((c) => c.publisher);
+    const releaseYear = game.first_release_date
+      ? new Date(game.first_release_date * 1000).getFullYear()
+      : undefined;
+
+    const platforms = (game.platforms ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      abbreviation: p.abbreviation,
+    }));
+
+    const availabilityChecks = await Promise.all(
+      platforms.map(async (p) => {
+        const existing = await gameMediaRepo.findOne({
+          where: { igdbId: game.id, platformIgdbId: p.id },
+        });
+        return {
+          ...p,
+          mediaStatus: existing?.status ?? null,
+          gameMediaId: existing?.id ?? null,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      igdbId: game.id,
+      title: game.name,
+      platforms: availabilityChecks,
+      releaseYear,
+      developer: developer?.company?.name,
+      publisher: publisher?.company?.name,
+      genre: game.genres?.map((g) => g.name).join(', '),
+      userRating: game.total_rating ? Math.round(game.total_rating) : undefined,
+      coverUrl: game.cover?.url
+        ? `https:${game.cover.url.replace('t_thumb', 't_cover_big')}`
+        : undefined,
+      summary: game.summary,
+      mediaType: MediaType.GAME,
+    });
+  } catch (e) {
+    logger.error('Game detail fetch failed', {
+      label: 'game',
+      igdbId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to fetch game details.',
     });
   }
 });

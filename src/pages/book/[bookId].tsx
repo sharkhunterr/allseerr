@@ -1,6 +1,7 @@
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import Tag from '@app/components/Common/Tag';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
 import { MediaStatus } from '@server/constants/media';
@@ -20,6 +21,10 @@ const messages = defineMessages('pages.BookDetail', {
   requestSuccess: 'Book requested successfully!',
   requestFailed: 'Failed to request book.',
   notFound: 'Book not found.',
+  overview: 'Overview',
+  overviewunavailable: 'Overview unavailable.',
+  subjects: 'Subjects',
+  openInLibrary: 'Open in Library',
 });
 
 interface BookDetailData {
@@ -44,16 +49,16 @@ const BookDetailPage: NextPage = () => {
     bookId ? `/api/v1/book/${bookId}` : null
   );
 
-  if (error) {
+  if (!data && !error) {
+    return <LoadingSpinner />;
+  }
+
+  if (error || !data) {
     return (
       <div className="mt-16 text-center text-gray-400">
         {intl.formatMessage(messages.notFound)}
       </div>
     );
-  }
-
-  if (!data) {
-    return <LoadingSpinner />;
   }
 
   const description =
@@ -96,83 +101,104 @@ const BookDetailPage: NextPage = () => {
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
+    <div className="media-page" style={{ height: 493 }}>
       <PageTitle title={data.title} />
-      <div className="flex flex-col gap-8 md:flex-row">
-        <div className="w-full flex-shrink-0 md:w-64">
+      <div className="media-header">
+        <div className="media-poster">
           {coverUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={coverUrl}
               alt={data.title}
-              className="w-full rounded-lg shadow-lg"
+              style={{ width: '100%', height: 'auto' }}
             />
           ) : (
-            <div className="flex aspect-[2/3] w-full items-center justify-center rounded-lg bg-gray-700">
+            <div className="flex h-full items-center justify-center rounded-lg bg-gray-700">
               <BookOpenIcon className="h-16 w-16 text-gray-500" />
             </div>
           )}
         </div>
-
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold text-white">{data.title}</h1>
-
-          {description && (
-            <p className="mt-4 leading-relaxed text-gray-300">
-              {description}
-            </p>
+        <div className="media-title">
+          <div className="media-status">
+            {isAvailable && (
+              <span className="rounded-full bg-green-500 px-3 py-1 text-xs font-bold text-white">
+                {intl.formatMessage(messages.available)}
+              </span>
+            )}
+            {isRequested && !isAvailable && (
+              <span className="rounded-full bg-yellow-500 px-3 py-1 text-xs font-bold text-white">
+                {intl.formatMessage(messages.requested)}
+              </span>
+            )}
+          </div>
+          <h1 data-testid="media-title">{data.title}</h1>
+        </div>
+        <div className="media-actions">
+          {isAvailable ? (
+            data.libraryServerUrl ? (
+              <a
+                href={data.libraryServerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button buttonType="primary">
+                  {intl.formatMessage(messages.openInLibrary)}
+                </Button>
+              </a>
+            ) : null
+          ) : isRequested ? (
+            <span className="rounded bg-yellow-600 px-4 py-2 font-bold text-white">
+              {intl.formatMessage(messages.requested)}
+            </span>
+          ) : (
+            <Button
+              buttonType="primary"
+              disabled={isRequesting}
+              onClick={handleRequest}
+            >
+              {isRequesting ? (
+                <LoadingSpinner />
+              ) : (
+                intl.formatMessage(messages.request)
+              )}
+            </Button>
           )}
-
+        </div>
+      </div>
+      <div className="media-overview">
+        <div className="media-overview-left">
+          <h2>{intl.formatMessage(messages.overview)}</h2>
+          <p>
+            {description || intl.formatMessage(messages.overviewunavailable)}
+          </p>
           {data.subjects && data.subjects.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {data.subjects.slice(0, 10).map((subject) => (
-                <span
-                  key={subject}
-                  className="rounded-full bg-gray-700 px-3 py-1 text-xs text-gray-300"
-                >
-                  {subject}
+            <div className="mt-6">
+              {data.subjects.slice(0, 15).map((subject) => (
+                <span key={subject} className="mb-2 mr-2 inline-flex last:mr-0">
+                  <Tag>{subject}</Tag>
                 </span>
               ))}
             </div>
           )}
-
-          <div className="mt-6 flex gap-3">
-            {isAvailable ? (
-              <>
-                <span className="rounded bg-green-600 px-4 py-2 font-bold text-white">
-                  {intl.formatMessage(messages.available)}
+        </div>
+        <div className="media-overview-right">
+          <div className="media-facts">
+            {data.subjects && data.subjects.length > 0 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.subjects)}</span>
+                <span className="media-fact-value">
+                  {data.subjects.slice(0, 5).map((s) => (
+                    <span key={s} className="block">
+                      {s}
+                    </span>
+                  ))}
                 </span>
-                {data.libraryServerUrl && (
-                  <a
-                    href={data.libraryServerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded bg-indigo-600 px-4 py-2 font-bold text-white hover:bg-indigo-500"
-                  >
-                    Open in Library
-                  </a>
-                )}
-              </>
-            ) : isRequested ? (
-              <span className="rounded bg-yellow-600 px-4 py-2 font-bold text-white">
-                {intl.formatMessage(messages.requested)}
-              </span>
-            ) : (
-              <Button
-                buttonType="primary"
-                disabled={isRequesting}
-                onClick={handleRequest}
-              >
-                {isRequesting ? (
-                  <LoadingSpinner />
-                ) : (
-                  intl.formatMessage(messages.request)
-                )}
-              </Button>
+              </div>
             )}
           </div>
         </div>
       </div>
+      <div className="extra-bottom-space relative" />
     </div>
   );
 };

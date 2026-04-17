@@ -78,8 +78,10 @@ const Search = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<MediaTab>('all');
   const [bookResults, setBookResults] = useState<BookResult[]>([]);
+  const [audiobookResults, setAudiobookResults] = useState<BookResult[]>([]);
   const [gameResults, setGameResults] = useState<GameResult[]>([]);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
+  const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
 
   const query = (router.query.query as string) ?? '';
@@ -99,47 +101,78 @@ const Search = () => {
     { hideAvailable: false, hideBlocklisted: false }
   );
 
-  // Book search
+  // Load all other results in parallel when query changes
   useEffect(() => {
-    if (activeTab === 'books' || activeTab === 'audiobooks') {
-      const type = activeTab === 'audiobooks' ? 'audiobook' : 'book';
-      setIsLoadingBooks(true);
-      axios
-        .get<BookSearchResponse>('/api/v1/book/search', {
-          params: { query, type, limit: 40 },
-        })
-        .then((res) => setBookResults(res.data.results))
-        .catch(() => setBookResults([]))
-        .finally(() => setIsLoadingBooks(false));
+    if (!query) {
+      setBookResults([]);
+      setAudiobookResults([]);
+      setGameResults([]);
+      return;
     }
-  }, [query, activeTab]);
 
-  // Game search
-  useEffect(() => {
-    if (activeTab === 'games') {
-      setIsLoadingGames(true);
-      axios
-        .get<GameSearchResponse>('/api/v1/game/search', {
-          params: { query, limit: 40 },
-        })
-        .then((res) => setGameResults(res.data.results))
-        .catch(() => setGameResults([]))
-        .finally(() => setIsLoadingGames(false));
-    }
-  }, [query, activeTab]);
+    setIsLoadingBooks(true);
+    setIsLoadingAudiobooks(true);
+    setIsLoadingGames(true);
+
+    axios
+      .get<BookSearchResponse>('/api/v1/book/search', {
+        params: { query, type: 'book', limit: 40 },
+      })
+      .then((res) => setBookResults(res.data.results))
+      .catch(() => setBookResults([]))
+      .finally(() => setIsLoadingBooks(false));
+
+    axios
+      .get<BookSearchResponse>('/api/v1/book/search', {
+        params: { query, type: 'audiobook', limit: 40 },
+      })
+      .then((res) => setAudiobookResults(res.data.results))
+      .catch(() => setAudiobookResults([]))
+      .finally(() => setIsLoadingAudiobooks(false));
+
+    axios
+      .get<GameSearchResponse>('/api/v1/game/search', {
+        params: { query, limit: 40 },
+      })
+      .then((res) => setGameResults(res.data.results))
+      .catch(() => setGameResults([]))
+      .finally(() => setIsLoadingGames(false));
+  }, [query]);
 
   if (error && activeTab === 'all') {
     return <ErrorPage statusCode={500} />;
   }
 
-  const tabs: { key: MediaTab; label: string }[] = [
-    { key: 'all', label: intl.formatMessage(messages.tabAll) },
-    { key: 'books', label: intl.formatMessage(messages.tabBooks) },
+  const tabs: {
+    key: MediaTab;
+    label: string;
+    count: number | null;
+    loading: boolean;
+  }[] = [
+    {
+      key: 'all',
+      label: intl.formatMessage(messages.tabAll),
+      count: titles?.length ?? null,
+      loading: isLoadingInitialData,
+    },
+    {
+      key: 'books',
+      label: intl.formatMessage(messages.tabBooks),
+      count: isLoadingBooks ? null : bookResults.length,
+      loading: isLoadingBooks,
+    },
     {
       key: 'audiobooks',
       label: intl.formatMessage(messages.tabAudiobooks),
+      count: isLoadingAudiobooks ? null : audiobookResults.length,
+      loading: isLoadingAudiobooks,
     },
-    { key: 'games', label: intl.formatMessage(messages.tabGames) },
+    {
+      key: 'games',
+      label: intl.formatMessage(messages.tabGames),
+      count: isLoadingGames ? null : gameResults.length,
+      loading: isLoadingGames,
+    },
   ];
 
   return (
@@ -154,7 +187,7 @@ const Search = () => {
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            className={`px-4 py-2 text-sm font-medium transition ${
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition ${
               activeTab === tab.key
                 ? 'border-b-2 border-indigo-500 text-indigo-400'
                 : 'text-gray-400 hover:text-gray-300'
@@ -162,6 +195,17 @@ const Search = () => {
             onClick={() => setActiveTab(tab.key)}
           >
             {tab.label}
+            {tab.count !== null && tab.count > 0 && (
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${
+                  activeTab === tab.key
+                    ? 'bg-indigo-500/30 text-indigo-300'
+                    : 'bg-gray-700 text-gray-400'
+                }`}
+              >
+                {tab.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -189,22 +233,23 @@ const Search = () => {
               {intl.formatMessage(messages.noResults)}
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            <ul className="cards-vertical">
               {bookResults.map((book) => (
-                <BookCard
-                  key={book.openLibraryId}
-                  openLibraryId={book.openLibraryId}
-                  title={book.title}
-                  authorName={book.authorName}
-                  coverUrl={book.coverUrl}
-                  year={book.year}
-                  publisher={book.publisher}
-                  seriesName={book.seriesName}
-                  seriesPosition={book.seriesPosition}
-                  mediaStatus={book.mediaStatus ?? undefined}
-                />
+                <li key={book.openLibraryId}>
+                  <BookCard
+                    openLibraryId={book.openLibraryId}
+                    title={book.title}
+                    authorName={book.authorName}
+                    coverUrl={book.coverUrl}
+                    year={book.year}
+                    publisher={book.publisher}
+                    seriesName={book.seriesName}
+                    seriesPosition={book.seriesPosition}
+                    mediaStatus={book.mediaStatus ?? undefined}
+                  />
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
       )}
@@ -212,29 +257,30 @@ const Search = () => {
       {/* Audiobooks */}
       {activeTab === 'audiobooks' && (
         <div>
-          {isLoadingBooks ? (
+          {isLoadingAudiobooks ? (
             <LoadingSpinner />
-          ) : bookResults.length === 0 ? (
+          ) : audiobookResults.length === 0 ? (
             <p className="py-8 text-center text-gray-400">
               {intl.formatMessage(messages.noResults)}
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {bookResults.map((book) => (
-                <AudiobookCard
-                  key={book.openLibraryId}
-                  openLibraryId={book.openLibraryId}
-                  title={book.title}
-                  authorName={book.authorName}
-                  narratorName={book.narratorName}
-                  durationSeconds={book.durationSeconds}
-                  coverUrl={book.coverUrl}
-                  year={book.year}
-                  publisher={book.publisher}
-                  mediaStatus={book.mediaStatus ?? undefined}
-                />
+            <ul className="cards-vertical">
+              {audiobookResults.map((book) => (
+                <li key={book.openLibraryId}>
+                  <AudiobookCard
+                    openLibraryId={book.openLibraryId}
+                    title={book.title}
+                    authorName={book.authorName}
+                    narratorName={book.narratorName}
+                    durationSeconds={book.durationSeconds}
+                    coverUrl={book.coverUrl}
+                    year={book.year}
+                    publisher={book.publisher}
+                    mediaStatus={book.mediaStatus ?? undefined}
+                  />
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
       )}
@@ -249,23 +295,24 @@ const Search = () => {
               {intl.formatMessage(messages.noResults)}
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            <ul className="cards-vertical">
               {gameResults.map((game) => (
-                <GameCard
-                  key={game.igdbId}
-                  igdbId={game.igdbId}
-                  title={game.title}
-                  platforms={game.platforms}
-                  releaseYear={game.releaseYear}
-                  developer={game.developer}
-                  publisher={game.publisher}
-                  genre={game.genre}
-                  userRating={game.userRating}
-                  coverUrl={game.coverUrl}
-                  summary={game.summary}
-                />
+                <li key={game.igdbId}>
+                  <GameCard
+                    igdbId={game.igdbId}
+                    title={game.title}
+                    platforms={game.platforms}
+                    releaseYear={game.releaseYear}
+                    developer={game.developer}
+                    publisher={game.publisher}
+                    genre={game.genre}
+                    userRating={game.userRating}
+                    coverUrl={game.coverUrl}
+                    summary={game.summary}
+                  />
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
       )}

@@ -368,6 +368,21 @@ export interface OidcGroupMapping {
   permissions: number;
 }
 
+export interface GameSettings {
+  igdb: {
+    clientId: string;
+    clientSecret: string;
+  };
+  romm: {
+    url: string;
+    apiKey: string;
+    username: string;
+    password: string;
+    pollIntervalMinutes: number;
+    enabled: boolean;
+  };
+}
+
 export interface OidcSettings {
   enabled: boolean;
   issuerUrl: string;
@@ -396,6 +411,7 @@ export interface AllSettings {
   jobs: Record<JobId, JobSettings>;
   network: NetworkSettings;
   metadataSettings: MetadataSettings;
+  game: GameSettings;
   oidc: OidcSettings;
   migrations: string[];
 }
@@ -634,6 +650,20 @@ class Settings {
         },
         apiRequestTimeout: 10000,
       },
+      game: {
+        igdb: {
+          clientId: '',
+          clientSecret: '',
+        },
+        romm: {
+          url: '',
+          apiKey: '',
+          username: '',
+          password: '',
+          pollIntervalMinutes: 15,
+          enabled: false,
+        },
+      },
       oidc: {
         enabled: false,
         issuerUrl: '',
@@ -709,6 +739,14 @@ class Settings {
 
   set sonarr(data: SonarrSettings[]) {
     this.data.sonarr = data;
+  }
+
+  get game(): GameSettings {
+    return this.data.game;
+  }
+
+  set game(data: GameSettings) {
+    this.data.game = mergeSettings(this.data.game, data);
   }
 
   get oidc(): OidcSettings {

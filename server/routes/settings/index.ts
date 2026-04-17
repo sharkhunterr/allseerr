@@ -39,9 +39,10 @@ import { rescheduleJob } from 'node-schedule';
 import path from 'path';
 import semver from 'semver';
 import { URL } from 'url';
+import bookSettingsRoutes from './bookSettings';
+import gameSettingsRoutes from './gameSettings';
 import metadataRoutes from './metadata';
 import notificationRoutes from './notifications';
-import bookSettingsRoutes from './bookSettings';
 import oidcRoutes from './oidc';
 import radarrRoutes from './radarr';
 import sonarrRoutes from './sonarr';
@@ -55,6 +56,7 @@ settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 settingsRoutes.use('/oidc', oidcRoutes);
 settingsRoutes.use('/book', bookSettingsRoutes);
+settingsRoutes.use('/game', gameSettingsRoutes);
 
 const filteredMainSettings = (
   user: User,

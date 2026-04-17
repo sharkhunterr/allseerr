@@ -18,7 +18,11 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid';
-import { MediaRequestStatus, MediaStatus } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import type { MediaRequest } from '@server/entity/MediaRequest';
 import type { NonFunctionProperties } from '@server/interfaces/api/common';
 import type { MovieDetails } from '@server/models/Movie';
@@ -167,7 +171,7 @@ const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
                         ).length > 0
                       }
                       is4k={requestData.is4k}
-                      mediaType={requestData.type}
+                      mediaType={requestData.type as 'movie' | 'tv'}
                       plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
                       serviceUrl={
                         requestData.is4k
@@ -181,7 +185,7 @@ const RequestCardError = ({ requestData }: RequestCardErrorProps) => {
             )}
             <div className="flex flex-1 items-end space-x-2">
               {hasPermission(Permission.MANAGE_REQUESTS) &&
-                requestData?.media.id && (
+                requestData?.media?.id && (
                   <>
                     <Button
                       buttonType="danger"
@@ -219,6 +223,11 @@ interface RequestCardProps {
   onTitleData?: (requestId: number, title: MovieDetails | TvDetails) => void;
 }
 
+const isNonTmdbType = (type: string) =>
+  type === MediaType.GAME ||
+  type === MediaType.BOOK ||
+  type === MediaType.AUDIOBOOK;
+
 const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
   const { ref, inView } = useInView({
     triggerOnce: true,
@@ -231,13 +240,16 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
     'approve' | 'decline' | null
   >(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const url =
-    request.type === 'movie'
+
+  const isNonTmdb = isNonTmdbType(request.type);
+  const url = !isNonTmdb
+    ? request.type === 'movie'
       ? `/api/v1/movie/${request.media.tmdbId}`
-      : `/api/v1/tv/${request.media.tmdbId}`;
+      : `/api/v1/tv/${request.media.tmdbId}`
+    : null;
 
   const { data: title, error } = useSWR<MovieDetails | TvDetails>(
-    inView ? `${url}` : null
+    inView && url ? url : null
   );
   const {
     data: requestData,
@@ -247,13 +259,16 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
     `/api/v1/request/${request.id}`,
     {
       fallbackData: request,
-      refreshInterval: refreshIntervalHelper(
-        {
-          downloadStatus: request.media.downloadStatus,
-          downloadStatus4k: request.media.downloadStatus4k,
-        },
-        15000
-      ),
+      refreshInterval:
+        !isNonTmdb && request.media
+          ? refreshIntervalHelper(
+              {
+                downloadStatus: request.media.downloadStatus,
+                downloadStatus4k: request.media.downloadStatus4k,
+              },
+              15000
+            )
+          : undefined,
     }
   );
 
@@ -311,6 +326,223 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
     }
   }, [title, onTitleData, request]);
 
+  // === Non-TMDB rendering (game, book, audiobook) ===
+  if (isNonTmdb) {
+    const typedRequest = request as NonFunctionProperties<MediaRequest>;
+    const gm = typedRequest.gameMedia as
+      | { title: string; coverUrl?: string; igdbId: number }
+      | undefined;
+    const bm = typedRequest.bookMedia as
+      | {
+          title: string;
+          coverUrl?: string;
+          openLibraryId?: string;
+          foreignBookId?: string;
+        }
+      | undefined;
+    const am = typedRequest.audiobookMedia as
+      | {
+          title: string;
+          coverUrl?: string;
+          openLibraryId?: string;
+          foreignBookId?: string;
+        }
+      | undefined;
+
+    let infoTitle = 'Unknown';
+    let coverUrl: string | undefined;
+    let href = '#';
+    let typeLabel = request.type as string;
+
+    if (request.type === MediaType.GAME && gm) {
+      infoTitle = gm.title;
+      coverUrl = gm.coverUrl;
+      href = `/game/${gm.igdbId}`;
+      typeLabel = 'Game';
+    } else if (request.type === MediaType.BOOK && bm) {
+      infoTitle = bm.title;
+      coverUrl = bm.coverUrl;
+      href = `/book/${(bm.openLibraryId || bm.foreignBookId || '').replace('/works/', '')}`;
+      typeLabel = 'Book';
+    } else if (request.type === MediaType.AUDIOBOOK && am) {
+      infoTitle = am.title;
+      coverUrl = am.coverUrl;
+      href = `/book/${(am.openLibraryId || am.foreignBookId || '').replace('/works/', '')}`;
+      typeLabel = 'Audiobook';
+    }
+
+    const statusBadge = (() => {
+      switch (requestData?.status ?? request.status) {
+        case MediaRequestStatus.PENDING:
+          return (
+            <Badge badgeType="warning">
+              {intl.formatMessage(globalMessages.pending)}
+            </Badge>
+          );
+        case MediaRequestStatus.APPROVED:
+          return (
+            <Badge badgeType="success">
+              {intl.formatMessage(globalMessages.approved)}
+            </Badge>
+          );
+        case MediaRequestStatus.DECLINED:
+          return (
+            <Badge badgeType="danger">
+              {intl.formatMessage(globalMessages.declined)}
+            </Badge>
+          );
+        case MediaRequestStatus.FAILED:
+          return (
+            <Badge badgeType="danger">
+              {intl.formatMessage(globalMessages.failed)}
+            </Badge>
+          );
+        default:
+          return (
+            <Badge badgeType="default">
+              {intl.formatMessage(globalMessages.pending)}
+            </Badge>
+          );
+      }
+    })();
+
+    return (
+      <div
+        ref={ref}
+        className="relative flex w-72 overflow-hidden rounded-xl bg-gray-800 p-4 text-gray-400 shadow ring-1 ring-gray-700 sm:w-96"
+        data-testid="request-card"
+      >
+        <div className="relative z-10 flex min-w-0 flex-1 flex-col pr-4">
+          <div className="hidden text-xs font-medium sm:flex">
+            <Badge
+              badgeType={
+                request.type === MediaType.GAME
+                  ? 'success'
+                  : request.type === MediaType.AUDIOBOOK
+                    ? 'primary'
+                    : 'default'
+              }
+            >
+              {typeLabel}
+            </Badge>
+          </div>
+          <Link
+            href={href}
+            className="overflow-hidden overflow-ellipsis whitespace-nowrap text-base font-bold text-white hover:underline sm:text-lg"
+          >
+            {infoTitle}
+          </Link>
+          {hasPermission(
+            [Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW],
+            { type: 'or' }
+          ) &&
+            requestData && (
+              <div className="card-field">
+                <Link
+                  href={`/users/${requestData.requestedBy.id}`}
+                  className="group flex items-center"
+                >
+                  <span className="avatar-sm">
+                    <CachedImage
+                      type="avatar"
+                      src={requestData.requestedBy.avatar}
+                      alt=""
+                      className="avatar-sm object-cover"
+                      width={20}
+                      height={20}
+                    />
+                  </span>
+                  <span className="truncate font-semibold group-hover:text-white group-hover:underline">
+                    {requestData.requestedBy.displayName}
+                  </span>
+                </Link>
+              </div>
+            )}
+          <div className="mt-2 flex items-center text-sm sm:mt-1">
+            <span className="mr-2 hidden font-bold sm:block">
+              {intl.formatMessage(globalMessages.status)}
+            </span>
+            {statusBadge}
+          </div>
+          <div className="flex flex-1 items-end space-x-2">
+            {(requestData?.status ?? request.status) ===
+              MediaRequestStatus.PENDING &&
+              hasPermission(Permission.MANAGE_REQUESTS) && (
+                <>
+                  <div>
+                    <Button
+                      buttonType="success"
+                      buttonSize="sm"
+                      onClick={() => modifyRequest('approve')}
+                      disabled={updatingType !== null}
+                    >
+                      {updatingType === 'approve' ? <Spinner /> : <CheckIcon />}
+                      <span className="ml-1.5 hidden sm:block">
+                        {intl.formatMessage(globalMessages.approve)}
+                      </span>
+                    </Button>
+                  </div>
+                  <div>
+                    <Button
+                      buttonType="danger"
+                      buttonSize="sm"
+                      onClick={() => modifyRequest('decline')}
+                      disabled={updatingType !== null}
+                    >
+                      {updatingType === 'decline' ? <Spinner /> : <XMarkIcon />}
+                      <span className="ml-1.5 hidden sm:block">
+                        {intl.formatMessage(globalMessages.decline)}
+                      </span>
+                    </Button>
+                  </div>
+                </>
+              )}
+            {(requestData?.status ?? request.status) ===
+              MediaRequestStatus.PENDING &&
+              !hasPermission(Permission.MANAGE_REQUESTS) &&
+              (requestData?.requestedBy.id ?? request.requestedBy.id) ===
+                user?.id && (
+                <Button
+                  buttonType="danger"
+                  buttonSize="sm"
+                  onClick={() => deleteRequest()}
+                >
+                  <XMarkIcon />
+                  <span className="ml-1.5 hidden sm:block">
+                    {intl.formatMessage(globalMessages.cancel)}
+                  </span>
+                </Button>
+              )}
+          </div>
+        </div>
+        <Link
+          href={href}
+          className="relative w-20 flex-shrink-0 scale-100 transform-gpu cursor-pointer overflow-hidden rounded-md shadow-sm transition duration-300 hover:scale-105 hover:shadow-md sm:w-28"
+        >
+          <div className="w-full" style={{ paddingBottom: '150%' }}>
+            {coverUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={coverUrl}
+                alt={infoTitle}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-700 text-2xl">
+                {request.type === MediaType.GAME
+                  ? '🎮'
+                  : request.type === MediaType.AUDIOBOOK
+                    ? '🎧'
+                    : '📖'}
+              </div>
+            )}
+          </div>
+        </Link>
+      </div>
+    );
+  }
+
+  // === TMDB rendering (movie, tv) ===
   if (!title && !error) {
     return (
       <div ref={ref}>
@@ -332,7 +564,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
       <RequestModal
         show={showEditModal}
         tmdbId={request.media.tmdbId}
-        type={request.type}
+        type={request.type as 'movie' | 'tv' | 'collection'}
         is4k={request.is4k}
         editRequest={request}
         onCancel={() => setShowEditModal(false)}
@@ -367,11 +599,18 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           className="relative z-10 flex min-w-0 flex-1 flex-col pr-4"
           data-testid="request-card-title"
         >
-          <div className="hidden text-xs font-medium text-white sm:flex">
-            {(isMovie(title) ? title.releaseDate : title.firstAirDate)?.slice(
-              0,
-              4
-            )}
+          <div className="hidden items-center gap-2 text-xs font-medium text-white sm:flex">
+            <Badge badgeType={request.type === 'movie' ? 'warning' : 'primary'}>
+              {request.type === 'movie'
+                ? intl.formatMessage(globalMessages.movie)
+                : intl.formatMessage(globalMessages.tvshow)}
+            </Badge>
+            <span>
+              {(isMovie(title) ? title.releaseDate : title.firstAirDate)?.slice(
+                0,
+                4
+              )}
+            </span>
           </div>
           <Link
             href={
@@ -472,7 +711,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                 }
                 is4k={requestData.is4k}
                 tmdbId={requestData.media.tmdbId}
-                mediaType={requestData.type}
+                mediaType={requestData.type as 'movie' | 'tv'}
                 plexUrl={requestData.is4k ? plexUrl4k : plexUrl}
                 serviceUrl={
                   requestData.is4k

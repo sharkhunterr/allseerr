@@ -128,11 +128,14 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
         .leftJoinAndSelect('request.seasons', 'seasons')
         .leftJoinAndSelect('request.modifiedBy', 'modifiedBy')
         .leftJoinAndSelect('request.requestedBy', 'requestedBy')
+        .leftJoinAndSelect('request.gameMedia', 'gameMedia')
+        .leftJoinAndSelect('request.bookMedia', 'bookMedia')
+        .leftJoinAndSelect('request.audiobookMedia', 'audiobookMedia')
         .where('request.status IN (:...requestStatus)', {
           requestStatus: statusFilter,
         })
         .andWhere(
-          '((request.is4k = false AND media.status IN (:...mediaStatus)) OR (request.is4k = true AND media.status4k IN (:...mediaStatus)))',
+          '(media.id IS NULL OR ((request.is4k = false AND media.status IN (:...mediaStatus)) OR (request.is4k = true AND media.status4k IN (:...mediaStatus))))',
           {
             mediaStatus: mediaStatusFilter,
           }
@@ -171,6 +174,21 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
         case 'tv':
           query = query.andWhere('request.type = :type', {
             type: MediaType.TV,
+          });
+          break;
+        case 'book':
+          query = query.andWhere('request.type = :type', {
+            type: MediaType.BOOK,
+          });
+          break;
+        case 'audiobook':
+          query = query.andWhere('request.type = :type', {
+            type: MediaType.AUDIOBOOK,
+          });
+          break;
+        case 'game':
+          query = query.andWhere('request.type = :type', {
+            type: MediaType.GAME,
           });
           break;
       }
@@ -234,6 +252,8 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
                 ?.profiles?.find((profile) => profile.id === r.profileId)?.name,
             };
           }
+          default:
+            return { ...r, profileName: undefined };
         }
       });
 

@@ -3919,6 +3919,684 @@ paths:
                   appDataPath:
                     type: string
                     example: /app/config
+  /game/search:
+    get:
+      summary: Search for games
+      description: Searches IGDB for games matching the query.
+      tags:
+        - game
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: platformId
+          schema:
+            type: number
+        - in: query
+          name: limit
+          schema:
+            type: number
+            default: 20
+      responses:
+        '200':
+          description: Game search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                  totalResults:
+                    type: number
+  /game/{igdbId}:
+    get:
+      summary: Get game details
+      description: Returns details for a specific game by IGDB ID.
+      tags:
+        - game
+      parameters:
+        - in: path
+          name: igdbId
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Game details returned
+          content:
+            application/json:
+              schema:
+                type: object
+  /game/request:
+    post:
+      summary: Submit a game request
+      description: Creates a new game request.
+      tags:
+        - game
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                igdbId:
+                  type: number
+                platformIgdbId:
+                  type: number
+                platformName:
+                  type: string
+                title:
+                  type: string
+                releaseYear:
+                  type: number
+                developer:
+                  type: string
+                publisher:
+                  type: string
+                genre:
+                  type: string
+                coverUrl:
+                  type: string
+                note:
+                  type: string
+      responses:
+        '201':
+          description: Game request created
+          content:
+            application/json:
+              schema:
+                type: object
+  /game/request/{id}:
+    put:
+      summary: Update game request status
+      description: Updates a game request status (approve/decline).
+      tags:
+        - game
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: number
+                reason:
+                  type: string
+                adminNote:
+                  type: string
+      responses:
+        '200':
+          description: Game request updated
+          content:
+            application/json:
+              schema:
+                type: object
+  /game/platforms:
+    get:
+      summary: Get available game platforms
+      description: Returns available game platforms from IGDB.
+      tags:
+        - game
+      responses:
+        '200':
+          description: Platforms returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: number
+                    name:
+                      type: string
+                    abbreviation:
+                      type: string
+  /book/search:
+    get:
+      summary: Search for books
+      description: Searches for books matching the query.
+      tags:
+        - book
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: type
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Book search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: number
+                  totalPages:
+                    type: number
+                  totalResults:
+                    type: number
+                  results:
+                    type: array
+                    items:
+                      type: object
+  /book/{id}:
+    get:
+      summary: Get book details
+      description: Returns details for a specific book.
+      tags:
+        - book
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Book details returned
+          content:
+            application/json:
+              schema:
+                type: object
+  /book/request:
+    get:
+      summary: Get book requests
+      description: Returns book requests.
+      tags:
+        - book
+      responses:
+        '200':
+          description: Book requests returned
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      summary: Submit a book request
+      description: Creates a new book request.
+      tags:
+        - book
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Book request created
+          content:
+            application/json:
+              schema:
+                type: object
+  /book/request/{id}:
+    delete:
+      summary: Delete a book request
+      description: Deletes a book request.
+      tags:
+        - book
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Book request deleted
+  /settings/game:
+    get:
+      summary: Get game settings
+      description: Returns current IGDB and ROMM settings.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Game settings returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  igdb:
+                    type: object
+                    properties:
+                      clientId:
+                        type: string
+                      clientSecret:
+                        type: string
+                      clientSecretSet:
+                        type: boolean
+                  romm:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                      apiKey:
+                        type: string
+                      username:
+                        type: string
+                      password:
+                        type: string
+                      pollIntervalMinutes:
+                        type: number
+                      enabled:
+                        type: boolean
+    put:
+      summary: Update game settings
+      description: Updates IGDB and ROMM settings.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                igdb:
+                  type: object
+                  properties:
+                    clientId:
+                      type: string
+                    clientSecret:
+                      type: string
+                romm:
+                  type: object
+                  properties:
+                    url:
+                      type: string
+                    apiKey:
+                      type: string
+                    username:
+                      type: string
+                    password:
+                      type: string
+                    pollIntervalMinutes:
+                      type: number
+                    enabled:
+                      type: boolean
+      responses:
+        '200':
+          description: Game settings updated
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/game/igdb/test:
+    post:
+      summary: Test IGDB connection
+      description: Tests IGDB/Twitch API credentials.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clientId:
+                  type: string
+                clientSecret:
+                  type: string
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+  /settings/game/romm/test:
+    post:
+      summary: Test ROMM connection
+      description: Tests ROMM server connection.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                apiKey:
+                  type: string
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+  /settings/game/romm/scan:
+    post:
+      summary: Trigger ROMM library scan
+      description: Triggers a scan of the ROMM library.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Scan triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+  /settings/book/download-managers:
+    get:
+      summary: Get book download manager instances
+      description: Returns all book download manager instances.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Download manager instances returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      summary: Create book download manager instance
+      description: Creates a new download manager instance.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                hostname:
+                  type: string
+                port:
+                  type: number
+                apiKey:
+                  type: string
+                useSsl:
+                  type: boolean
+                baseUrl:
+                  type: string
+                serviceType:
+                  type: string
+      responses:
+        '201':
+          description: Instance created
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/book/download-managers/{id}:
+    put:
+      summary: Update book download manager instance
+      description: Updates an existing download manager instance.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Instance updated
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      summary: Delete book download manager instance
+      description: Deletes a download manager instance.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '204':
+          description: Instance deleted
+  /settings/book/download-managers/test:
+    post:
+      summary: Test book download manager connection
+      description: Tests connection to a download manager.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serviceType:
+                  type: string
+                hostname:
+                  type: string
+                port:
+                  type: number
+                apiKey:
+                  type: string
+                useSsl:
+                  type: boolean
+                baseUrl:
+                  type: string
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+  /settings/book/library-servers:
+    get:
+      summary: Get book library server instances
+      description: Returns all book library server instances.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Library server instances returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      summary: Create book library server instance
+      description: Creates a new library server instance.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                hostname:
+                  type: string
+                port:
+                  type: number
+                apiKey:
+                  type: string
+                useSsl:
+                  type: boolean
+                baseUrl:
+                  type: string
+                serviceType:
+                  type: string
+                scanIntervalSeconds:
+                  type: number
+      responses:
+        '201':
+          description: Instance created
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/book/library-servers/{id}:
+    put:
+      summary: Update book library server instance
+      description: Updates an existing library server instance.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Instance updated
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      summary: Delete book library server instance
+      description: Deletes a library server instance.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '204':
+          description: Instance deleted
+  /settings/book/library-servers/test:
+    post:
+      summary: Test book library server connection
+      description: Tests connection to a library server.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serviceType:
+                  type: string
+                hostname:
+                  type: string
+                port:
+                  type: number
+                apiKey:
+                  type: string
+                useSsl:
+                  type: boolean
+                baseUrl:
+                  type: string
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+  /settings/book/library-servers/{id}/scan:
+    post:
+      summary: Trigger book library server scan
+      description: Triggers a scan for a specific library server instance.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '202':
+          description: Scan triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
   /auth/me:
     get:
       summary: Get logged-in user
