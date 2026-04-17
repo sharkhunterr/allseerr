@@ -87,7 +87,7 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
 
   async triggerLibraryScan(): Promise<void> {
     try {
-      await this.axios.post('/tasks/scan');
+      await this.axios.put('/tasks/scan');
     } catch (e) {
       logger.warn('ROMM scan trigger failed', {
         label: 'romm',
