@@ -1,3 +1,4 @@
+import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import defineMessages from '@app/utils/defineMessages';
@@ -52,7 +53,11 @@ interface DownloadManagerInstance {
   isActive: boolean;
 }
 
-const DownloadManagerSettings = () => {
+const DownloadManagerSettings = ({
+  mediaTypeFilter,
+}: {
+  mediaTypeFilter?: string;
+}) => {
   const intl = useIntl();
   const { addToast } = useToasts();
   const { data, mutate } = useSWR<DownloadManagerInstance[]>(
@@ -73,7 +78,7 @@ const DownloadManagerSettings = () => {
     port: 8787,
     apiKey: '',
     useSsl: false,
-    mediaTypes: ['book'],
+    mediaTypes: [mediaTypeFilter ?? 'book'],
     isFallback: false,
     isActive: true,
   });
@@ -146,15 +151,19 @@ const DownloadManagerSettings = () => {
 
   if (!data) return <LoadingSpinner />;
 
+  const filtered = mediaTypeFilter
+    ? data.filter((d) => d.mediaTypes.includes(mediaTypeFilter))
+    : data;
+
   return (
     <div>
-      {data.length === 0 && !editingInstance && (
+      {filtered.length === 0 && !editingInstance && (
         <p className="mb-4 text-gray-400">
           {intl.formatMessage(messages.noInstances)}
         </p>
       )}
 
-      {data.map((inst) => (
+      {filtered.map((inst) => (
         <div
           key={inst.id}
           className="mb-3 flex items-center justify-between rounded-lg bg-gray-800 p-4"
@@ -331,7 +340,7 @@ const DownloadManagerSettings = () => {
             >
               <BeakerIcon className="mr-1 h-4 w-4" />
               {isTesting ? (
-                <LoadingSpinner />
+                <Spinner />
               ) : (
                 intl.formatMessage(messages.testConnection)
               )}

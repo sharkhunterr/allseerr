@@ -17,6 +17,7 @@ gameSettingsRoutes.get('/', (_req, res) => {
     },
     romm: {
       url: settings.game.romm.url,
+      publicUrl: settings.game.romm.publicUrl,
       apiKey: settings.game.romm.apiKey,
       username: settings.game.romm.username,
       password: '',
@@ -46,6 +47,7 @@ gameSettingsRoutes.put('/', async (req, res) => {
       ...settings.game,
       romm: {
         url: romm.url ?? settings.game.romm.url,
+        publicUrl: romm.publicUrl ?? settings.game.romm.publicUrl,
         apiKey: romm.apiKey ?? settings.game.romm.apiKey,
         username: romm.username ?? settings.game.romm.username,
         password: romm.password || settings.game.romm.password,
@@ -66,6 +68,7 @@ gameSettingsRoutes.put('/', async (req, res) => {
     },
     romm: {
       url: settings.game.romm.url,
+      publicUrl: settings.game.romm.publicUrl,
       apiKey: settings.game.romm.apiKey,
       username: settings.game.romm.username,
       password: '',
@@ -117,20 +120,10 @@ gameSettingsRoutes.post('/romm/test', async (req, res) => {
   }
 });
 
-gameSettingsRoutes.post('/romm/scan', async (req, res) => {
-  const settings = getSettings();
-
+gameSettingsRoutes.post('/romm/scan', async (_req, res) => {
   try {
-    const rommUrl = new URL(settings.game.romm.url);
-    const adapter = new RommAdapter({
-      hostname: rommUrl.hostname,
-      port:
-        parseInt(rommUrl.port) || (rommUrl.protocol === 'https:' ? 443 : 80),
-      apiKey: settings.game.romm.apiKey,
-      useSsl: rommUrl.protocol === 'https:',
-    });
-
-    await adapter.triggerLibraryScan();
+    const { rommScanner } = await import('@server/lib/scanners/romm');
+    rommScanner.run();
     return res.status(200).json({ success: true, message: 'Scan triggered.' });
   } catch (e) {
     logger.error('ROMM scan failed', {

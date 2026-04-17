@@ -109,9 +109,10 @@ interface PresetServerDisplay {
 }
 interface SettingsPlexProps {
   onComplete?: () => void;
+  embedded?: boolean;
 }
 
-const SettingsPlex = ({ onComplete }: SettingsPlexProps) => {
+const SettingsPlex = ({ onComplete, embedded }: SettingsPlexProps) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRefreshingPresets, setIsRefreshingPresets] = useState(false);
   const [availableServers, setAvailableServers] = useState<PlexDevice[] | null>(
@@ -337,20 +338,27 @@ const SettingsPlex = ({ onComplete }: SettingsPlexProps) => {
   }
   return (
     <>
-      <PageTitle
-        title={[
-          intl.formatMessage(messages.plex),
-          intl.formatMessage(globalMessages.settings),
-        ]}
-      />
-      <div className="mb-6">
-        <h3 className="heading">{intl.formatMessage(messages.plexsettings)}</h3>
-        <p className="description">
-          {intl.formatMessage(messages.plexsettingsDescription)}
-        </p>
-        {!!onComplete && (
-          <div className="section">
-            <Alert
+      {!embedded && (
+        <>
+          <PageTitle
+            title={[
+              intl.formatMessage(messages.plex),
+              intl.formatMessage(globalMessages.settings),
+            ]}
+          />
+          <div className="mb-6">
+            <h3 className="heading">
+              {intl.formatMessage(messages.plexsettings)}
+            </h3>
+            <p className="description">
+              {intl.formatMessage(messages.plexsettingsDescription)}
+            </p>
+          </div>
+        </>
+      )}
+      {!!onComplete && (
+        <div className="mb-6 section">
+          <Alert
               title={intl.formatMessage(messages.settingUpPlexDescription, {
                 RegisterPlexTVLink: (msg: React.ReactNode) => (
                   <a
@@ -367,7 +375,6 @@ const SettingsPlex = ({ onComplete }: SettingsPlexProps) => {
             />
           </div>
         )}
-      </div>
       <Formik
         initialValues={{
           hostname: data?.ip,

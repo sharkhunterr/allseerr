@@ -1,16 +1,13 @@
-import SettingsLayout from '@app/components/Settings/SettingsLayout';
-import SettingsBooksAudiobooks from '@app/components/Settings/BooksAudiobooks';
-import useRouteGuard from '@app/hooks/useRouteGuard';
-import { Permission } from '@app/hooks/useUser';
 import type { NextPage } from 'next';
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
 
-const SettingsBooksAudiobooksPage: NextPage = () => {
-  useRouteGuard(Permission.ADMIN);
-  return (
-    <SettingsLayout>
-      <SettingsBooksAudiobooks />
-    </SettingsLayout>
-  );
+const LegacyBooksAudiobooksPage: NextPage = () => {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/settings/services');
+  }, [router]);
+  return null;
 };
 
-export default SettingsBooksAudiobooksPage;
+export default LegacyBooksAudiobooksPage;

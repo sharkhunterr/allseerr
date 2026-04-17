@@ -361,7 +361,8 @@ export type JobId =
   | 'jellyfin-full-scan'
   | 'image-cache-cleanup'
   | 'availability-sync'
-  | 'process-blocklisted-tags';
+  | 'process-blocklisted-tags'
+  | 'romm-scan';
 
 export interface OidcGroupMapping {
   oidcGroup: string;
@@ -375,6 +376,7 @@ export interface GameSettings {
   };
   romm: {
     url: string;
+    publicUrl: string;
     apiKey: string;
     username: string;
     password: string;
@@ -628,6 +630,9 @@ class Settings {
         'process-blocklisted-tags': {
           schedule: '0 30 1 */7 * *',
         },
+        'romm-scan': {
+          schedule: '0 */15 * * * *',
+        },
       },
       network: {
         csrfProtection: false,
@@ -657,6 +662,7 @@ class Settings {
         },
         romm: {
           url: '',
+          publicUrl: '',
           apiKey: '',
           username: '',
           password: '',

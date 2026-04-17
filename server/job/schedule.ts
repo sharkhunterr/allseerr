@@ -10,6 +10,7 @@ import {
 } from '@server/lib/scanners/jellyfin';
 import { plexFullScanner, plexRecentScanner } from '@server/lib/scanners/plex';
 import { radarrScanner } from '@server/lib/scanners/radarr';
+import { rommScanner } from '@server/lib/scanners/romm';
 import { sonarrScanner } from '@server/lib/scanners/sonarr';
 import type { JobId } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -257,6 +258,23 @@ export const startJobs = (): void => {
     }),
     running: () => blocklistedTagsProcessor.status().running,
     cancelFn: () => blocklistedTagsProcessor.cancel(),
+  });
+
+  // Run ROMM scan every 15 minutes
+  scheduledJobs.push({
+    id: 'romm-scan',
+    name: 'ROMM Library Scan',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['romm-scan'].schedule,
+    job: schedule.scheduleJob(jobs['romm-scan'].schedule, () => {
+      logger.info('Starting scheduled job: ROMM Library Scan', {
+        label: 'Jobs',
+      });
+      rommScanner.run();
+    }),
+    running: () => rommScanner.status().running,
+    cancelFn: () => rommScanner.cancel(),
   });
 
   logger.info('Scheduled jobs loaded', { label: 'Jobs' });

@@ -22,8 +22,18 @@ interface RommGame {
   igdb_id?: number;
   name: string;
   platform_name?: string;
+  platform_display_name?: string;
   platform_igdb_id?: number;
+  platform_id?: number;
   file_name?: string;
+  fs_name_no_tags?: string;
+}
+
+interface RommPaginatedResponse {
+  items: RommGame[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 /**
@@ -68,11 +78,18 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
     _type: MediaType
   ): Promise<AvailabilityResult> {
     try {
-      const [igdbId, platformId] = externalId.split(':').map(Number);
-      const games = await this.getGames();
-      const match = games.find(
-        (g) => g.igdb_id === igdbId && g.platform_igdb_id === platformId
-      );
+      const [igdbId] = externalId.split(':').map(Number);
+      let match: RommGame | undefined;
+      let page = 1;
+      let hasMore = true;
+      while (hasMore && !match) {
+        const result = await this.getGamesPage(page, 100);
+        match = result.games.find(
+          (g: RommGame) => g.igdb_id === igdbId
+        );
+        hasMore = result.hasMore;
+        page++;
+      }
       if (match) {
         return {
           available: true,
@@ -87,7 +104,7 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
 
   async triggerLibraryScan(): Promise<void> {
     try {
-      await this.axios.post('/tasks/scan');
+      await this.axios.put('/tasks/scan');
     } catch (e) {
       logger.warn('ROMM scan trigger failed', {
         label: 'romm',
@@ -97,32 +114,32 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
   }
 
   /**
-   * Get all games from ROMM for matching.
+   * Get a page of games from ROMM.
    */
-  async getGames(): Promise<RommGame[]> {
+  async getGamesPage(
+    page = 1,
+    pageSize = 100
+  ): Promise<{ games: RommGame[]; hasMore: boolean; total: number }> {
     try {
-      const response = await this.axios.get('/roms', {
-        params: { limit: 10000 },
+      const offset = (page - 1) * pageSize;
+      const response = await this.axios.get<RommPaginatedResponse>('/roms', {
+        params: { limit: pageSize, offset },
       });
-      return response.data ?? [];
+      const data = response.data;
+      const games: RommGame[] = data.items ?? [];
+      return {
+        games,
+        hasMore: offset + games.length < data.total,
+        total: data.total,
+      };
     } catch (e) {
-      logger.error('ROMM get games failed', {
+      logger.error('ROMM get games page failed', {
         label: 'romm',
+        page,
         error: e instanceof Error ? e.message : String(e),
       });
-      return [];
+      return { games: [], hasMore: false, total: 0 };
     }
-  }
-
-  /**
-   * Get games added since a specific timestamp.
-   */
-  async getNewGamesSince(
-    timestamp: number
-  ): Promise<RommGame[]> {
-    const allGames = await this.getGames();
-    // ROMM may not support filtering by date; return all for now
-    return allGames;
   }
 
   /**

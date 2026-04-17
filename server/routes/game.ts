@@ -68,19 +68,38 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
           abbreviation: p.abbreviation,
         }));
 
-        // Check if available in ROMM for any platform
-        const availabilityChecks = await Promise.all(
-          platforms.map(async (p) => {
-            const existing = await gameMediaRepo.findOne({
-              where: { igdbId: game.id, platformIgdbId: p.id },
-            });
-            return {
-              ...p,
-              mediaStatus: existing?.status ?? null,
-              gameMediaId: existing?.id ?? null,
-            };
-          })
+        // Check if available in ROMM for this game (match on igdbId only,
+        // since ROMM and IGDB use different platform ID systems)
+        const existingMedia = await gameMediaRepo.find({
+          where: { igdbId: game.id },
+        });
+        const availableRommPlatforms = new Set(
+          existingMedia
+            .filter((m) => m.status === MediaStatus.AVAILABLE)
+            .map((m) => m.platformName?.toLowerCase())
         );
+
+        const availabilityChecks = platforms.map((p) => {
+          // Try to match IGDB platform name with ROMM platform name
+          const isAvailable = availableRommPlatforms.has(
+            p.name.toLowerCase()
+          );
+          const matchedMedia = isAvailable
+            ? existingMedia.find(
+                (m) =>
+                  m.status === MediaStatus.AVAILABLE &&
+                  m.platformName?.toLowerCase() === p.name.toLowerCase()
+              )
+            : existingMedia.find((m) => m.igdbId === game.id);
+
+          return {
+            ...p,
+            mediaStatus: isAvailable
+              ? MediaStatus.AVAILABLE
+              : matchedMedia?.status ?? null,
+            gameMediaId: matchedMedia?.id ?? null,
+          };
+        });
 
         return {
           igdbId: game.id,
@@ -345,18 +364,33 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
       abbreviation: p.abbreviation,
     }));
 
-    const availabilityChecks = await Promise.all(
-      platforms.map(async (p) => {
-        const existing = await gameMediaRepo.findOne({
-          where: { igdbId: game.id, platformIgdbId: p.id },
-        });
-        return {
-          ...p,
-          mediaStatus: existing?.status ?? null,
-          gameMediaId: existing?.id ?? null,
-        };
-      })
+    const existingMedia = await gameMediaRepo.find({
+      where: { igdbId: game.id },
+    });
+    const availableRommPlatforms = new Set(
+      existingMedia
+        .filter((m) => m.status === MediaStatus.AVAILABLE)
+        .map((m) => m.platformName?.toLowerCase())
     );
+
+    const availabilityChecks = platforms.map((p) => {
+      const isAvailable = availableRommPlatforms.has(p.name.toLowerCase());
+      const matchedMedia = isAvailable
+        ? existingMedia.find(
+            (m) =>
+              m.status === MediaStatus.AVAILABLE &&
+              m.platformName?.toLowerCase() === p.name.toLowerCase()
+          )
+        : existingMedia.find((m) => m.igdbId === game.id);
+
+      return {
+        ...p,
+        mediaStatus: isAvailable
+          ? MediaStatus.AVAILABLE
+          : matchedMedia?.status ?? null,
+        gameMediaId: matchedMedia?.id ?? null,
+      };
+    });
 
     return res.status(200).json({
       igdbId: game.id,

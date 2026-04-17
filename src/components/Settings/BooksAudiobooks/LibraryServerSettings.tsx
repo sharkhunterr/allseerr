@@ -1,3 +1,4 @@
+import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import defineMessages from '@app/utils/defineMessages';
@@ -51,7 +52,11 @@ interface LibraryServerInstance {
   lastScanTimestamp?: number;
 }
 
-const LibraryServerSettings = () => {
+const LibraryServerSettings = ({
+  mediaTypeFilter,
+}: {
+  mediaTypeFilter?: string;
+}) => {
   const intl = useIntl();
   const { addToast } = useToasts();
   const { data, mutate } = useSWR<LibraryServerInstance[]>(
@@ -72,7 +77,7 @@ const LibraryServerSettings = () => {
     port: 8080,
     apiKey: '',
     useSsl: false,
-    mediaTypes: ['book'],
+    mediaTypes: [mediaTypeFilter ?? 'book'],
     isActive: true,
     scanIntervalSeconds: 300,
   });
@@ -123,15 +128,19 @@ const LibraryServerSettings = () => {
 
   if (!data) return <LoadingSpinner />;
 
+  const filtered = mediaTypeFilter
+    ? data.filter((d) => d.mediaTypes.includes(mediaTypeFilter))
+    : data;
+
   return (
     <div>
-      {data.length === 0 && !editingInstance && (
+      {filtered.length === 0 && !editingInstance && (
         <p className="mb-4 text-gray-400">
           {intl.formatMessage(messages.noInstances)}
         </p>
       )}
 
-      {data.map((inst) => (
+      {filtered.map((inst) => (
         <div
           key={inst.id}
           className="mb-3 flex items-center justify-between rounded-lg bg-gray-800 p-4"
@@ -333,7 +342,7 @@ const LibraryServerSettings = () => {
             >
               <BeakerIcon className="mr-1 h-4 w-4" />
               {isTesting ? (
-                <LoadingSpinner />
+                <Spinner />
               ) : (
                 intl.formatMessage(messages.testConnection)
               )}

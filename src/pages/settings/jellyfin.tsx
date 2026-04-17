@@ -1,16 +1,13 @@
-import SettingsJellyfin from '@app/components/Settings/SettingsJellyfin';
-import SettingsLayout from '@app/components/Settings/SettingsLayout';
-import useRouteGuard from '@app/hooks/useRouteGuard';
-import { Permission } from '@app/hooks/useUser';
 import type { NextPage } from 'next';
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
 
-const JellyfinSettingsPage: NextPage = () => {
-  useRouteGuard(Permission.MANAGE_SETTINGS);
-  return (
-    <SettingsLayout>
-      <SettingsJellyfin />
-    </SettingsLayout>
-  );
+const LegacyJellyfinPage: NextPage = () => {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/settings/media-servers');
+  }, [router]);
+  return null;
 };
 
-export default JellyfinSettingsPage;
+export default LegacyJellyfinPage;
