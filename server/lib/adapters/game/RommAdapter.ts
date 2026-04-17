@@ -22,8 +22,18 @@ interface RommGame {
   igdb_id?: number;
   name: string;
   platform_name?: string;
+  platform_display_name?: string;
   platform_igdb_id?: number;
+  platform_id?: number;
   file_name?: string;
+  fs_name_no_tags?: string;
+}
+
+interface RommPaginatedResponse {
+  items: RommGame[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 /**
@@ -110,20 +120,26 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
   async getGamesPage(
     page = 1,
     pageSize = 100
-  ): Promise<{ games: RommGame[]; hasMore: boolean }> {
+  ): Promise<{ games: RommGame[]; hasMore: boolean; total: number }> {
     try {
-      const response = await this.axios.get('/roms', {
-        params: { limit: pageSize, offset: (page - 1) * pageSize },
+      const offset = (page - 1) * pageSize;
+      const response = await this.axios.get<RommPaginatedResponse>('/roms', {
+        params: { limit: pageSize, offset },
       });
-      const games: RommGame[] = response.data ?? [];
-      return { games, hasMore: games.length === pageSize };
+      const data = response.data;
+      const games: RommGame[] = data.items ?? [];
+      return {
+        games,
+        hasMore: offset + games.length < data.total,
+        total: data.total,
+      };
     } catch (e) {
       logger.error('ROMM get games page failed', {
         label: 'romm',
         page,
         error: e instanceof Error ? e.message : String(e),
       });
-      return { games: [], hasMore: false };
+      return { games: [], hasMore: false, total: 0 };
     }
   }
 

@@ -76,6 +76,7 @@ class RommScanner {
       while (hasMore && this.running) {
         const result = await adapter.getGamesPage(page, PAGE_SIZE);
         hasMore = result.hasMore;
+        this.totalSize = result.total;
 
         for (const game of result.games) {
           if (!this.running) {
@@ -84,7 +85,6 @@ class RommScanner {
           }
 
           this.progress++;
-          this.totalSize = this.progress + (hasMore ? PAGE_SIZE : 0);
 
           if (!game.igdb_id) {
             continue;
@@ -108,10 +108,13 @@ class RommScanner {
             }
           } else {
             const newMedia = new GameMedia({
-              title: game.name,
+              title: game.fs_name_no_tags || game.name,
               igdbId: game.igdb_id,
               platformIgdbId: game.platform_igdb_id ?? 0,
-              platformName: game.platform_name ?? 'Unknown',
+              platformName:
+                game.platform_display_name ??
+                game.platform_name ??
+                'Unknown',
               status: MediaStatus.AVAILABLE,
               rommId: game.id,
             });
@@ -122,8 +125,6 @@ class RommScanner {
 
         page++;
       }
-
-      this.totalSize = this.progress;
 
       logger.info(
         `ROMM scan complete: ${this.newGames} new, ${this.updatedGames} updated out of ${this.totalSize} games`,
