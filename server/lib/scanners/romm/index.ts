@@ -5,7 +5,6 @@ import { RommAdapter } from '@server/lib/adapters/game/RommAdapter';
 import type { StatusBase } from '@server/lib/scanners/baseScanner';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
-import { In } from 'typeorm';
 
 export interface RommSyncStatus extends StatusBase {
   newGames: number;
@@ -83,17 +82,18 @@ class RommScanner {
         const gamesWithIgdb = result.games.filter((g) => g.igdb_id);
 
         if (gamesWithIgdb.length > 0) {
-          // Batch lookup: find all existing GameMedia for these IGDB IDs
-          const igdbIds = gamesWithIgdb.map((g) => g.igdb_id!);
-          const existingMedia = await gameMediaRepo.find({
-            where: { igdbId: In(igdbIds) },
-          });
-          const existingByIgdbId = new Map(
-            existingMedia.map((m) => [m.igdbId, m])
-          );
+          // Deduplicate by igdbId+platformId within this page
+          const seen = new Set<string>();
 
           for (const game of gamesWithIgdb) {
-            const existing = existingByIgdbId.get(game.igdb_id!);
+            const platformId = game.platform_id ?? 0;
+            const key = `${game.igdb_id}:${platformId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const existing = await gameMediaRepo.findOne({
+              where: { igdbId: game.igdb_id!, platformIgdbId: platformId },
+            });
 
             if (existing) {
               if (existing.status !== MediaStatus.AVAILABLE) {
@@ -103,19 +103,23 @@ class RommScanner {
                 this.updatedGames++;
               }
             } else {
-              const newMedia = new GameMedia({
-                title: game.fs_name_no_tags || game.name,
-                igdbId: game.igdb_id!,
-                platformIgdbId: 0,
-                platformName:
-                  game.platform_display_name ??
-                  game.platform_name ??
-                  'Unknown',
-                status: MediaStatus.AVAILABLE,
-                rommId: game.id,
-              });
-              await gameMediaRepo.save(newMedia);
-              this.newGames++;
+              try {
+                const newMedia = new GameMedia({
+                  title: game.fs_name_no_tags || game.name,
+                  igdbId: game.igdb_id!,
+                  platformIgdbId: platformId,
+                  platformName:
+                    game.platform_display_name ??
+                    game.platform_name ??
+                    'Unknown',
+                  status: MediaStatus.AVAILABLE,
+                  rommId: game.id,
+                });
+                await gameMediaRepo.save(newMedia);
+                this.newGames++;
+              } catch {
+                // Skip duplicates from concurrent inserts
+              }
             }
           }
         }
