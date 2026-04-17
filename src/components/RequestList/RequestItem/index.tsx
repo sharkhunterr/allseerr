@@ -181,6 +181,7 @@ const getNonTmdbInfo = (
         coverUrl?: string;
         openLibraryId?: string;
         foreignBookId?: string;
+        covers?: number[];
       }
     | undefined;
   const am = request.audiobookMedia as
@@ -189,6 +190,7 @@ const getNonTmdbInfo = (
         coverUrl?: string;
         openLibraryId?: string;
         foreignBookId?: string;
+        covers?: number[];
       }
     | undefined;
 
@@ -207,7 +209,11 @@ const getNonTmdbInfo = (
     );
     return {
       title: bm.title,
-      coverUrl: bm.coverUrl,
+      coverUrl:
+        bm.coverUrl ||
+        (bm.covers?.[0]
+          ? `https://covers.openlibrary.org/b/id/${bm.covers[0]}-L.jpg`
+          : undefined),
       href: `/book/${bookId}`,
       typeLabel: 'Book',
     };
@@ -219,7 +225,11 @@ const getNonTmdbInfo = (
     );
     return {
       title: am.title,
-      coverUrl: am.coverUrl,
+      coverUrl:
+        am.coverUrl ||
+        (am.covers?.[0]
+          ? `https://covers.openlibrary.org/b/id/${am.covers[0]}-L.jpg`
+          : undefined),
       href: `/book/${bookId}`,
       typeLabel: 'Audiobook',
     };

@@ -338,6 +338,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           coverUrl?: string;
           openLibraryId?: string;
           foreignBookId?: string;
+          covers?: number[];
         }
       | undefined;
     const am = typedRequest.audiobookMedia as
@@ -346,6 +347,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           coverUrl?: string;
           openLibraryId?: string;
           foreignBookId?: string;
+          covers?: number[];
         }
       | undefined;
 
@@ -361,12 +363,20 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
       typeLabel = 'Game';
     } else if (request.type === MediaType.BOOK && bm) {
       infoTitle = bm.title;
-      coverUrl = bm.coverUrl;
+      coverUrl =
+        bm.coverUrl ||
+        (bm.covers?.[0]
+          ? `https://covers.openlibrary.org/b/id/${bm.covers[0]}-L.jpg`
+          : undefined);
       href = `/book/${(bm.openLibraryId || bm.foreignBookId || '').replace('/works/', '')}`;
       typeLabel = 'Book';
     } else if (request.type === MediaType.AUDIOBOOK && am) {
       infoTitle = am.title;
-      coverUrl = am.coverUrl;
+      coverUrl =
+        am.coverUrl ||
+        (am.covers?.[0]
+          ? `https://covers.openlibrary.org/b/id/${am.covers[0]}-L.jpg`
+          : undefined);
       href = `/book/${(am.openLibraryId || am.foreignBookId || '').replace('/works/', '')}`;
       typeLabel = 'Audiobook';
     }

@@ -85,6 +85,7 @@ const BookDetailPage: NextPage = () => {
         title: data.title,
         authorName: 'Unknown',
         foreignBookId: data.key,
+        coverUrl,
       });
       addToast(intl.formatMessage(messages.requestSuccess), {
         appearance: 'success',
