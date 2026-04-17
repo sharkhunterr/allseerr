@@ -2,6 +2,8 @@ import Badge from '@app/components/Common/Badge';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import SubTabs from '@app/components/Common/SubTabs';
+import SettingsIgdb from '@app/components/Settings/Games/SettingsIgdb';
 import MetadataSelector, {
   MetadataProviderType,
 } from '@app/components/MetadataSelector';
@@ -57,7 +59,7 @@ interface MetadataSettings {
   metadata: MetadataValues;
 }
 
-const SettingsMetadata = () => {
+const MoviesAndTVMetadata = () => {
   const intl = useIntl();
   const { addToast } = useToasts();
   const [isTesting, setIsTesting] = useState(false);
@@ -261,17 +263,7 @@ const SettingsMetadata = () => {
 
   return (
     <>
-      <PageTitle
-        title={[
-          intl.formatMessage(messages.general),
-          intl.formatMessage(globalMessages.settings),
-        ]}
-      />
-
       <div className="mb-6">
-        <h3 className="heading">
-          {intl.formatMessage(messages.metadataProviderSettings)}
-        </h3>
         <p className="description">
           {intl.formatMessage(messages.metadataSettings)}
         </p>
@@ -472,6 +464,40 @@ const SettingsMetadata = () => {
           }}
         </Formik>
       </div>
+    </>
+  );
+};
+
+const SettingsMetadata = () => {
+  const intl = useIntl();
+  const [activeTab, setActiveTab] = useState<'movies-tv' | 'games'>(
+    'movies-tv'
+  );
+
+  const tabs: { key: typeof activeTab; label: string }[] = [
+    {
+      key: 'movies-tv',
+      label: `${intl.formatMessage(globalMessages.movies)} & ${intl.formatMessage(globalMessages.tvshows)}`,
+    },
+    { key: 'games', label: intl.formatMessage(globalMessages.game) },
+  ];
+
+  return (
+    <>
+      <PageTitle
+        title={[
+          intl.formatMessage(messages.metadataProviderSettings),
+          intl.formatMessage(globalMessages.settings),
+        ]}
+      />
+      <div className="mb-6">
+        <h3 className="heading">
+          {intl.formatMessage(messages.metadataProviderSettings)}
+        </h3>
+      </div>
+      <SubTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+      {activeTab === 'movies-tv' && <MoviesAndTVMetadata />}
+      {activeTab === 'games' && <SettingsIgdb />}
     </>
   );
 };

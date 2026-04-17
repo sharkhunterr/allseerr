@@ -1,5 +1,6 @@
 import PageTitle from '@app/components/Common/PageTitle';
 import SubTabs from '@app/components/Common/SubTabs';
+import SettingsRomm from '@app/components/Settings/Games/SettingsRomm';
 import SettingsJellyfin from '@app/components/Settings/SettingsJellyfin';
 import SettingsPlex from '@app/components/Settings/SettingsPlex';
 import useSettings from '@app/hooks/useSettings';
@@ -79,7 +80,7 @@ const SettingsMediaServers = () => {
         <ComingSoon name="Audiobookshelf" />
       )}
       {activeTab === 'calibre' && <ComingSoon name="Calibre / Grimoire" />}
-      {activeTab === 'romm' && <ComingSoon name="ROMM" />}
+      {activeTab === 'romm' && <SettingsRomm />}
     </>
   );
 };

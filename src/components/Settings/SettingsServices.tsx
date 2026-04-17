@@ -9,7 +9,6 @@ import PageTitle from '@app/components/Common/PageTitle';
 import SubTabs from '@app/components/Common/SubTabs';
 import DownloadManagerSettings from '@app/components/Settings/BooksAudiobooks/DownloadManagerSettings';
 import LibraryServerSettings from '@app/components/Settings/BooksAudiobooks/LibraryServerSettings';
-import SettingsGames from '@app/components/Settings/Games';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
 import OverrideRuleTiles from '@app/components/Settings/OverrideRule/OverrideRuleTiles';
 import RadarrModal from '@app/components/Settings/RadarrModal';
@@ -558,14 +557,13 @@ const MoviesAndTVServices = () => {
 const SettingsServices = () => {
   const intl = useIntl();
   const [activeTab, setActiveTab] = useState<
-    'movies-tv' | 'books' | 'audiobooks' | 'games'
+    'movies-tv' | 'books' | 'audiobooks'
   >('movies-tv');
 
   const tabs: { key: typeof activeTab; label: string }[] = [
     { key: 'movies-tv', label: `${intl.formatMessage(globalMessages.movies)} & ${intl.formatMessage(globalMessages.tvshows)}` },
     { key: 'books', label: intl.formatMessage(globalMessages.book) },
     { key: 'audiobooks', label: intl.formatMessage(globalMessages.audiobook) },
-    { key: 'games', label: intl.formatMessage(globalMessages.game) },
   ];
 
   return (
@@ -595,7 +593,6 @@ const SettingsServices = () => {
           <LibraryServerSettings mediaTypeFilter="audiobook" />
         </div>
       )}
-      {activeTab === 'games' && <SettingsGames embedded />}
     </>
   );
 };
