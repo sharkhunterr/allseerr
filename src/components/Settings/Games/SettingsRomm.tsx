@@ -21,6 +21,8 @@ const messages = defineMessages('components.Settings.Games.Romm', {
     'Connect to your ROMM instance for game availability detection.',
   rommUrl: 'ROMM URL',
   rommUrlTip: 'e.g., http://romm.local:8080',
+  rommPublicUrl: 'Public URL',
+  rommPublicUrlTip: 'External URL for "Open in ROMM" links (optional)',
   rommApiKey: 'API Key or Token',
   pollInterval: 'Polling Interval (minutes)',
   pollIntervalTip: 'How often to check ROMM for new additions (default: 15)',
@@ -33,6 +35,7 @@ const messages = defineMessages('components.Settings.Games.Romm', {
 interface RommSettings {
   romm: {
     url: string;
+    publicUrl: string;
     apiKey: string;
     username: string;
     password: string;
@@ -98,6 +101,7 @@ const SettingsRomm = () => {
     <Formik
       initialValues={{
         rommUrl: data?.romm?.url ?? '',
+        rommPublicUrl: data?.romm?.publicUrl ?? '',
         rommApiKey: data?.romm?.apiKey ?? '',
         rommUsername: data?.romm?.username ?? '',
         rommPassword: '',
@@ -110,6 +114,7 @@ const SettingsRomm = () => {
           await axios.put('/api/v1/settings/game', {
             romm: {
               url: values.rommUrl,
+              publicUrl: values.rommPublicUrl,
               apiKey: values.rommApiKey,
               username: values.rommUsername,
               password: values.rommPassword || undefined,
@@ -166,6 +171,23 @@ const SettingsRomm = () => {
                   id="rommUrl"
                   name="rommUrl"
                   placeholder="http://romm.local:8080"
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <label htmlFor="rommPublicUrl" className="text-label">
+                {intl.formatMessage(messages.rommPublicUrl)}
+                <span className="label-tip">
+                  {intl.formatMessage(messages.rommPublicUrlTip)}
+                </span>
+              </label>
+              <div className="form-input-area">
+                <Field
+                  type="text"
+                  id="rommPublicUrl"
+                  name="rommPublicUrl"
+                  placeholder="https://romm.example.com"
                 />
               </div>
             </div>

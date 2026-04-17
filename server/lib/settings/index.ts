@@ -376,6 +376,7 @@ export interface GameSettings {
   };
   romm: {
     url: string;
+    publicUrl: string;
     apiKey: string;
     username: string;
     password: string;
@@ -661,6 +662,7 @@ class Settings {
         },
         romm: {
           url: '',
+          publicUrl: '',
           apiKey: '',
           username: '',
           password: '',

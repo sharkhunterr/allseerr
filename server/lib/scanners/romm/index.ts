@@ -69,6 +69,7 @@ class RommScanner {
 
       logger.info('Starting ROMM scan', { label: 'ROMM Scan' });
 
+      const publicUrl = rommSettings.publicUrl || rommSettings.url;
       const gameMediaRepo = getRepository(GameMedia);
       let page = 1;
       let hasMore = true;
@@ -95,10 +96,13 @@ class RommScanner {
               where: { igdbId: game.igdb_id!, platformIgdbId: platformId },
             });
 
+            const rommUrl = `${publicUrl}/rom/${game.id}`;
+
             if (existing) {
-              if (existing.status !== MediaStatus.AVAILABLE) {
+              if (existing.status !== MediaStatus.AVAILABLE || !existing.rommUrl) {
                 existing.status = MediaStatus.AVAILABLE;
                 existing.rommId = game.id;
+                existing.rommUrl = rommUrl;
                 await gameMediaRepo.save(existing);
                 this.updatedGames++;
               }
@@ -114,6 +118,7 @@ class RommScanner {
                     'Unknown',
                   status: MediaStatus.AVAILABLE,
                   rommId: game.id,
+                  rommUrl,
                 });
                 await gameMediaRepo.save(newMedia);
                 this.newGames++;

@@ -17,6 +17,7 @@ gameSettingsRoutes.get('/', (_req, res) => {
     },
     romm: {
       url: settings.game.romm.url,
+      publicUrl: settings.game.romm.publicUrl,
       apiKey: settings.game.romm.apiKey,
       username: settings.game.romm.username,
       password: '',
@@ -46,6 +47,7 @@ gameSettingsRoutes.put('/', async (req, res) => {
       ...settings.game,
       romm: {
         url: romm.url ?? settings.game.romm.url,
+        publicUrl: romm.publicUrl ?? settings.game.romm.publicUrl,
         apiKey: romm.apiKey ?? settings.game.romm.apiKey,
         username: romm.username ?? settings.game.romm.username,
         password: romm.password || settings.game.romm.password,
@@ -66,6 +68,7 @@ gameSettingsRoutes.put('/', async (req, res) => {
     },
     romm: {
       url: settings.game.romm.url,
+      publicUrl: settings.game.romm.publicUrl,
       apiKey: settings.game.romm.apiKey,
       username: settings.game.romm.username,
       password: '',
