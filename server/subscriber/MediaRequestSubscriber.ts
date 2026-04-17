@@ -952,6 +952,11 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     manager: EntityManager,
     entity: MediaRequest
   ): Promise<void> {
+    // Skip for non-TMDB media types (games, books, audiobooks)
+    if (!entity.media) {
+      return;
+    }
+
     const fullMedia = await manager.findOneOrFail(Media, {
       where: { id: entity.media.id },
       relations: { requests: true },

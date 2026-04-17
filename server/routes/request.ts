@@ -456,7 +456,14 @@ requestRoutes.get('/:requestId', async (req, res, next) => {
   try {
     const request = await requestRepository.findOneOrFail({
       where: { id: Number(req.params.requestId) },
-      relations: { requestedBy: true, modifiedBy: true },
+      relations: {
+        requestedBy: true,
+        modifiedBy: true,
+        media: true,
+        gameMedia: true,
+        bookMedia: true,
+        audiobookMedia: true,
+      },
     });
 
     if (

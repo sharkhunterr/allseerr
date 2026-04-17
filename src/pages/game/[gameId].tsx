@@ -1,3 +1,4 @@
+import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -56,9 +57,11 @@ interface GameDetailData {
 const PlatformRequestButton = ({
   platform,
   game,
+  onRequested,
 }: {
   platform: Platform;
   game: GameDetailData;
+  onRequested?: () => void;
 }) => {
   const intl = useIntl();
   const { addToast } = useToasts();
@@ -92,6 +95,7 @@ const PlatformRequestButton = ({
         autoDismiss: true,
       });
       setLocalStatus(MediaStatus.PENDING);
+      onRequested?.();
     } catch (e) {
       const msg =
         (e as { response?: { status?: number } }).response?.status === 409
@@ -125,7 +129,7 @@ const PlatformRequestButton = ({
           onClick={handleRequest}
         >
           {isRequesting ? (
-            <LoadingSpinner />
+            <Spinner />
           ) : (
             intl.formatMessage(messages.request)
           )}
@@ -140,9 +144,11 @@ const GameDetailPage: NextPage = () => {
   const intl = useIntl();
   const { gameId } = router.query;
 
-  const { data: game, error } = useSWR<GameDetailData>(
-    gameId ? `/api/v1/game/${gameId}` : null
-  );
+  const {
+    data: game,
+    error,
+    mutate: revalidate,
+  } = useSWR<GameDetailData>(gameId ? `/api/v1/game/${gameId}` : null);
 
   if (!game && !error) {
     return <LoadingSpinner />;
@@ -236,6 +242,7 @@ const GameDetailPage: NextPage = () => {
                     key={platform.id}
                     platform={platform}
                     game={game}
+                    onRequested={revalidate}
                   />
                 ))}
               </div>

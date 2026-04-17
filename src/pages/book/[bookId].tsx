@@ -1,3 +1,4 @@
+import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -45,7 +46,7 @@ const BookDetailPage: NextPage = () => {
   const { bookId } = router.query;
   const [isRequesting, setIsRequesting] = useState(false);
 
-  const { data, error } = useSWR<BookDetailData>(
+  const { data, error, mutate: revalidate } = useSWR<BookDetailData>(
     bookId ? `/api/v1/book/${bookId}` : null
   );
 
@@ -91,6 +92,7 @@ const BookDetailPage: NextPage = () => {
         appearance: 'success',
         autoDismiss: true,
       });
+      revalidate();
     } catch {
       addToast(intl.formatMessage(messages.requestFailed), {
         appearance: 'error',
@@ -158,7 +160,7 @@ const BookDetailPage: NextPage = () => {
               onClick={handleRequest}
             >
               {isRequesting ? (
-                <LoadingSpinner />
+                <Spinner />
               ) : (
                 intl.formatMessage(messages.request)
               )}
