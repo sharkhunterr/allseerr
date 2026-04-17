@@ -66,15 +66,14 @@ const PlatformRequestButton = ({
   const intl = useIntl();
   const { addToast } = useToasts();
   const [isRequesting, setIsRequesting] = useState(false);
-  const [localStatus, setLocalStatus] = useState<MediaStatus | null>(
-    platform.mediaStatus ?? null
-  );
+  const [localOverride, setLocalOverride] = useState<MediaStatus | null>(null);
 
-  const isAvailable = localStatus === MediaStatus.AVAILABLE;
+  const effectiveStatus = localOverride ?? platform.mediaStatus ?? null;
+  const isAvailable = effectiveStatus === MediaStatus.AVAILABLE;
   const isRequested =
-    localStatus !== null &&
-    localStatus !== undefined &&
-    localStatus !== MediaStatus.UNKNOWN;
+    effectiveStatus !== null &&
+    effectiveStatus !== undefined &&
+    effectiveStatus !== MediaStatus.UNKNOWN;
 
   const handleRequest = async () => {
     setIsRequesting(true);
@@ -94,7 +93,7 @@ const PlatformRequestButton = ({
         appearance: 'success',
         autoDismiss: true,
       });
-      setLocalStatus(MediaStatus.PENDING);
+      setLocalOverride(MediaStatus.PENDING);
       onRequested?.();
     } catch (e) {
       const msg =
