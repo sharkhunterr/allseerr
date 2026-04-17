@@ -5,13 +5,14 @@ import { RommAdapter } from '@server/lib/adapters/game/RommAdapter';
 import type { StatusBase } from '@server/lib/scanners/baseScanner';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
+import { In } from 'typeorm';
 
 export interface RommSyncStatus extends StatusBase {
   newGames: number;
   updatedGames: number;
 }
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 250;
 
 class RommScanner {
   private running = false;
@@ -78,51 +79,48 @@ class RommScanner {
         hasMore = result.hasMore;
         this.totalSize = result.total;
 
-        for (const game of result.games) {
-          if (!this.running) {
-            logger.info('ROMM scan cancelled', { label: 'ROMM Scan' });
-            return;
-          }
+        // Filter games that have an IGDB ID
+        const gamesWithIgdb = result.games.filter((g) => g.igdb_id);
 
-          this.progress++;
-
-          if (!game.igdb_id) {
-            continue;
-          }
-
-          const existing = await gameMediaRepo.findOne({
-            where: {
-              igdbId: game.igdb_id,
-              ...(game.platform_igdb_id
-                ? { platformIgdbId: game.platform_igdb_id }
-                : {}),
-            },
+        if (gamesWithIgdb.length > 0) {
+          // Batch lookup: find all existing GameMedia for these IGDB IDs
+          const igdbIds = gamesWithIgdb.map((g) => g.igdb_id!);
+          const existingMedia = await gameMediaRepo.find({
+            where: { igdbId: In(igdbIds) },
           });
+          const existingByIgdbId = new Map(
+            existingMedia.map((m) => [m.igdbId, m])
+          );
 
-          if (existing) {
-            if (existing.status !== MediaStatus.AVAILABLE) {
-              existing.status = MediaStatus.AVAILABLE;
-              existing.rommId = game.id;
-              await gameMediaRepo.save(existing);
-              this.updatedGames++;
+          for (const game of gamesWithIgdb) {
+            const existing = existingByIgdbId.get(game.igdb_id!);
+
+            if (existing) {
+              if (existing.status !== MediaStatus.AVAILABLE) {
+                existing.status = MediaStatus.AVAILABLE;
+                existing.rommId = game.id;
+                await gameMediaRepo.save(existing);
+                this.updatedGames++;
+              }
+            } else {
+              const newMedia = new GameMedia({
+                title: game.fs_name_no_tags || game.name,
+                igdbId: game.igdb_id!,
+                platformIgdbId: 0,
+                platformName:
+                  game.platform_display_name ??
+                  game.platform_name ??
+                  'Unknown',
+                status: MediaStatus.AVAILABLE,
+                rommId: game.id,
+              });
+              await gameMediaRepo.save(newMedia);
+              this.newGames++;
             }
-          } else {
-            const newMedia = new GameMedia({
-              title: game.fs_name_no_tags || game.name,
-              igdbId: game.igdb_id,
-              platformIgdbId: game.platform_igdb_id ?? 0,
-              platformName:
-                game.platform_display_name ??
-                game.platform_name ??
-                'Unknown',
-              status: MediaStatus.AVAILABLE,
-              rommId: game.id,
-            });
-            await gameMediaRepo.save(newMedia);
-            this.newGames++;
           }
         }
 
+        this.progress += result.games.length;
         page++;
       }
 

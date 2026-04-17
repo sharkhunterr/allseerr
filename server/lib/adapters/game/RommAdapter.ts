@@ -78,15 +78,14 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
     _type: MediaType
   ): Promise<AvailabilityResult> {
     try {
-      const [igdbId, platformId] = externalId.split(':').map(Number);
+      const [igdbId] = externalId.split(':').map(Number);
       let match: RommGame | undefined;
       let page = 1;
       let hasMore = true;
       while (hasMore && !match) {
         const result = await this.getGamesPage(page, 100);
         match = result.games.find(
-          (g: RommGame) =>
-            g.igdb_id === igdbId && g.platform_igdb_id === platformId
+          (g: RommGame) => g.igdb_id === igdbId
         );
         hasMore = result.hasMore;
         page++;
