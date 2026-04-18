@@ -334,7 +334,6 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           title: string;
           coverUrl?: string;
           igdbId: number;
-          platformName?: string;
         }
       | undefined;
     const bm = typedRequest.bookMedia as
@@ -360,14 +359,12 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
     let coverUrl: string | undefined;
     let href = '#';
     let typeLabel = request.type as string;
-    let platform: string | undefined;
 
     if (request.type === MediaType.GAME && gm) {
       infoTitle = gm.title;
       coverUrl = gm.coverUrl;
       href = `/game/${gm.igdbId}`;
       typeLabel = 'Game';
-      platform = gm.platformName;
     } else if (request.type === MediaType.BOOK && bm) {
       infoTitle = bm.title;
       coverUrl =
@@ -436,11 +433,6 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           >
             {infoTitle}
           </Link>
-          {platform && (
-            <div className="mt-1">
-              <Badge>{platform}</Badge>
-            </div>
-          )}
           {hasPermission(
             [Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW],
             { type: 'or' }
