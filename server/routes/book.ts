@@ -1,5 +1,6 @@
-import AudibleAPI from '@server/api/audible';
+import AudibleAPI, { type AudibleRegion } from '@server/api/audible';
 import OpenLibraryAPI from '@server/api/openlibrary';
+import { getSettings } from '@server/lib/settings';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -17,7 +18,29 @@ import { Router } from 'express';
 
 const bookRoutes = Router();
 const openLibrary = new OpenLibraryAPI();
-const audible = new AudibleAPI('us');
+
+const AUDIBLE_VALID_REGIONS: AudibleRegion[] = [
+  'us',
+  'ca',
+  'uk',
+  'au',
+  'fr',
+  'de',
+  'jp',
+  'it',
+  'in',
+  'es',
+  'br',
+];
+
+const getAudibleClient = (): AudibleAPI => {
+  const region = (
+    getSettings().main.discoverRegion?.toLowerCase() || 'us'
+  ) as AudibleRegion;
+  return new AudibleAPI(
+    AUDIBLE_VALID_REGIONS.includes(region) ? region : 'us'
+  );
+};
 
 /**
  * GET /api/v1/book/search
@@ -50,7 +73,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
   try {
     if (type === 'audiobook') {
       // Audible Catalog API (free, no auth) — same source as AudioBookRequest
-      const { results, totalResults } = await audible.search(
+      const { results, totalResults } = await getAudibleClient().search(
         query,
         limit,
         Math.max(0, page - 1)
@@ -141,7 +164,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
 
   try {
     if (isAudibleAsin) {
-      const product = await audible.getProduct(id);
+      const product = await getAudibleClient().getProduct(id);
       if (!product) {
         return res.status(404).json({
           status: 404,
