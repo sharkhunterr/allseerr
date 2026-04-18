@@ -330,23 +330,22 @@ const GameDetailPage: NextPage = () => {
           )}
         </div>
       </div>
-      {showRequestModal && (
-        <GameRequestModal
-          igdbId={game.igdbId}
-          title={game.title}
-          platforms={game.platforms}
-          releaseYear={game.releaseYear}
-          developer={game.developer}
-          publisher={game.publisher}
-          genre={game.genre}
-          coverUrl={game.coverUrl}
-          onCancel={() => setShowRequestModal(false)}
-          onComplete={() => {
-            setShowRequestModal(false);
-            revalidate();
-          }}
-        />
-      )}
+      <GameRequestModal
+        show={showRequestModal}
+        igdbId={game.igdbId}
+        title={game.title}
+        platforms={game.platforms}
+        releaseYear={game.releaseYear}
+        developer={game.developer}
+        publisher={game.publisher}
+        genre={game.genre}
+        coverUrl={game.coverUrl}
+        onCancel={() => setShowRequestModal(false)}
+        onComplete={() => {
+          setShowRequestModal(false);
+          revalidate();
+        }}
+      />
       <div className="media-overview">
         <div className="media-overview-left">
           <h2>{intl.formatMessage(messages.overview)}</h2>

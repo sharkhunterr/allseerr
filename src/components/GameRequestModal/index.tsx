@@ -1,6 +1,7 @@
 import Modal from '@app/components/Common/Modal';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import { Transition } from '@headlessui/react';
 import { CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/solid';
 import { MediaStatus } from '@server/constants/media';
 import axios from 'axios';
@@ -31,6 +32,7 @@ interface Platform {
 }
 
 interface GameRequestModalProps {
+  show: boolean;
   igdbId: number;
   title: string;
   platforms: Platform[];
@@ -44,6 +46,7 @@ interface GameRequestModalProps {
 }
 
 const GameRequestModal = ({
+  show,
   igdbId,
   title,
   platforms,
@@ -131,8 +134,18 @@ const GameRequestModal = ({
   };
 
   return (
-    <Modal
-      title={intl.formatMessage(messages.requestForTitle, { title })}
+    <Transition
+      as="div"
+      enter="transition-opacity duration-300"
+      enterFrom="opacity-0"
+      enterTo="opacity-100"
+      leave="transition-opacity duration-300"
+      leaveFrom="opacity-100"
+      leaveTo="opacity-0"
+      show={show}
+    >
+      <Modal
+        title={intl.formatMessage(messages.requestForTitle, { title })}
       subTitle={
         developer
           ? `${developer}${releaseYear ? ` · ${releaseYear}` : ''}`
@@ -219,7 +232,8 @@ const GameRequestModal = ({
           );
         })}
       </div>
-    </Modal>
+      </Modal>
+    </Transition>
   );
 };
 
