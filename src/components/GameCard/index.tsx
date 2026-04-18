@@ -1,13 +1,11 @@
+import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import defineMessages from '@app/utils/defineMessages';
 import { MediaStatus } from '@server/constants/media';
 import Link from 'next/link';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.GameCard', {
-  available: 'Available',
-  requested: 'Requested',
-  awaitingAddition: 'Awaiting Addition',
-  manualNote: 'Manual addition required',
+  game: 'Game',
 });
 
 interface Platform {
@@ -43,16 +41,25 @@ const GameCard = ({
 }: GameCardProps) => {
   const intl = useIntl();
 
-  const hasAvailable = platforms.some(
+  const availableCount = platforms.filter(
     (p) => p.mediaStatus === MediaStatus.AVAILABLE
-  );
-  const hasRequested = platforms.some(
+  ).length;
+  const hasPending = platforms.some(
     (p) =>
       p.mediaStatus !== null &&
       p.mediaStatus !== undefined &&
       p.mediaStatus !== MediaStatus.UNKNOWN &&
       p.mediaStatus !== MediaStatus.AVAILABLE
   );
+
+  const aggregateStatus: MediaStatus | undefined =
+    availableCount > 0
+      ? availableCount === platforms.length
+        ? MediaStatus.AVAILABLE
+        : MediaStatus.PARTIALLY_AVAILABLE
+      : hasPending
+        ? MediaStatus.PENDING
+        : undefined;
 
   return (
     <Link href={`/game/${igdbId}`}>
@@ -71,30 +78,21 @@ const GameCard = ({
             </div>
           )}
 
-          {(hasAvailable || hasRequested) && (
-            <div className="absolute left-2 top-2">
-              <span
-                className={`rounded px-2 py-1 text-xs font-bold ${
-                  hasAvailable
-                    ? 'bg-green-600 text-white'
-                    : 'bg-yellow-600 text-white'
-                }`}
-              >
-                {hasAvailable
-                  ? intl.formatMessage(messages.available)
-                  : intl.formatMessage(messages.requested)}
-              </span>
+          <div className="absolute left-0 right-0 flex items-center justify-between p-2">
+            <div className="pointer-events-none z-40 self-start rounded-full border border-emerald-500 bg-emerald-600/80 shadow-md">
+              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                {intl.formatMessage(messages.game)}
+              </div>
             </div>
-          )}
-
-          <div className="absolute bottom-2 right-2">
-            <span className="rounded bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
-              Game
-            </span>
+            {aggregateStatus !== undefined && (
+              <div className="pointer-events-none z-40 flex">
+                <StatusBadgeMini status={aggregateStatus} shrink />
+              </div>
+            )}
           </div>
 
           {userRating && (
-            <div className="absolute right-2 top-2">
+            <div className="absolute bottom-2 right-2">
               <span className="rounded bg-yellow-500/90 px-1.5 py-0.5 text-xs font-bold text-black">
                 {Math.round(userRating)}%
               </span>

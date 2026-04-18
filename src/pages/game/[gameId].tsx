@@ -2,6 +2,7 @@ import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import GameRequestModal from '@app/components/GameRequestModal';
 import defineMessages from '@app/utils/defineMessages';
 import { ExclamationTriangleIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
@@ -216,6 +217,7 @@ const GameDetailPage: NextPage = () => {
   const router = useRouter();
   const intl = useIntl();
   const { gameId } = router.query;
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
   const {
     data: game,
@@ -250,6 +252,16 @@ const GameDetailPage: NextPage = () => {
   const isFullyAvailable =
     game.platforms.length > 0 &&
     availablePlatforms.length === game.platforms.length;
+  const requestablePlatforms = game.platforms.filter((p) => {
+    const s = p.mediaStatus;
+    return (
+      s === null ||
+      s === undefined ||
+      s === MediaStatus.UNKNOWN ||
+      s === MediaStatus.DELETED
+    );
+  });
+  const hasRequestable = requestablePlatforms.length > 0;
 
   return (
     <div className="media-page" style={{ height: 493 }}>
@@ -308,8 +320,33 @@ const GameDetailPage: NextPage = () => {
           {hasAnyAvailable && (
             <PlayOnRommAction platforms={availablePlatforms} intl={intl} />
           )}
+          {hasRequestable && (
+            <Button
+              buttonType="primary"
+              onClick={() => setShowRequestModal(true)}
+            >
+              <span>{intl.formatMessage(messages.request)}</span>
+            </Button>
+          )}
         </div>
       </div>
+      {showRequestModal && (
+        <GameRequestModal
+          igdbId={game.igdbId}
+          title={game.title}
+          platforms={game.platforms}
+          releaseYear={game.releaseYear}
+          developer={game.developer}
+          publisher={game.publisher}
+          genre={game.genre}
+          coverUrl={game.coverUrl}
+          onCancel={() => setShowRequestModal(false)}
+          onComplete={() => {
+            setShowRequestModal(false);
+            revalidate();
+          }}
+        />
+      )}
       <div className="media-overview">
         <div className="media-overview-left">
           <h2>{intl.formatMessage(messages.overview)}</h2>

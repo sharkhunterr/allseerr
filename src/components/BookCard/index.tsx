@@ -1,3 +1,4 @@
+import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
 import { MediaStatus } from '@server/constants/media';
@@ -5,9 +6,7 @@ import Link from 'next/link';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.BookCard', {
-  available: 'Available',
-  requested: 'Requested',
-  request: 'Request',
+  book: 'Book',
 });
 
 interface BookCardProps {
@@ -53,21 +52,20 @@ const BookCard = ({
             </div>
           )}
 
-          {mediaStatus !== null && mediaStatus !== undefined && (
-            <div className="absolute left-2 top-2">
-              <span
-                className={`rounded px-2 py-1 text-xs font-bold ${
-                  mediaStatus === MediaStatus.AVAILABLE
-                    ? 'bg-green-600 text-white'
-                    : 'bg-yellow-600 text-white'
-                }`}
-              >
-                {mediaStatus === MediaStatus.AVAILABLE
-                  ? intl.formatMessage(messages.available)
-                  : intl.formatMessage(messages.requested)}
-              </span>
+          <div className="absolute left-0 right-0 flex items-center justify-between p-2">
+            <div className="pointer-events-none z-40 self-start rounded-full border border-orange-500 bg-orange-600/80 shadow-md">
+              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                {intl.formatMessage(messages.book)}
+              </div>
             </div>
-          )}
+            {mediaStatus !== null &&
+              mediaStatus !== undefined &&
+              mediaStatus !== MediaStatus.UNKNOWN && (
+                <div className="pointer-events-none z-40 flex">
+                  <StatusBadgeMini status={mediaStatus} shrink />
+                </div>
+              )}
+          </div>
         </div>
 
         <div className="flex flex-1 flex-col p-3">
