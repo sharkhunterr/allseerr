@@ -166,7 +166,13 @@ const NonTmdbStatusBadge = ({ status }: { status: MediaRequestStatus }) => {
  */
 const getNonTmdbInfo = (
   request: RequestResultsResponse['results'][number]
-): { title: string; coverUrl?: string; href: string; typeLabel: string } => {
+): {
+  title: string;
+  coverUrl?: string;
+  href: string;
+  typeLabel: string;
+  platform?: string;
+} => {
   const gm = request.gameMedia as
     | {
         title: string;
@@ -200,6 +206,7 @@ const getNonTmdbInfo = (
       coverUrl: gm.coverUrl,
       href: `/game/${gm.igdbId}`,
       typeLabel: 'Game',
+      platform: gm.platformName,
     };
   }
   if (request.type === MediaType.BOOK && bm) {
@@ -589,17 +596,17 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
             </Link>
             <div className="flex flex-col justify-center overflow-hidden pl-2 xl:pl-4">
               <div className="pt-0.5 text-xs font-medium text-white sm:pt-1">
-                <Badge
-                  badgeType={
+                <span
+                  className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold uppercase leading-5 text-white shadow ${
                     request.type === MediaType.GAME
-                      ? 'success'
+                      ? 'border-teal-500 bg-teal-600/80'
                       : request.type === MediaType.AUDIOBOOK
-                        ? 'primary'
-                        : 'default'
-                  }
+                        ? 'border-pink-500 bg-pink-600/80'
+                        : 'border-orange-500 bg-orange-600/80'
+                  }`}
                 >
                   {info.typeLabel}
-                </Badge>
+                </span>
               </div>
               <Link
                 href={info.href}
@@ -607,6 +614,11 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               >
                 {info.title}
               </Link>
+              {info.platform && (
+                <div className="mt-1">
+                  <Badge>{info.platform}</Badge>
+                </div>
+              )}
             </div>
           </div>
           <div className="z-10 ml-4 mt-4 flex w-full flex-col justify-center gap-1 overflow-hidden pr-4 text-sm sm:ml-2 sm:mt-0 xl:flex-1 xl:pr-0">
@@ -703,11 +715,24 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               />
             </Link>
             <div className="flex flex-col justify-center overflow-hidden pl-2 xl:pl-4">
-              <div className="pt-0.5 text-xs font-medium text-white sm:pt-1">
-                {(isMovie(title)
-                  ? title.releaseDate
-                  : title.firstAirDate
-                )?.slice(0, 4)}
+              <div className="flex items-center gap-2 pt-0.5 text-xs font-medium text-white sm:pt-1">
+                <span
+                  className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold uppercase leading-5 text-white shadow ${
+                    requestData.type === 'movie'
+                      ? 'border-blue-500 bg-blue-600/80'
+                      : 'border-purple-500 bg-purple-600/80'
+                  }`}
+                >
+                  {requestData.type === 'movie'
+                    ? intl.formatMessage(globalMessages.movie)
+                    : intl.formatMessage(globalMessages.tvshow)}
+                </span>
+                <span>
+                  {(isMovie(title)
+                    ? title.releaseDate
+                    : title.firstAirDate
+                  )?.slice(0, 4)}
+                </span>
               </div>
               <Link
                 href={

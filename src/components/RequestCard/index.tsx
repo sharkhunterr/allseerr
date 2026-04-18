@@ -330,7 +330,11 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
   if (isNonTmdb) {
     const typedRequest = request as NonFunctionProperties<MediaRequest>;
     const gm = typedRequest.gameMedia as
-      | { title: string; coverUrl?: string; igdbId: number }
+      | {
+          title: string;
+          coverUrl?: string;
+          igdbId: number;
+        }
       | undefined;
     const bm = typedRequest.bookMedia as
       | {
@@ -423,19 +427,6 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
         data-testid="request-card"
       >
         <div className="relative z-10 flex min-w-0 flex-1 flex-col pr-4">
-          <div className="hidden text-xs font-medium sm:flex">
-            <Badge
-              badgeType={
-                request.type === MediaType.GAME
-                  ? 'success'
-                  : request.type === MediaType.AUDIOBOOK
-                    ? 'primary'
-                    : 'default'
-              }
-            >
-              {typeLabel}
-            </Badge>
-          </div>
           <Link
             href={href}
             className="overflow-hidden overflow-ellipsis whitespace-nowrap text-base font-bold text-white hover:underline sm:text-lg"
@@ -468,9 +459,20 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                 </Link>
               </div>
             )}
-          <div className="mt-2 flex items-center text-sm sm:mt-1">
+          <div className="mt-2 flex items-center gap-2 text-sm sm:mt-1">
             <span className="mr-2 hidden font-bold sm:block">
               {intl.formatMessage(globalMessages.status)}
+            </span>
+            <span
+              className={`inline-flex whitespace-nowrap rounded-full border px-2 text-xs font-semibold leading-5 text-white ${
+                request.type === MediaType.GAME
+                  ? 'border-teal-500 bg-teal-600/80'
+                  : request.type === MediaType.AUDIOBOOK
+                    ? 'border-pink-500 bg-pink-600/80'
+                    : 'border-orange-500 bg-orange-600/80'
+              }`}
+            >
+              {typeLabel}
             </span>
             {statusBadge}
           </div>
@@ -609,18 +611,11 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           className="relative z-10 flex min-w-0 flex-1 flex-col pr-4"
           data-testid="request-card-title"
         >
-          <div className="hidden items-center gap-2 text-xs font-medium text-white sm:flex">
-            <Badge badgeType={request.type === 'movie' ? 'warning' : 'primary'}>
-              {request.type === 'movie'
-                ? intl.formatMessage(globalMessages.movie)
-                : intl.formatMessage(globalMessages.tvshow)}
-            </Badge>
-            <span>
-              {(isMovie(title) ? title.releaseDate : title.firstAirDate)?.slice(
-                0,
-                4
-              )}
-            </span>
+          <div className="hidden text-xs font-medium text-white sm:flex">
+            {(isMovie(title) ? title.releaseDate : title.firstAirDate)?.slice(
+              0,
+              4
+            )}
           </div>
           <Link
             href={
@@ -677,9 +672,20 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
               </div>
             </div>
           )}
-          <div className="mt-2 flex items-center text-sm sm:mt-1">
+          <div className="mt-2 flex items-center gap-2 text-sm sm:mt-1">
             <span className="mr-2 hidden font-bold sm:block">
               {intl.formatMessage(globalMessages.status)}
+            </span>
+            <span
+              className={`inline-flex whitespace-nowrap rounded-full border px-2 text-xs font-semibold leading-5 text-white ${
+                request.type === 'movie'
+                  ? 'border-blue-500 bg-blue-600/80'
+                  : 'border-purple-500 bg-purple-600/80'
+              }`}
+            >
+              {request.type === 'movie'
+                ? intl.formatMessage(globalMessages.movie)
+                : intl.formatMessage(globalMessages.tvshow)}
             </span>
             {requestData.status === MediaRequestStatus.DECLINED ? (
               <Badge badgeType="danger">

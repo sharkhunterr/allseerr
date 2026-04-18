@@ -21,6 +21,7 @@ metadataRoutes.get('/', (_req, res) => {
   res.status(200).json({
     tv: settings.metadataSettings.tv,
     anime: settings.metadataSettings.anime,
+    audibleRegion: settings.metadataSettings.audibleRegion ?? 'us',
   });
 });
 
@@ -77,15 +78,18 @@ metadataRoutes.put('/', async (req, res) => {
   }
 
   settings.metadataSettings = {
-    tv: body.tv,
-    anime: body.anime,
+    tv: body.tv ?? settings.metadataSettings.tv,
+    anime: body.anime ?? settings.metadataSettings.anime,
+    audibleRegion:
+      body.audibleRegion ?? settings.metadataSettings.audibleRegion ?? 'us',
   };
   await settings.save();
 
   res.status(200).json({
     success: true,
-    tv: body.tv,
-    anime: body.anime,
+    tv: settings.metadataSettings.tv,
+    anime: settings.metadataSettings.anime,
+    audibleRegion: settings.metadataSettings.audibleRegion,
     tests: {
       tvdb: getTestResultString(tvdbTest),
       tmdb: getTestResultString(tmdbTest),

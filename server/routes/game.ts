@@ -16,6 +16,23 @@ import { Router } from 'express';
 const gameRoutes = Router();
 
 /**
+ * Swap ROMM internal URL with configured public URL for external "Play" links.
+ */
+const remapRommPublicUrl = (
+  storedUrl: string | null | undefined
+): string | null => {
+  if (!storedUrl) return null;
+  const romm = getSettings().game.romm;
+  if (!romm.publicUrl || !romm.url || romm.publicUrl === romm.url) {
+    return storedUrl;
+  }
+  if (storedUrl.startsWith(romm.url)) {
+    return romm.publicUrl + storedUrl.slice(romm.url.length);
+  }
+  return storedUrl;
+};
+
+/**
  * GET /api/v1/game/search
  * Search for games via IGDB.
  */
@@ -80,24 +97,29 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
         );
 
         const availabilityChecks = platforms.map((p) => {
-          // Try to match IGDB platform name with ROMM platform name
-          const isAvailable = availableRommPlatforms.has(
-            p.name.toLowerCase()
+          // ROMM availability: match by platform name (case-insensitive) —
+          // IGDB and ROMM use different internal platform ID systems.
+          const availableMatch = existingMedia.find(
+            (m) =>
+              m.status === MediaStatus.AVAILABLE &&
+              m.platformName?.toLowerCase() === p.name.toLowerCase()
           );
-          const matchedMedia = isAvailable
-            ? existingMedia.find(
-                (m) =>
-                  m.status === MediaStatus.AVAILABLE &&
-                  m.platformName?.toLowerCase() === p.name.toLowerCase()
-              )
-            : existingMedia.find((m) => m.igdbId === game.id);
+          // Request status: match by exact platformIgdbId since user
+          // requests are keyed on IGDB platform id.
+          const requestedMatch = existingMedia.find(
+            (m) =>
+              m.platformIgdbId === p.id &&
+              m.status !== MediaStatus.AVAILABLE
+          );
+          const matchedMedia = availableMatch ?? requestedMatch;
 
           return {
             ...p,
-            mediaStatus: isAvailable
+            mediaStatus: availableMatch
               ? MediaStatus.AVAILABLE
               : matchedMedia?.status ?? null,
             gameMediaId: matchedMedia?.id ?? null,
+            rommUrl: remapRommPublicUrl(matchedMedia?.rommUrl),
           };
         });
 
@@ -208,7 +230,10 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
         publisher: body.publisher,
         genre: body.genre,
         coverUrl: body.coverUrl,
-        status: MediaStatus.PENDING,
+        // PROCESSING = awaiting the game/ROM to appear in ROMM.
+        // Matches how movies/TV show an indigo clock badge after a
+        // validated request is awaiting download.
+        status: MediaStatus.PROCESSING,
       });
       await gameMediaRepo.save(gameMedia);
     }
@@ -374,21 +399,24 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
     );
 
     const availabilityChecks = platforms.map((p) => {
-      const isAvailable = availableRommPlatforms.has(p.name.toLowerCase());
-      const matchedMedia = isAvailable
-        ? existingMedia.find(
-            (m) =>
-              m.status === MediaStatus.AVAILABLE &&
-              m.platformName?.toLowerCase() === p.name.toLowerCase()
-          )
-        : existingMedia.find((m) => m.igdbId === game.id);
+      const availableMatch = existingMedia.find(
+        (m) =>
+          m.status === MediaStatus.AVAILABLE &&
+          m.platformName?.toLowerCase() === p.name.toLowerCase()
+      );
+      const requestedMatch = existingMedia.find(
+        (m) =>
+          m.platformIgdbId === p.id && m.status !== MediaStatus.AVAILABLE
+      );
+      const matchedMedia = availableMatch ?? requestedMatch;
 
       return {
         ...p,
-        mediaStatus: isAvailable
+        mediaStatus: availableMatch
           ? MediaStatus.AVAILABLE
           : matchedMedia?.status ?? null,
         gameMediaId: matchedMedia?.id ?? null,
+        rommUrl: remapRommPublicUrl(matchedMedia?.rommUrl),
       };
     });
 

@@ -123,16 +123,18 @@ const SettingsIgdb = () => {
                 </span>
               </label>
               <div className="form-input-area">
-                <SensitiveInput
-                  as="field"
-                  type="password"
-                  id="igdbClientSecret"
-                  name="igdbClientSecret"
-                  placeholder={
-                    data?.igdb?.clientSecretSet ? '••••••••••••' : ''
-                  }
-                  autoComplete="new-password"
-                />
+                <div className="form-input-field">
+                  <SensitiveInput
+                    as="field"
+                    type="password"
+                    id="igdbClientSecret"
+                    name="igdbClientSecret"
+                    placeholder={
+                      data?.igdb?.clientSecretSet ? '••••••••••••' : ''
+                    }
+                    autoComplete="new-password"
+                  />
+                </div>
               </div>
             </div>
 

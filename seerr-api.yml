@@ -4170,6 +4170,92 @@ paths:
       responses:
         '204':
           description: Book request deleted
+  /settings/audiobookshelf:
+    get:
+      summary: Get Audiobookshelf settings
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+    put:
+      summary: Update Audiobookshelf settings
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/audiobookshelf/test:
+    post:
+      summary: Test Audiobookshelf connection
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                apiKey:
+                  type: string
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+  /settings/audiobookshelf/libraries:
+    get:
+      summary: List Audiobookshelf libraries
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  libraries:
+                    type: array
+                    items:
+                      type: object
+  /settings/audiobookshelf/scan:
+    post:
+      summary: Trigger Audiobookshelf manual scan
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Scan triggered
+          content:
+            application/json:
+              schema:
+                type: object
   /settings/game:
     get:
       summary: Get game settings

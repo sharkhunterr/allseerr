@@ -110,6 +110,15 @@ const Search = () => {
       return;
     }
 
+    // Use %20 instead of '+' for spaces (OpenAPI validator rejects '+')
+    const paramsSerializer = (params: Record<string, unknown>) =>
+      Object.entries(params)
+        .map(
+          ([k, v]) =>
+            `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`
+        )
+        .join('&');
+
     setIsLoadingBooks(true);
     setIsLoadingAudiobooks(true);
     setIsLoadingGames(true);
@@ -117,6 +126,7 @@ const Search = () => {
     axios
       .get<BookSearchResponse>('/api/v1/book/search', {
         params: { query, type: 'book', limit: 40 },
+        paramsSerializer,
       })
       .then((res) => setBookResults(res.data.results))
       .catch(() => setBookResults([]))
@@ -125,6 +135,7 @@ const Search = () => {
     axios
       .get<BookSearchResponse>('/api/v1/book/search', {
         params: { query, type: 'audiobook', limit: 40 },
+        paramsSerializer,
       })
       .then((res) => setAudiobookResults(res.data.results))
       .catch(() => setAudiobookResults([]))
@@ -133,6 +144,7 @@ const Search = () => {
     axios
       .get<GameSearchResponse>('/api/v1/game/search', {
         params: { query, limit: 40 },
+        paramsSerializer,
       })
       .then((res) => setGameResults(res.data.results))
       .catch(() => setGameResults([]))

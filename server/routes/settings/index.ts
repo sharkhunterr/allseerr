@@ -39,6 +39,7 @@ import { rescheduleJob } from 'node-schedule';
 import path from 'path';
 import semver from 'semver';
 import { URL } from 'url';
+import audiobookshelfSettingsRoutes from './audiobookshelfSettings';
 import bookSettingsRoutes from './bookSettings';
 import gameSettingsRoutes from './gameSettings';
 import metadataRoutes from './metadata';
@@ -56,6 +57,7 @@ settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 settingsRoutes.use('/oidc', oidcRoutes);
 settingsRoutes.use('/book', bookSettingsRoutes);
+settingsRoutes.use('/audiobookshelf', audiobookshelfSettingsRoutes);
 settingsRoutes.use('/game', gameSettingsRoutes);
 
 const filteredMainSettings = (

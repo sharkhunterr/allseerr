@@ -1,3 +1,4 @@
+import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import defineMessages from '@app/utils/defineMessages';
 import { MusicalNoteIcon } from '@heroicons/react/24/solid';
 import { MediaStatus } from '@server/constants/media';
@@ -5,8 +6,7 @@ import Link from 'next/link';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.AudiobookCard', {
-  available: 'Available',
-  requested: 'Requested',
+  audiobook: 'Audiobook',
   narrator: 'Narrated by {narrator}',
 });
 
@@ -25,9 +25,7 @@ interface AudiobookCardProps {
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
+  if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
 }
 
@@ -61,26 +59,19 @@ const AudiobookCard = ({
             </div>
           )}
 
-          {mediaStatus !== null && mediaStatus !== undefined && (
-            <div className="absolute left-2 top-2">
-              <span
-                className={`rounded px-2 py-1 text-xs font-bold ${
-                  mediaStatus === MediaStatus.AVAILABLE
-                    ? 'bg-green-600 text-white'
-                    : 'bg-yellow-600 text-white'
-                }`}
-              >
-                {mediaStatus === MediaStatus.AVAILABLE
-                  ? intl.formatMessage(messages.available)
-                  : intl.formatMessage(messages.requested)}
-              </span>
+          <div className="absolute left-0 right-0 top-0 flex items-center justify-between p-2">
+            <div className="pointer-events-none z-40 self-start rounded-full border border-pink-500 bg-pink-600/80 shadow-md">
+              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                {intl.formatMessage(messages.audiobook)}
+              </div>
             </div>
-          )}
-
-          <div className="absolute bottom-2 right-2">
-            <span className="rounded bg-purple-600 px-2 py-0.5 text-xs font-bold text-white">
-              Audiobook
-            </span>
+            {mediaStatus !== null &&
+              mediaStatus !== undefined &&
+              mediaStatus !== MediaStatus.UNKNOWN && (
+                <div className="pointer-events-none z-40 flex">
+                  <StatusBadgeMini status={mediaStatus} shrink />
+                </div>
+              )}
           </div>
         </div>
 

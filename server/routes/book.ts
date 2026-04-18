@@ -1,4 +1,6 @@
+import AudibleAPI, { type AudibleRegion } from '@server/api/audible';
 import OpenLibraryAPI from '@server/api/openlibrary';
+import { getSettings } from '@server/lib/settings';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -16,6 +18,48 @@ import { Router } from 'express';
 
 const bookRoutes = Router();
 const openLibrary = new OpenLibraryAPI();
+
+const AUDIBLE_VALID_REGIONS: AudibleRegion[] = [
+  'us',
+  'ca',
+  'uk',
+  'au',
+  'fr',
+  'de',
+  'jp',
+  'it',
+  'in',
+  'es',
+  'br',
+];
+
+const getAudibleClient = (): AudibleAPI => {
+  const settings = getSettings();
+  const configured = settings.metadataSettings.audibleRegion?.toLowerCase();
+  const fallback = settings.main.discoverRegion?.toLowerCase();
+  const region = (configured || fallback || 'us') as AudibleRegion;
+  return new AudibleAPI(
+    AUDIBLE_VALID_REGIONS.includes(region) ? region : 'us'
+  );
+};
+
+/**
+ * Swap Audiobookshelf internal URL with the configured public URL for
+ * "Open in Library" external links.
+ */
+const remapToPublicUrl = (
+  storedUrl: string | null | undefined
+): string | null | undefined => {
+  if (!storedUrl) return storedUrl;
+  const abs = getSettings().book.audiobookshelf;
+  if (!abs.publicUrl || !abs.url || abs.publicUrl === abs.url) {
+    return storedUrl;
+  }
+  if (storedUrl.startsWith(abs.url)) {
+    return abs.publicUrl + storedUrl.slice(abs.url.length);
+  }
+  return storedUrl;
+};
 
 /**
  * GET /api/v1/book/search
@@ -35,7 +79,57 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
     });
   }
 
+  // OpenLibrary rejects queries < 3 chars with 422; return empty gracefully
+  if (type === 'book' && query.trim().length < 3) {
+    return res.status(200).json({
+      page,
+      totalPages: 0,
+      totalResults: 0,
+      results: [],
+    });
+  }
+
   try {
+    if (type === 'audiobook') {
+      // Audible Catalog API (free, no auth) — same source as AudioBookRequest
+      const { results, totalResults } = await getAudibleClient().search(
+        query,
+        limit,
+        Math.max(0, page - 1)
+      );
+
+      const audiobookMediaRepo = getRepository(AudiobookMedia);
+      const enrichedResults = await Promise.all(
+        results.map(async (result) => {
+          const existing = await audiobookMediaRepo.findOne({
+            where: { asin: result.asin },
+          });
+
+          return {
+            openLibraryId: result.asin,
+            title: result.title,
+            authorName: result.authorName,
+            narratorName: result.narratorName,
+            coverUrl: result.coverUrl,
+            year: result.year,
+            publisher: result.publisher,
+            durationSeconds: result.durationSeconds,
+            summary: result.summary,
+            mediaType: MediaType.AUDIOBOOK,
+            mediaStatus: existing?.status ?? null,
+            bookMediaId: existing?.id ?? null,
+          };
+        })
+      );
+
+      return res.status(200).json({
+        page,
+        totalPages: Math.ceil(totalResults / limit),
+        totalResults: enrichedResults.length,
+        results: enrichedResults,
+      });
+    }
+
     const { results, totalResults } = await openLibrary.search(
       query,
       page,
@@ -52,8 +146,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
 
         return {
           ...result,
-          mediaType:
-            type === 'audiobook' ? MediaType.AUDIOBOOK : MediaType.BOOK,
+          mediaType: MediaType.BOOK,
           mediaStatus: existing?.status ?? null,
           bookMediaId: existing?.id ?? null,
         };
@@ -84,9 +177,45 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
  * Get book detail by OpenLibrary work key.
  */
 bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
-  const workKey = `/works/${req.params.id}`;
+  const id = req.params.id;
+  // Audible ASINs are 10 chars starting with 'B'; OpenLibrary IDs look like "OL...W"
+  const isAudibleAsin = /^B[0-9A-Z]{9}$/.test(id);
 
   try {
+    if (isAudibleAsin) {
+      const product = await getAudibleClient().getProduct(id);
+      if (!product) {
+        return res.status(404).json({
+          status: 404,
+          message: 'Audiobook not found.',
+        });
+      }
+
+      const audiobookMediaRepo = getRepository(AudiobookMedia);
+      const existing = await audiobookMediaRepo.findOne({
+        where: { asin: product.asin },
+      });
+
+      return res.status(200).json({
+        key: product.asin,
+        title: product.title,
+        subtitle: product.subtitle,
+        authorName: product.authorName,
+        narratorName: product.narratorName,
+        description: product.summary,
+        coverUrl: product.coverUrl,
+        year: product.year,
+        publisher: product.publisher,
+        durationSeconds: product.durationSeconds,
+        language: product.language,
+        mediaType: MediaType.AUDIOBOOK,
+        mediaStatus: existing?.status ?? null,
+        bookMediaId: existing?.id ?? null,
+        libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),
+      });
+    }
+
+    const workKey = `/works/${id}`;
     const work = await openLibrary.getWork(workKey);
 
     if (!work) {
@@ -106,12 +235,12 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       ...work,
       mediaStatus: existing?.status ?? null,
       bookMediaId: existing?.id ?? null,
-      libraryServerUrl: existing?.libraryServerUrl ?? null,
+      libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),
     });
   } catch (e) {
     logger.error('Book detail fetch failed', {
       label: 'book',
-      workKey,
+      id,
       error: e instanceof Error ? e.message : String(e),
     });
     return res.status(500).json({
@@ -134,6 +263,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
     foreignBookId: string;
     isbn13?: string;
     isbn10?: string;
+    asin?: string;
     note?: string;
     preferredFormat?: string;
     coverUrl?: string;
@@ -213,19 +343,30 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           coverUrl: body.coverUrl,
           year: body.year,
           publisher: body.publisher,
-          status: MediaStatus.PENDING,
+          // PROCESSING so the card shows the blue clock badge like
+          // movies/TV requests awaiting download.
+          status: MediaStatus.PROCESSING,
         });
       } else {
+        // For audiobooks, foreignBookId is the Audible ASIN
+        const asin =
+          body.asin ||
+          (/^B[0-9A-Z]{9}$/.test(body.foreignBookId)
+            ? body.foreignBookId
+            : undefined);
         media = new AudiobookMedia({
           title: body.title,
           authorName: body.authorName,
           foreignBookId: body.foreignBookId,
           openLibraryId: body.openLibraryId,
+          asin,
           coverUrl: body.coverUrl,
           year: body.year,
           publisher: body.publisher,
           narratorName: body.narratorName,
-          status: MediaStatus.PENDING,
+          // PROCESSING so the card shows the blue clock badge like
+          // movies/TV requests awaiting download.
+          status: MediaStatus.PROCESSING,
         });
       }
       if (isBook && media) {

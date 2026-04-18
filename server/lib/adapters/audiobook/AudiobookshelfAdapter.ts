@@ -146,6 +146,56 @@ export class AudiobookshelfAdapter
     return null;
   }
 
+  /**
+   * Fetch all items from a specific library.
+   */
+  async getLibraryItems(
+    libraryId: string,
+    limit = 10000
+  ): Promise<
+    Array<{
+      id: string;
+      media: {
+        metadata: {
+          title: string;
+          authorName?: string;
+          isbn?: string;
+          asin?: string;
+          publishedYear?: string;
+          publisher?: string;
+        };
+        coverPath?: string;
+      };
+    }>
+  > {
+    const response = await this.axios.get(
+      `/api/libraries/${libraryId}/items`,
+      { params: { limit } }
+    );
+    return response.data?.results ?? [];
+  }
+
+  /**
+   * Public method to list libraries with their media type hint.
+   * Audiobookshelf library types: 'book' (includes ebooks+audiobooks mixed),
+   * 'podcast'. Use mediaType hint from library settings when available.
+   */
+  async getLibrariesList(): Promise<
+    Array<{ id: string; name: string; mediaType: string }>
+  > {
+    const response = await this.axios.get('/api/libraries');
+    const libraries: Array<{
+      id: string;
+      name: string;
+      mediaType: string;
+    }> = response.data?.libraries ?? [];
+    return libraries.map((l) => ({
+      id: l.id,
+      name: l.name,
+      mediaType: l.mediaType ?? 'book',
+    }));
+  }
+
   private async getLibraries(): Promise<
     Array<{ id: string; name: string }>
   > {
