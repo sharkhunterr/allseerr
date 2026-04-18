@@ -270,7 +270,7 @@ const GameDetailPage: NextPage = () => {
           )}
         </div>
         <div className="media-title">
-          <div className="media-status flex flex-wrap gap-2">
+          <div className="media-status">
             <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
               Game
             </span>
