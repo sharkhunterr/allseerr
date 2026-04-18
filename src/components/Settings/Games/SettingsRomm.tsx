@@ -197,13 +197,15 @@ const SettingsRomm = () => {
                 {intl.formatMessage(messages.rommApiKey)}
               </label>
               <div className="form-input-area">
-                <SensitiveInput
-                  as="field"
-                  type="password"
-                  id="rommApiKey"
-                  name="rommApiKey"
-                  autoComplete="new-password"
-                />
+                <div className="form-input-field">
+                  <SensitiveInput
+                    as="field"
+                    type="password"
+                    id="rommApiKey"
+                    name="rommApiKey"
+                    autoComplete="new-password"
+                  />
+                </div>
               </div>
             </div>
 
@@ -216,10 +218,11 @@ const SettingsRomm = () => {
               </label>
               <div className="form-input-area">
                 <Field
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   id="rommPollInterval"
                   name="rommPollInterval"
-                  min={1}
+                  className="short"
                 />
               </div>
             </div>

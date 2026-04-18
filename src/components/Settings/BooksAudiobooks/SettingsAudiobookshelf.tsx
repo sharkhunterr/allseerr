@@ -226,14 +226,16 @@ const SettingsAudiobookshelf = () => {
                 {intl.formatMessage(messages.apiKey)}
               </label>
               <div className="form-input-area">
-                <SensitiveInput
-                  as="field"
-                  type="password"
-                  id="apiKey"
-                  name="apiKey"
-                  placeholder={data?.apiKeySet ? '••••••••••••' : ''}
-                  autoComplete="new-password"
-                />
+                <div className="form-input-field">
+                  <SensitiveInput
+                    as="field"
+                    type="password"
+                    id="apiKey"
+                    name="apiKey"
+                    placeholder={data?.apiKeySet ? '••••••••••••' : ''}
+                    autoComplete="new-password"
+                  />
+                </div>
               </div>
             </div>
 
@@ -243,10 +245,11 @@ const SettingsAudiobookshelf = () => {
               </label>
               <div className="form-input-area">
                 <Field
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   id="pollIntervalMinutes"
                   name="pollIntervalMinutes"
-                  min={1}
+                  className="short"
                 />
               </div>
             </div>
