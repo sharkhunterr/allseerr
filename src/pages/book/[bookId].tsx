@@ -4,8 +4,8 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tag from '@app/components/Common/Tag';
 import defineMessages from '@app/utils/defineMessages';
-import { BookOpenIcon } from '@heroicons/react/24/solid';
-import { MediaStatus } from '@server/constants/media';
+import { BookOpenIcon, MusicalNoteIcon } from '@heroicons/react/24/solid';
+import { MediaStatus, MediaType } from '@server/constants/media';
 import axios from 'axios';
 import type { NextPage } from 'next';
 import { useRouter } from 'next/router';
@@ -15,29 +15,53 @@ import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 
 const messages = defineMessages('pages.BookDetail', {
-  request: 'Request Book',
+  requestBook: 'Request Book',
   requestAudiobook: 'Request Audiobook',
   available: 'Available',
   requested: 'Already Requested',
-  requestSuccess: 'Book requested successfully!',
-  requestFailed: 'Failed to request book.',
-  notFound: 'Book not found.',
+  requestSuccess: 'Request submitted successfully!',
+  requestFailed: 'Failed to submit request.',
+  notFound: 'Not found.',
   overview: 'Overview',
   overviewunavailable: 'Overview unavailable.',
   subjects: 'Subjects',
   openInLibrary: 'Open in Library',
+  author: 'Author',
+  narrator: 'Narrator',
+  duration: 'Duration',
+  publisher: 'Publisher',
+  releaseDate: 'Release Date',
+  language: 'Language',
+  asin: 'ASIN',
 });
 
 interface BookDetailData {
   key: string;
   title: string;
+  subtitle?: string;
   description?: string | { value: string };
   covers?: number[];
+  coverUrl?: string;
   subjects?: string[];
+  authorName?: string;
+  narratorName?: string;
+  year?: number;
+  publisher?: string;
+  durationSeconds?: number;
+  language?: string;
+  releaseDate?: string;
+  mediaType?: MediaType;
   mediaStatus?: MediaStatus | null;
   bookMediaId?: number | null;
   libraryServerUrl?: string | null;
 }
+
+const formatDuration = (seconds: number): string => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+};
 
 const BookDetailPage: NextPage = () => {
   const router = useRouter();
@@ -46,9 +70,11 @@ const BookDetailPage: NextPage = () => {
   const { bookId } = router.query;
   const [isRequesting, setIsRequesting] = useState(false);
 
-  const { data, error, mutate: revalidate } = useSWR<BookDetailData>(
-    bookId ? `/api/v1/book/${bookId}` : null
-  );
+  const {
+    data,
+    error,
+    mutate: revalidate,
+  } = useSWR<BookDetailData>(bookId ? `/api/v1/book/${bookId}` : null);
 
   if (!data && !error) {
     return <LoadingSpinner />;
@@ -62,14 +88,18 @@ const BookDetailPage: NextPage = () => {
     );
   }
 
+  const isAudiobook = data.mediaType === MediaType.AUDIOBOOK;
+
   const description =
     typeof data.description === 'string'
       ? data.description
       : data.description?.value;
 
-  const coverUrl = data.covers?.[0]
-    ? `https://covers.openlibrary.org/b/id/${data.covers[0]}-L.jpg`
-    : undefined;
+  const coverUrl =
+    data.coverUrl ||
+    (data.covers?.[0]
+      ? `https://covers.openlibrary.org/b/id/${data.covers[0]}-L.jpg`
+      : undefined);
 
   const isAvailable = data.mediaStatus === MediaStatus.AVAILABLE;
   const isRequested =
@@ -81,12 +111,16 @@ const BookDetailPage: NextPage = () => {
     setIsRequesting(true);
     try {
       await axios.post('/api/v1/book/request', {
-        mediaType: 'book',
+        mediaType: isAudiobook ? MediaType.AUDIOBOOK : MediaType.BOOK,
         openLibraryId: data.key,
         title: data.title,
-        authorName: 'Unknown',
+        authorName: data.authorName ?? 'Unknown',
         foreignBookId: data.key,
+        narratorName: data.narratorName,
+        asin: isAudiobook ? data.key : undefined,
         coverUrl,
+        year: data.year,
+        publisher: data.publisher,
       });
       addToast(intl.formatMessage(messages.requestSuccess), {
         appearance: 'success',
@@ -103,6 +137,15 @@ const BookDetailPage: NextPage = () => {
     }
   };
 
+  const attributes: React.ReactNode[] = [];
+  if (data.year) attributes.push(<span>{data.year}</span>);
+  if (data.durationSeconds) {
+    attributes.push(<span>{formatDuration(data.durationSeconds)}</span>);
+  }
+  if (data.language) {
+    attributes.push(<span className="uppercase">{data.language}</span>);
+  }
+
   return (
     <div className="media-page" style={{ height: 493 }}>
       <PageTitle title={data.title} />
@@ -117,12 +160,23 @@ const BookDetailPage: NextPage = () => {
             />
           ) : (
             <div className="flex h-full items-center justify-center rounded-lg bg-gray-700">
-              <BookOpenIcon className="h-16 w-16 text-gray-500" />
+              {isAudiobook ? (
+                <MusicalNoteIcon className="h-16 w-16 text-gray-500" />
+              ) : (
+                <BookOpenIcon className="h-16 w-16 text-gray-500" />
+              )}
             </div>
           )}
         </div>
         <div className="media-title">
           <div className="media-status">
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-bold text-white ${
+                isAudiobook ? 'bg-purple-600' : 'bg-indigo-600'
+              }`}
+            >
+              {isAudiobook ? 'Audiobook' : 'Book'}
+            </span>
             {isAvailable && (
               <span className="rounded-full bg-green-500 px-3 py-1 text-xs font-bold text-white">
                 {intl.formatMessage(messages.available)}
@@ -134,7 +188,38 @@ const BookDetailPage: NextPage = () => {
               </span>
             )}
           </div>
-          <h1 data-testid="media-title">{data.title}</h1>
+          <h1 data-testid="media-title">
+            {data.title}{' '}
+            {data.year && (
+              <span className="media-year">({data.year})</span>
+            )}
+          </h1>
+          {data.subtitle && (
+            <p className="text-lg text-gray-400">{data.subtitle}</p>
+          )}
+          {data.authorName && (
+            <p className="text-sm text-gray-300">
+              {intl.formatMessage(messages.author)}: {data.authorName}
+            </p>
+          )}
+          {data.narratorName && (
+            <p className="text-sm text-indigo-400">
+              {intl.formatMessage(messages.narrator)}: {data.narratorName}
+            </p>
+          )}
+          {attributes.length > 0 && (
+            <span className="media-attributes">
+              {attributes
+                .map((t, k) => <span key={k}>{t}</span>)
+                .reduce((prev, curr) => (
+                  <>
+                    {prev}
+                    <span>|</span>
+                    {curr}
+                  </>
+                ))}
+            </span>
+          )}
         </div>
         <div className="media-actions">
           {isAvailable ? (
@@ -162,7 +247,9 @@ const BookDetailPage: NextPage = () => {
               {isRequesting ? (
                 <Spinner />
               ) : (
-                intl.formatMessage(messages.request)
+                intl.formatMessage(
+                  isAudiobook ? messages.requestAudiobook : messages.requestBook
+                )
               )}
             </Button>
           )}
@@ -186,6 +273,58 @@ const BookDetailPage: NextPage = () => {
         </div>
         <div className="media-overview-right">
           <div className="media-facts">
+            {data.authorName && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.author)}</span>
+                <span className="media-fact-value">{data.authorName}</span>
+              </div>
+            )}
+            {data.narratorName && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.narrator)}</span>
+                <span className="media-fact-value">{data.narratorName}</span>
+              </div>
+            )}
+            {data.durationSeconds && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.duration)}</span>
+                <span className="media-fact-value">
+                  {formatDuration(data.durationSeconds)}
+                </span>
+              </div>
+            )}
+            {data.publisher && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.publisher)}</span>
+                <span className="media-fact-value">{data.publisher}</span>
+              </div>
+            )}
+            {data.releaseDate && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.releaseDate)}</span>
+                <span className="media-fact-value">
+                  {intl.formatDate(data.releaseDate, {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </span>
+              </div>
+            )}
+            {data.language && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.language)}</span>
+                <span className="media-fact-value uppercase">
+                  {data.language}
+                </span>
+              </div>
+            )}
+            {isAudiobook && data.key && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.asin)}</span>
+                <span className="media-fact-value">{data.key}</span>
+              </div>
+            )}
             {data.subjects && data.subjects.length > 0 && (
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.subjects)}</span>
