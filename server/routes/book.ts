@@ -188,7 +188,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
   } catch (e) {
     logger.error('Book detail fetch failed', {
       label: 'book',
-      workKey,
+      id,
       error: e instanceof Error ? e.message : String(e),
     });
     return res.status(500).json({
