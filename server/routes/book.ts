@@ -343,7 +343,9 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           coverUrl: body.coverUrl,
           year: body.year,
           publisher: body.publisher,
-          status: MediaStatus.PENDING,
+          // PROCESSING so the card shows the blue clock badge like
+          // movies/TV requests awaiting download.
+          status: MediaStatus.PROCESSING,
         });
       } else {
         // For audiobooks, foreignBookId is the Audible ASIN
@@ -362,7 +364,9 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           year: body.year,
           publisher: body.publisher,
           narratorName: body.narratorName,
-          status: MediaStatus.PENDING,
+          // PROCESSING so the card shows the blue clock badge like
+          // movies/TV requests awaiting download.
+          status: MediaStatus.PROCESSING,
         });
       }
       if (isBook && media) {

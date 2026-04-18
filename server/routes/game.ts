@@ -230,7 +230,10 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
         publisher: body.publisher,
         genre: body.genre,
         coverUrl: body.coverUrl,
-        status: MediaStatus.PENDING,
+        // PROCESSING = awaiting the game/ROM to appear in ROMM.
+        // Matches how movies/TV show an indigo clock badge after a
+        // validated request is awaiting download.
+        status: MediaStatus.PROCESSING,
       });
       await gameMediaRepo.save(gameMedia);
     }
