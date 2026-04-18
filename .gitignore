@@ -75,3 +75,9 @@ config/cache
 
 # Docker compose
 compose.override.yaml
+
+
+# Local dev .npmrc backups (created by dev.sh)
+.npmrc.bak
+.npmrc.bak2
+.npmrc.tmp
