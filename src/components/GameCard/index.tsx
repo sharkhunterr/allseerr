@@ -44,22 +44,25 @@ const GameCard = ({
   const availableCount = platforms.filter(
     (p) => p.mediaStatus === MediaStatus.AVAILABLE
   ).length;
-  const hasPending = platforms.some(
-    (p) =>
-      p.mediaStatus !== null &&
-      p.mediaStatus !== undefined &&
-      p.mediaStatus !== MediaStatus.UNKNOWN &&
-      p.mediaStatus !== MediaStatus.AVAILABLE
-  );
+  // Find the best status among the non-available platforms so we show
+  // the right badge (PROCESSING = indigo clock, PENDING = yellow bell).
+  const nonAvailablePendingStatus = platforms
+    .map((p) => p.mediaStatus)
+    .filter(
+      (s): s is MediaStatus =>
+        s !== null &&
+        s !== undefined &&
+        s !== MediaStatus.UNKNOWN &&
+        s !== MediaStatus.AVAILABLE
+    )
+    .sort((a, b) => b - a)[0];
 
   const aggregateStatus: MediaStatus | undefined =
     availableCount > 0
       ? availableCount === platforms.length
         ? MediaStatus.AVAILABLE
         : MediaStatus.PARTIALLY_AVAILABLE
-      : hasPending
-        ? MediaStatus.PENDING
-        : undefined;
+      : nonAvailablePendingStatus;
 
   return (
     <Link href={`/game/${igdbId}`}>
