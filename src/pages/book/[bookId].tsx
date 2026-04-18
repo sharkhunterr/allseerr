@@ -3,6 +3,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tag from '@app/components/Common/Tag';
+import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
 import {
   BookOpenIcon,
@@ -72,6 +73,7 @@ const BookDetailPage: NextPage = () => {
   const router = useRouter();
   const intl = useIntl();
   const { addToast } = useToasts();
+  const { currentSettings } = useSettings();
   const { bookId } = router.query;
   const [isRequesting, setIsRequesting] = useState(false);
 
@@ -94,6 +96,9 @@ const BookDetailPage: NextPage = () => {
   }
 
   const isAudiobook = data.mediaType === MediaType.AUDIOBOOK;
+  const canRequest = isAudiobook
+    ? currentSettings.audiobookEnabled
+    : currentSettings.bookEnabled;
 
   const description =
     typeof data.description === 'string'
@@ -254,7 +259,7 @@ const BookDetailPage: NextPage = () => {
             <span className="rounded bg-yellow-600 px-4 py-2 font-bold text-white">
               {intl.formatMessage(messages.requested)}
             </span>
-          ) : (
+          ) : canRequest ? (
             <Button
               buttonType="primary"
               disabled={isRequesting}
@@ -268,7 +273,7 @@ const BookDetailPage: NextPage = () => {
                 )
               )}
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
       <div className="media-overview">

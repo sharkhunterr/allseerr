@@ -1,6 +1,8 @@
 import PageTitle from '@app/components/Common/PageTitle';
 import SubTabs from '@app/components/Common/SubTabs';
 import SettingsAudiobookshelf from '@app/components/Settings/BooksAudiobooks/SettingsAudiobookshelf';
+import SettingsGrimmory from '@app/components/Settings/BooksAudiobooks/SettingsGrimmory';
+import SettingsKomga from '@app/components/Settings/BooksAudiobooks/SettingsKomga';
 import SettingsRomm from '@app/components/Settings/Games/SettingsRomm';
 import SettingsJellyfin from '@app/components/Settings/SettingsJellyfin';
 import SettingsPlex from '@app/components/Settings/SettingsPlex';
@@ -15,26 +17,15 @@ const messages = defineMessages('components.Settings.SettingsMediaServers', {
   mediaServers: 'Media Servers',
   mediaServersDescription:
     'Configure media server connections for content availability detection.',
-  comingSoon: '{name} integration coming soon.',
 });
 
 type MediaServerTab =
   | 'plex'
   | 'jellyfin'
   | 'audiobookshelf'
-  | 'calibre'
+  | 'komga'
+  | 'grimmory'
   | 'romm';
-
-const ComingSoon = ({ name }: { name: string }) => {
-  const intl = useIntl();
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-      <p className="text-lg">
-        {intl.formatMessage(messages.comingSoon, { name })}
-      </p>
-    </div>
-  );
-};
 
 const SettingsMediaServers = () => {
   const intl = useIntl();
@@ -54,7 +45,8 @@ const SettingsMediaServers = () => {
     { key: 'plex', label: 'Plex' },
     { key: 'jellyfin', label: 'Jellyfin / Emby' },
     { key: 'audiobookshelf', label: 'Audiobookshelf' },
-    { key: 'calibre', label: 'Calibre / Grimoire' },
+    { key: 'komga', label: 'Komga' },
+    { key: 'grimmory', label: 'Grimmory' },
     { key: 'romm', label: 'ROMM' },
   ];
 
@@ -78,7 +70,8 @@ const SettingsMediaServers = () => {
       {activeTab === 'plex' && <SettingsPlex embedded />}
       {activeTab === 'jellyfin' && <SettingsJellyfin embedded />}
       {activeTab === 'audiobookshelf' && <SettingsAudiobookshelf />}
-      {activeTab === 'calibre' && <ComingSoon name="Calibre / Grimoire" />}
+      {activeTab === 'komga' && <SettingsKomga />}
+      {activeTab === 'grimmory' && <SettingsGrimmory />}
       {activeTab === 'romm' && <SettingsRomm />}
     </>
   );

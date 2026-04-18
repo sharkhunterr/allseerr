@@ -217,6 +217,9 @@ interface FullPublicSettings extends PublicSettings {
   plexClientIdentifier: string;
   oidcEnabled: boolean;
   oidcProviderName: string;
+  bookEnabled: boolean;
+  audiobookEnabled: boolean;
+  gameEnabled: boolean;
 }
 
 export interface NotificationAgentConfig {
@@ -364,7 +367,9 @@ export type JobId =
   | 'availability-sync'
   | 'process-blocklisted-tags'
   | 'romm-scan'
-  | 'audiobookshelf-scan';
+  | 'audiobookshelf-scan'
+  | 'komga-scan'
+  | 'grimmory-scan';
 
 export interface OidcGroupMapping {
   oidcGroup: string;
@@ -385,6 +390,21 @@ export interface BookSettings {
     pollIntervalMinutes: number;
     enabled: boolean;
     libraries: AudiobookshelfLibraryMapping[];
+  };
+  komga: {
+    url: string;
+    publicUrl: string;
+    apiKey: string;
+    pollIntervalMinutes: number;
+    enabled: boolean;
+  };
+  grimmory: {
+    url: string;
+    publicUrl: string;
+    email: string;
+    password: string;
+    pollIntervalMinutes: number;
+    enabled: boolean;
   };
 }
 
@@ -657,6 +677,12 @@ class Settings {
         'audiobookshelf-scan': {
           schedule: '0 */15 * * * *',
         },
+        'komga-scan': {
+          schedule: '0 */15 * * * *',
+        },
+        'grimmory-scan': {
+          schedule: '0 */15 * * * *',
+        },
       },
       network: {
         csrfProtection: false,
@@ -702,6 +728,21 @@ class Settings {
           pollIntervalMinutes: 15,
           enabled: false,
           libraries: [],
+        },
+        komga: {
+          url: '',
+          publicUrl: '',
+          apiKey: '',
+          pollIntervalMinutes: 15,
+          enabled: false,
+        },
+        grimmory: {
+          url: '',
+          publicUrl: '',
+          email: '',
+          password: '',
+          pollIntervalMinutes: 15,
+          enabled: false,
         },
       },
       oidc: {
@@ -851,6 +892,22 @@ class Settings {
         !!this.data.oidc.issuerUrl &&
         !!this.data.oidc.clientId,
       oidcProviderName: this.data.oidc.displayName || 'OIDC',
+      bookEnabled:
+        (this.data.book.komga.enabled && !!this.data.book.komga.url) ||
+        (this.data.book.grimmory.enabled && !!this.data.book.grimmory.url) ||
+        (this.data.book.audiobookshelf.enabled &&
+          !!this.data.book.audiobookshelf.url &&
+          this.data.book.audiobookshelf.libraries.some(
+            (l) => l.mediaType === 'book'
+          )),
+      audiobookEnabled:
+        this.data.book.audiobookshelf.enabled &&
+        !!this.data.book.audiobookshelf.url &&
+        this.data.book.audiobookshelf.libraries.some(
+          (l) => l.mediaType === 'audiobook'
+        ),
+      gameEnabled:
+        this.data.game.romm.enabled && !!this.data.game.romm.url,
     };
   }
 

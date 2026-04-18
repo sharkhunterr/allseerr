@@ -34,6 +34,9 @@ const defaultSettings = {
   plexClientIdentifier: '',
   oidcEnabled: false,
   oidcProviderName: 'OIDC',
+  bookEnabled: false,
+  audiobookEnabled: false,
+  gameEnabled: false,
 };
 
 export const SettingsContext = React.createContext<SettingsContextProps>({

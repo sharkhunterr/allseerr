@@ -6,6 +6,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import GameCard from '@app/components/GameCard';
 import useDiscover from '@app/hooks/useDiscover';
+import useSettings from '@app/hooks/useSettings';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
 import type {
@@ -76,6 +77,10 @@ interface GameSearchResponse {
 const Search = () => {
   const intl = useIntl();
   const router = useRouter();
+  const { currentSettings } = useSettings();
+  const bookEnabled = currentSettings.bookEnabled;
+  const audiobookEnabled = currentSettings.audiobookEnabled;
+  const gameEnabled = currentSettings.gameEnabled;
   const [activeTab, setActiveTab] = useState<MediaTab>('all');
   const [bookResults, setBookResults] = useState<BookResult[]>([]);
   const [audiobookResults, setAudiobookResults] = useState<BookResult[]>([]);
@@ -119,37 +124,48 @@ const Search = () => {
         )
         .join('&');
 
-    setIsLoadingBooks(true);
-    setIsLoadingAudiobooks(true);
-    setIsLoadingGames(true);
+    if (bookEnabled) {
+      setIsLoadingBooks(true);
+      axios
+        .get<BookSearchResponse>('/api/v1/book/search', {
+          params: { query, type: 'book', limit: 40 },
+          paramsSerializer,
+        })
+        .then((res) => setBookResults(res.data.results))
+        .catch(() => setBookResults([]))
+        .finally(() => setIsLoadingBooks(false));
+    } else {
+      setBookResults([]);
+    }
 
-    axios
-      .get<BookSearchResponse>('/api/v1/book/search', {
-        params: { query, type: 'book', limit: 40 },
-        paramsSerializer,
-      })
-      .then((res) => setBookResults(res.data.results))
-      .catch(() => setBookResults([]))
-      .finally(() => setIsLoadingBooks(false));
+    if (audiobookEnabled) {
+      setIsLoadingAudiobooks(true);
+      axios
+        .get<BookSearchResponse>('/api/v1/book/search', {
+          params: { query, type: 'audiobook', limit: 40 },
+          paramsSerializer,
+        })
+        .then((res) => setAudiobookResults(res.data.results))
+        .catch(() => setAudiobookResults([]))
+        .finally(() => setIsLoadingAudiobooks(false));
+    } else {
+      setAudiobookResults([]);
+    }
 
-    axios
-      .get<BookSearchResponse>('/api/v1/book/search', {
-        params: { query, type: 'audiobook', limit: 40 },
-        paramsSerializer,
-      })
-      .then((res) => setAudiobookResults(res.data.results))
-      .catch(() => setAudiobookResults([]))
-      .finally(() => setIsLoadingAudiobooks(false));
-
-    axios
-      .get<GameSearchResponse>('/api/v1/game/search', {
-        params: { query, limit: 40 },
-        paramsSerializer,
-      })
-      .then((res) => setGameResults(res.data.results))
-      .catch(() => setGameResults([]))
-      .finally(() => setIsLoadingGames(false));
-  }, [query]);
+    if (gameEnabled) {
+      setIsLoadingGames(true);
+      axios
+        .get<GameSearchResponse>('/api/v1/game/search', {
+          params: { query, limit: 40 },
+          paramsSerializer,
+        })
+        .then((res) => setGameResults(res.data.results))
+        .catch(() => setGameResults([]))
+        .finally(() => setIsLoadingGames(false));
+    } else {
+      setGameResults([]);
+    }
+  }, [query, bookEnabled, audiobookEnabled, gameEnabled]);
 
   if (error && activeTab === 'all') {
     return <ErrorPage statusCode={500} />;
@@ -167,24 +183,36 @@ const Search = () => {
       count: titles?.length ?? null,
       loading: isLoadingInitialData,
     },
-    {
-      key: 'books',
-      label: intl.formatMessage(messages.tabBooks),
-      count: isLoadingBooks ? null : bookResults.length,
-      loading: isLoadingBooks,
-    },
-    {
-      key: 'audiobooks',
-      label: intl.formatMessage(messages.tabAudiobooks),
-      count: isLoadingAudiobooks ? null : audiobookResults.length,
-      loading: isLoadingAudiobooks,
-    },
-    {
-      key: 'games',
-      label: intl.formatMessage(messages.tabGames),
-      count: isLoadingGames ? null : gameResults.length,
-      loading: isLoadingGames,
-    },
+    ...(bookEnabled
+      ? [
+          {
+            key: 'books' as MediaTab,
+            label: intl.formatMessage(messages.tabBooks),
+            count: isLoadingBooks ? null : bookResults.length,
+            loading: isLoadingBooks,
+          },
+        ]
+      : []),
+    ...(audiobookEnabled
+      ? [
+          {
+            key: 'audiobooks' as MediaTab,
+            label: intl.formatMessage(messages.tabAudiobooks),
+            count: isLoadingAudiobooks ? null : audiobookResults.length,
+            loading: isLoadingAudiobooks,
+          },
+        ]
+      : []),
+    ...(gameEnabled
+      ? [
+          {
+            key: 'games' as MediaTab,
+            label: intl.formatMessage(messages.tabGames),
+            count: isLoadingGames ? null : gameResults.length,
+            loading: isLoadingGames,
+          },
+        ]
+      : []),
   ];
 
   return (

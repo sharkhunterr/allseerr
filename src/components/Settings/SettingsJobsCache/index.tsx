@@ -92,6 +92,8 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages(
     'process-blocklisted-tags': 'Process Blocklisted Tags',
     'romm-scan': 'ROMM Library Scan',
     'audiobookshelf-scan': 'Audiobookshelf Library Scan',
+    'komga-scan': 'Komga Library Scan',
+    'grimmory-scan': 'Grimmory Library Scan',
     editJobSchedule: 'Modify Job',
     jobScheduleEditSaved: 'Job edited successfully!',
     jobScheduleEditFailed: 'Something went wrong while saving the job.',

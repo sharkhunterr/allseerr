@@ -4256,6 +4256,124 @@ paths:
             application/json:
               schema:
                 type: object
+  /settings/komga:
+    get:
+      summary: Get Komga settings
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+    put:
+      summary: Update Komga settings
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/komga/test:
+    post:
+      summary: Test Komga connection
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/komga/scan:
+    post:
+      summary: Trigger Komga manual scan
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Scan triggered
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/grimmory:
+    get:
+      summary: Get Grimmory settings
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+    put:
+      summary: Update Grimmory settings
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/grimmory/test:
+    post:
+      summary: Test Grimmory connection
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/grimmory/scan:
+    post:
+      summary: Trigger Grimmory manual scan
+      tags:
+        - settings
+      responses:
+        '200':
+          description: Scan triggered
+          content:
+            application/json:
+              schema:
+                type: object
   /settings/game:
     get:
       summary: Get game settings

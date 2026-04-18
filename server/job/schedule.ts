@@ -9,6 +9,8 @@ import {
   jellyfinRecentScanner,
 } from '@server/lib/scanners/jellyfin';
 import { audiobookshelfScanner } from '@server/lib/scanners/audiobookshelf';
+import { grimmoryScanner } from '@server/lib/scanners/grimmory';
+import { komgaScanner } from '@server/lib/scanners/komga';
 import { plexFullScanner, plexRecentScanner } from '@server/lib/scanners/plex';
 import { radarrScanner } from '@server/lib/scanners/radarr';
 import { rommScanner } from '@server/lib/scanners/romm';
@@ -293,6 +295,40 @@ export const startJobs = (): void => {
     }),
     running: () => audiobookshelfScanner.status().running,
     cancelFn: () => audiobookshelfScanner.cancel(),
+  });
+
+  // Run Komga scan every 15 minutes
+  scheduledJobs.push({
+    id: 'komga-scan',
+    name: 'Komga Library Scan',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['komga-scan'].schedule,
+    job: schedule.scheduleJob(jobs['komga-scan'].schedule, () => {
+      logger.info('Starting scheduled job: Komga Library Scan', {
+        label: 'Jobs',
+      });
+      komgaScanner.run();
+    }),
+    running: () => komgaScanner.status().running,
+    cancelFn: () => komgaScanner.cancel(),
+  });
+
+  // Run Grimmory scan every 15 minutes
+  scheduledJobs.push({
+    id: 'grimmory-scan',
+    name: 'Grimmory Library Scan',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['grimmory-scan'].schedule,
+    job: schedule.scheduleJob(jobs['grimmory-scan'].schedule, () => {
+      logger.info('Starting scheduled job: Grimmory Library Scan', {
+        label: 'Jobs',
+      });
+      grimmoryScanner.run();
+    }),
+    running: () => grimmoryScanner.status().running,
+    cancelFn: () => grimmoryScanner.cancel(),
   });
 
   logger.info('Scheduled jobs loaded', { label: 'Jobs' });

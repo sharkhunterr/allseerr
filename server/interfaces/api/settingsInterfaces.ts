@@ -51,6 +51,9 @@ export interface PublicSettingsResponse {
   plexClientIdentifier: string;
   oidcEnabled: boolean;
   oidcProviderName: string;
+  bookEnabled: boolean;
+  audiobookEnabled: boolean;
+  gameEnabled: boolean;
 }
 
 export interface CacheItem {

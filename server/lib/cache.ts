@@ -12,7 +12,9 @@ export type AvailableCacheIds =
   | 'plexwatchlist'
   | 'tvdb'
   | 'romm'
-  | 'audiobookshelf';
+  | 'audiobookshelf'
+  | 'komga'
+  | 'grimmory';
 
 const DEFAULT_TTL = 300;
 const DEFAULT_CHECK_PERIOD = 120;
@@ -82,6 +84,14 @@ class CacheManager {
       checkPeriod: 60 * 30,
     }),
     audiobookshelf: new Cache('audiobookshelf', 'Audiobookshelf Library', {
+      stdTtl: 86400,
+      checkPeriod: 60 * 30,
+    }),
+    komga: new Cache('komga', 'Komga Library', {
+      stdTtl: 86400,
+      checkPeriod: 60 * 30,
+    }),
+    grimmory: new Cache('grimmory', 'Grimmory Library', {
       stdTtl: 86400,
       checkPeriod: 60 * 30,
     }),

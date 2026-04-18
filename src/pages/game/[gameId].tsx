@@ -3,6 +3,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import GameRequestModal from '@app/components/GameRequestModal';
+import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
 import { ExclamationTriangleIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
@@ -127,6 +128,8 @@ const PlatformRequestButton = ({
 }) => {
   const intl = useIntl();
   const { addToast } = useToasts();
+  const { currentSettings } = useSettings();
+  const gameEnabled = currentSettings.gameEnabled;
   const [isRequesting, setIsRequesting] = useState(false);
   const [localOverride, setLocalOverride] = useState<MediaStatus | null>(null);
 
@@ -195,7 +198,7 @@ const PlatformRequestButton = ({
             <span>{intl.formatMessage(messages.playOnRomm)}</span>
           </Button>
         </a>
-      ) : isAvailable || isRequested ? null : (
+      ) : isAvailable || isRequested || !gameEnabled ? null : (
         <Button
           buttonType="primary"
           buttonSize="sm"
@@ -216,6 +219,8 @@ const PlatformRequestButton = ({
 const GameDetailPage: NextPage = () => {
   const router = useRouter();
   const intl = useIntl();
+  const { currentSettings } = useSettings();
+  const gameEnabled = currentSettings.gameEnabled;
   const { gameId } = router.query;
   const [showRequestModal, setShowRequestModal] = useState(false);
 
@@ -320,7 +325,7 @@ const GameDetailPage: NextPage = () => {
           {hasAnyAvailable && (
             <PlayOnRommAction platforms={availablePlatforms} intl={intl} />
           )}
-          {hasRequestable && (
+          {hasRequestable && gameEnabled && (
             <Button
               buttonType="primary"
               onClick={() => setShowRequestModal(true)}
