@@ -37,6 +37,16 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
     });
   }
 
+  // OpenLibrary rejects queries < 3 chars with 422; return empty gracefully
+  if (type === 'book' && query.trim().length < 3) {
+    return res.status(200).json({
+      page,
+      totalPages: 0,
+      totalResults: 0,
+      results: [],
+    });
+  }
+
   try {
     if (type === 'audiobook') {
       // Audible Catalog API (free, no auth) — same source as AudioBookRequest
@@ -73,7 +83,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       return res.status(200).json({
         page,
         totalPages: Math.ceil(totalResults / limit),
-        totalResults,
+        totalResults: enrichedResults.length,
         results: enrichedResults,
       });
     }
