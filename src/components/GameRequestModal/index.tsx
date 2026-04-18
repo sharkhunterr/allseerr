@@ -1,8 +1,8 @@
+import Badge from '@app/components/Common/Badge';
 import Modal from '@app/components/Common/Modal';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
-import { CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/solid';
 import { MediaStatus } from '@server/constants/media';
 import axios from 'axios';
 import { useState } from 'react';
@@ -10,13 +10,15 @@ import { useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 
 const messages = defineMessages('components.GameRequestModal', {
-  title: 'Request Game',
   requestForTitle: 'Request {title}',
   description:
     'Select the platform(s) you want to request. One request is created per selected platform.',
   selectAll: 'Select All',
+  platform: 'Platform',
+  status: 'Status',
   available: 'Available',
   requested: 'Requested',
+  notrequested: 'Not Requested',
   request: 'Request',
   requestPlatforms:
     'Request {count} {count, plural, one {Platform} other {Platforms}}',
@@ -45,6 +47,17 @@ interface GameRequestModalProps {
   onComplete?: () => void;
 }
 
+const isPlatformDisabled = (p: Platform): boolean => {
+  const s = p.mediaStatus;
+  return (
+    s === MediaStatus.AVAILABLE ||
+    (s !== null &&
+      s !== undefined &&
+      s !== MediaStatus.UNKNOWN &&
+      s !== MediaStatus.DELETED)
+  );
+};
+
 const GameRequestModal = ({
   show,
   igdbId,
@@ -63,22 +76,14 @@ const GameRequestModal = ({
   const [selected, setSelected] = useState<number[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const requestable = platforms.filter((p) => {
-    const s = p.mediaStatus;
-    return (
-      s === null ||
-      s === undefined ||
-      s === MediaStatus.UNKNOWN ||
-      s === MediaStatus.DELETED
-    );
-  });
-
+  const requestable = platforms.filter((p) => !isPlatformDisabled(p));
   const allSelected =
     requestable.length > 0 && selected.length === requestable.length;
 
-  const togglePlatform = (id: number) => {
+  const togglePlatform = (p: Platform) => {
+    if (isPlatformDisabled(p)) return;
     setSelected((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
+      prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id]
     );
   };
 
@@ -90,7 +95,9 @@ const GameRequestModal = ({
     if (selected.length === 0) return;
     setIsSubmitting(true);
 
-    const selectedPlatforms = platforms.filter((p) => selected.includes(p.id));
+    const selectedPlatforms = platforms.filter(
+      (p) => selected.includes(p.id) && !isPlatformDisabled(p)
+    );
     let success = 0;
     let failed = 0;
 
@@ -123,6 +130,7 @@ const GameRequestModal = ({
         }),
         { appearance: 'success', autoDismiss: true }
       );
+      setSelected([]);
       onComplete?.();
     }
     if (failed > 0) {
@@ -132,6 +140,27 @@ const GameRequestModal = ({
       });
     }
   };
+
+  const renderSwitch = (checked: boolean, disabled: boolean) => (
+    <span
+      className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer items-center justify-center pt-2 focus:outline-none ${
+        disabled ? 'cursor-not-allowed opacity-50' : ''
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`${
+          checked ? 'bg-indigo-500' : 'bg-gray-700'
+        } absolute mx-auto h-4 w-9 rounded-full transition-colors duration-200 ease-in-out`}
+      />
+      <span
+        aria-hidden="true"
+        className={`${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        } absolute left-0 inline-block h-5 w-5 rounded-full border border-gray-200 bg-white shadow transition-transform duration-200 ease-in-out`}
+      />
+    </span>
+  );
 
   return (
     <Transition
@@ -146,92 +175,118 @@ const GameRequestModal = ({
     >
       <Modal
         title={intl.formatMessage(messages.requestForTitle, { title })}
-      subTitle={
-        developer
-          ? `${developer}${releaseYear ? ` · ${releaseYear}` : ''}`
-          : releaseYear?.toString()
-      }
-      backgroundClickable
-      onCancel={onCancel}
-      onOk={handleSubmit}
-      okDisabled={selected.length === 0 || isSubmitting}
-      okText={
-        isSubmitting
-          ? intl.formatMessage(globalMessages.saving)
-          : selected.length > 0
-            ? intl.formatMessage(messages.requestPlatforms, {
-                count: selected.length,
-              })
-            : intl.formatMessage(messages.request)
-      }
-      okButtonType="primary"
-      backdrop={coverUrl}
-    >
-      <p className="mb-4 text-sm text-gray-300">
-        {intl.formatMessage(messages.description)}
-      </p>
-      {requestable.length > 1 && (
-        <div className="mb-3 flex justify-end">
-          <button
-            type="button"
-            className="text-sm text-indigo-400 hover:text-indigo-300"
-            onClick={toggleAll}
-          >
-            {allSelected ? '✕ ' : '✓ '}
-            {intl.formatMessage(messages.selectAll)}
-          </button>
-        </div>
-      )}
-      <div className="space-y-2">
-        {platforms.map((p) => {
-          const isAvailable = p.mediaStatus === MediaStatus.AVAILABLE;
-          const isRequested =
-            p.mediaStatus !== null &&
-            p.mediaStatus !== undefined &&
-            p.mediaStatus !== MediaStatus.UNKNOWN &&
-            p.mediaStatus !== MediaStatus.DELETED &&
-            !isAvailable;
-          const disabled = isAvailable || isRequested;
-          const isChecked = selected.includes(p.id);
+        subTitle={
+          developer
+            ? `${developer}${releaseYear ? ` · ${releaseYear}` : ''}`
+            : releaseYear?.toString()
+        }
+        backgroundClickable
+        onCancel={onCancel}
+        onOk={handleSubmit}
+        okDisabled={selected.length === 0 || isSubmitting}
+        okText={
+          isSubmitting
+            ? intl.formatMessage(globalMessages.saving)
+            : selected.length > 0
+              ? intl.formatMessage(messages.requestPlatforms, {
+                  count: selected.length,
+                })
+              : intl.formatMessage(messages.request)
+        }
+        okButtonType="primary"
+        backdrop={coverUrl}
+      >
+        <p className="mb-4 text-sm text-gray-300">
+          {intl.formatMessage(messages.description)}
+        </p>
+        <div className="flex flex-col">
+          <div className="-mx-4 sm:mx-0">
+            <div className="inline-block min-w-full py-2 align-middle">
+              <div className="overflow-hidden shadow sm:rounded-lg">
+                <table className="min-w-full">
+                  <thead>
+                    <tr>
+                      <th className="bg-gray-500 bg-opacity-80 px-4 py-3 text-left text-xs font-medium uppercase leading-4 tracking-wider text-gray-200">
+                        <span
+                          role="checkbox"
+                          tabIndex={0}
+                          aria-checked={allSelected}
+                          onClick={toggleAll}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              toggleAll();
+                            }
+                          }}
+                          className="relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer items-center justify-center pt-2 focus:outline-none"
+                        >
+                          {renderSwitch(allSelected, false)}
+                        </span>
+                      </th>
+                      <th className="bg-gray-500 bg-opacity-80 px-1 py-3 text-left text-xs font-medium uppercase leading-4 tracking-wider text-gray-200 md:px-6">
+                        {intl.formatMessage(messages.platform)}
+                      </th>
+                      <th className="bg-gray-500 bg-opacity-80 px-2 py-3 text-left text-xs font-medium uppercase leading-4 tracking-wider text-gray-200 md:px-6">
+                        {intl.formatMessage(messages.status)}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700 bg-gray-600 bg-opacity-50">
+                    {platforms.map((p) => {
+                      const disabled = isPlatformDisabled(p);
+                      const isAvailable =
+                        p.mediaStatus === MediaStatus.AVAILABLE;
+                      const isRequested = disabled && !isAvailable;
+                      const isChecked = selected.includes(p.id);
+                      const switchChecked =
+                        isAvailable || isRequested || isChecked;
 
-          return (
-            <label
-              key={p.id}
-              className={`flex cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition ${
-                disabled
-                  ? 'cursor-not-allowed border-gray-700 bg-gray-800/30 opacity-60'
-                  : isChecked
-                    ? 'border-indigo-500 bg-indigo-600/20'
-                    : 'border-gray-700 bg-gray-800/50 hover:border-gray-500'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4"
-                  checked={isChecked}
-                  disabled={disabled}
-                  onChange={() => !disabled && togglePlatform(p.id)}
-                />
-                <span className="text-sm font-medium text-gray-200">
-                  {p.name}
-                </span>
+                      return (
+                        <tr key={`platform-${p.id}`}>
+                          <td className="whitespace-nowrap px-4 py-4 text-sm font-medium leading-5 text-gray-100">
+                            <span
+                              role="checkbox"
+                              tabIndex={0}
+                              aria-checked={switchChecked}
+                              onClick={() => togglePlatform(p)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  togglePlatform(p);
+                                }
+                              }}
+                              className="inline-flex"
+                            >
+                              {renderSwitch(switchChecked, disabled)}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-1 py-4 text-sm font-medium leading-5 text-gray-100 md:px-6">
+                            {p.name}
+                          </td>
+                          <td className="whitespace-nowrap px-2 py-4 text-sm leading-5 text-gray-200 md:px-6">
+                            {isAvailable ? (
+                              <Badge badgeType="success">
+                                {intl.formatMessage(messages.available)}
+                              </Badge>
+                            ) : isRequested ? (
+                              <Badge badgeType="warning">
+                                {intl.formatMessage(messages.requested)}
+                              </Badge>
+                            ) : (
+                              <Badge>
+                                {intl.formatMessage(messages.notrequested)}
+                              </Badge>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              {isAvailable ? (
-                <span className="flex items-center gap-1 text-xs font-semibold text-green-400">
-                  <CheckCircleIcon className="h-4 w-4" />
-                  {intl.formatMessage(messages.available)}
-                </span>
-              ) : isRequested ? (
-                <span className="flex items-center gap-1 text-xs font-semibold text-yellow-400">
-                  <XCircleIcon className="h-4 w-4" />
-                  {intl.formatMessage(messages.requested)}
-                </span>
-              ) : null}
-            </label>
-          );
-        })}
-      </div>
+            </div>
+          </div>
+        </div>
       </Modal>
     </Transition>
   );
