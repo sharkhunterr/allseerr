@@ -16,6 +16,23 @@ import { Router } from 'express';
 const gameRoutes = Router();
 
 /**
+ * Swap ROMM internal URL with configured public URL for external "Play" links.
+ */
+const remapRommPublicUrl = (
+  storedUrl: string | null | undefined
+): string | null => {
+  if (!storedUrl) return null;
+  const romm = getSettings().game.romm;
+  if (!romm.publicUrl || !romm.url || romm.publicUrl === romm.url) {
+    return storedUrl;
+  }
+  if (storedUrl.startsWith(romm.url)) {
+    return romm.publicUrl + storedUrl.slice(romm.url.length);
+  }
+  return storedUrl;
+};
+
+/**
  * GET /api/v1/game/search
  * Search for games via IGDB.
  */
@@ -98,6 +115,7 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
               ? MediaStatus.AVAILABLE
               : matchedMedia?.status ?? null,
             gameMediaId: matchedMedia?.id ?? null,
+            rommUrl: remapRommPublicUrl(matchedMedia?.rommUrl),
           };
         });
 
@@ -389,6 +407,7 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
           ? MediaStatus.AVAILABLE
           : matchedMedia?.status ?? null,
         gameMediaId: matchedMedia?.id ?? null,
+        rommUrl: remapRommPublicUrl(matchedMedia?.rommUrl),
       };
     });
 

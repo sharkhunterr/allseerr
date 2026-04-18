@@ -4,7 +4,11 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tag from '@app/components/Common/Tag';
 import defineMessages from '@app/utils/defineMessages';
-import { BookOpenIcon, MusicalNoteIcon } from '@heroicons/react/24/solid';
+import {
+  BookOpenIcon,
+  MusicalNoteIcon,
+  PlayIcon,
+} from '@heroicons/react/24/solid';
 import { MediaStatus, MediaType } from '@server/constants/media';
 import axios from 'axios';
 import type { NextPage } from 'next';
@@ -26,6 +30,7 @@ const messages = defineMessages('pages.BookDetail', {
   overviewunavailable: 'Overview unavailable.',
   subjects: 'Subjects',
   openInLibrary: 'Open in Library',
+  playOnAudiobookshelf: 'Play on Audiobookshelf',
   author: 'Author',
   narrator: 'Narrator',
   duration: 'Duration',
@@ -230,10 +235,21 @@ const BookDetailPage: NextPage = () => {
                 rel="noopener noreferrer"
               >
                 <Button buttonType="primary">
-                  {intl.formatMessage(messages.openInLibrary)}
+                  <PlayIcon />
+                  <span>
+                    {intl.formatMessage(
+                      isAudiobook
+                        ? messages.playOnAudiobookshelf
+                        : messages.openInLibrary
+                    )}
+                  </span>
                 </Button>
               </a>
-            ) : null
+            ) : (
+              <span className="rounded bg-green-600 px-4 py-2 font-bold text-white">
+                {intl.formatMessage(messages.available)}
+              </span>
+            )
           ) : isRequested ? (
             <span className="rounded bg-yellow-600 px-4 py-2 font-bold text-white">
               {intl.formatMessage(messages.requested)}

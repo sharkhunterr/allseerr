@@ -3,7 +3,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import defineMessages from '@app/utils/defineMessages';
-import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { ExclamationTriangleIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
 import axios from 'axios';
 import type { NextPage } from 'next';
@@ -16,6 +16,7 @@ import useSWR from 'swr';
 const messages = defineMessages('pages.GameDetail', {
   request: 'Request',
   available: 'Available',
+  playOnRomm: 'Play on ROMM',
   requested: 'Requested',
   awaitingAddition: 'Approved — Awaiting Manual Addition',
   manualWorkflow:
@@ -39,6 +40,7 @@ interface Platform {
   abbreviation?: string;
   mediaStatus?: MediaStatus | null;
   gameMediaId?: number | null;
+  rommUrl?: string | null;
 }
 
 interface GameDetailData {
@@ -113,9 +115,18 @@ const PlatformRequestButton = ({
     <div className="flex items-center justify-between rounded-lg border border-gray-700 bg-gray-800/50 px-4 py-3">
       <span className="text-sm font-medium text-gray-200">{platform.name}</span>
       {isAvailable ? (
-        <span className="rounded-full bg-green-600 px-3 py-1 text-xs font-bold text-white">
-          {intl.formatMessage(messages.available)}
-        </span>
+        platform.rommUrl ? (
+          <a href={platform.rommUrl} target="_blank" rel="noopener noreferrer">
+            <Button buttonType="primary" buttonSize="sm">
+              <PlayIcon className="h-4 w-4" />
+              <span>{intl.formatMessage(messages.playOnRomm)}</span>
+            </Button>
+          </a>
+        ) : (
+          <span className="rounded-full bg-green-600 px-3 py-1 text-xs font-bold text-white">
+            {intl.formatMessage(messages.available)}
+          </span>
+        )
       ) : isRequested ? (
         <span className="rounded-full bg-yellow-600 px-3 py-1 text-xs font-bold text-white">
           {intl.formatMessage(messages.requested)}

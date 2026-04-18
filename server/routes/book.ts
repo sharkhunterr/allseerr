@@ -44,6 +44,24 @@ const getAudibleClient = (): AudibleAPI => {
 };
 
 /**
+ * Swap Audiobookshelf internal URL with the configured public URL for
+ * "Open in Library" external links.
+ */
+const remapToPublicUrl = (
+  storedUrl: string | null | undefined
+): string | null | undefined => {
+  if (!storedUrl) return storedUrl;
+  const abs = getSettings().book.audiobookshelf;
+  if (!abs.publicUrl || !abs.url || abs.publicUrl === abs.url) {
+    return storedUrl;
+  }
+  if (storedUrl.startsWith(abs.url)) {
+    return abs.publicUrl + storedUrl.slice(abs.url.length);
+  }
+  return storedUrl;
+};
+
+/**
  * GET /api/v1/book/search
  * Search for books or audiobooks via OpenLibrary.
  * Overlays local availability status from BookMedia/AudiobookMedia.
@@ -193,7 +211,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         mediaType: MediaType.AUDIOBOOK,
         mediaStatus: existing?.status ?? null,
         bookMediaId: existing?.id ?? null,
-        libraryServerUrl: existing?.libraryServerUrl ?? null,
+        libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),
       });
     }
 
@@ -217,7 +235,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       ...work,
       mediaStatus: existing?.status ?? null,
       bookMediaId: existing?.id ?? null,
-      libraryServerUrl: existing?.libraryServerUrl ?? null,
+      libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),
     });
   } catch (e) {
     logger.error('Book detail fetch failed', {
