@@ -60,7 +60,7 @@ const AudiobookCard = ({
           )}
 
           <div className="absolute left-0 right-0 top-0 flex items-center justify-between p-2">
-            <div className="pointer-events-none z-40 self-start rounded-full border border-purple-500 bg-purple-600/80 shadow-md">
+            <div className="pointer-events-none z-40 self-start rounded-full border border-pink-500 bg-pink-600/80 shadow-md">
               <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
                 {intl.formatMessage(messages.audiobook)}
               </div>

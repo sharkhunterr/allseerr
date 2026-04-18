@@ -596,17 +596,17 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
             </Link>
             <div className="flex flex-col justify-center overflow-hidden pl-2 xl:pl-4">
               <div className="pt-0.5 text-xs font-medium text-white sm:pt-1">
-                <Badge
-                  badgeType={
+                <span
+                  className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold uppercase leading-5 text-white shadow ${
                     request.type === MediaType.GAME
-                      ? 'success'
+                      ? 'border-teal-500 bg-teal-600/80'
                       : request.type === MediaType.AUDIOBOOK
-                        ? 'primary'
-                        : 'default'
-                  }
+                        ? 'border-pink-500 bg-pink-600/80'
+                        : 'border-orange-500 bg-orange-600/80'
+                  }`}
                 >
                   {info.typeLabel}
-                </Badge>
+                </span>
               </div>
               <Link
                 href={info.href}
@@ -715,11 +715,24 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               />
             </Link>
             <div className="flex flex-col justify-center overflow-hidden pl-2 xl:pl-4">
-              <div className="pt-0.5 text-xs font-medium text-white sm:pt-1">
-                {(isMovie(title)
-                  ? title.releaseDate
-                  : title.firstAirDate
-                )?.slice(0, 4)}
+              <div className="flex items-center gap-2 pt-0.5 text-xs font-medium text-white sm:pt-1">
+                <span
+                  className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold uppercase leading-5 text-white shadow ${
+                    requestData.type === 'movie'
+                      ? 'border-blue-500 bg-blue-600/80'
+                      : 'border-purple-500 bg-purple-600/80'
+                  }`}
+                >
+                  {requestData.type === 'movie'
+                    ? intl.formatMessage(globalMessages.movie)
+                    : intl.formatMessage(globalMessages.tvshow)}
+                </span>
+                <span>
+                  {(isMovie(title)
+                    ? title.releaseDate
+                    : title.firstAirDate
+                  )?.slice(0, 4)}
+                </span>
               </div>
               <Link
                 href={

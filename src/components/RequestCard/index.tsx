@@ -430,18 +430,18 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
         data-testid="request-card"
       >
         <div className="relative z-10 flex min-w-0 flex-1 flex-col pr-4">
-          <div className="hidden text-xs font-medium sm:flex">
-            <Badge
-              badgeType={
+          <div className="flex items-center gap-2 text-xs font-medium">
+            <span
+              className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold uppercase leading-5 text-white shadow ${
                 request.type === MediaType.GAME
-                  ? 'success'
+                  ? 'border-teal-500 bg-teal-600/80'
                   : request.type === MediaType.AUDIOBOOK
-                    ? 'primary'
-                    : 'default'
-              }
+                    ? 'border-pink-500 bg-pink-600/80'
+                    : 'border-orange-500 bg-orange-600/80'
+              }`}
             >
               {typeLabel}
-            </Badge>
+            </span>
           </div>
           <Link
             href={href}
@@ -621,12 +621,18 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           className="relative z-10 flex min-w-0 flex-1 flex-col pr-4"
           data-testid="request-card-title"
         >
-          <div className="hidden items-center gap-2 text-xs font-medium text-white sm:flex">
-            <Badge badgeType={request.type === 'movie' ? 'warning' : 'primary'}>
+          <div className="flex items-center gap-2 text-xs font-medium text-white">
+            <span
+              className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold uppercase leading-5 text-white shadow ${
+                request.type === 'movie'
+                  ? 'border-blue-500 bg-blue-600/80'
+                  : 'border-purple-500 bg-purple-600/80'
+              }`}
+            >
               {request.type === 'movie'
                 ? intl.formatMessage(globalMessages.movie)
                 : intl.formatMessage(globalMessages.tvshow)}
-            </Badge>
+            </span>
             <span>
               {(isMovie(title) ? title.releaseDate : title.firstAirDate)?.slice(
                 0,
