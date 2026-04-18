@@ -166,7 +166,13 @@ const NonTmdbStatusBadge = ({ status }: { status: MediaRequestStatus }) => {
  */
 const getNonTmdbInfo = (
   request: RequestResultsResponse['results'][number]
-): { title: string; coverUrl?: string; href: string; typeLabel: string } => {
+): {
+  title: string;
+  coverUrl?: string;
+  href: string;
+  typeLabel: string;
+  platform?: string;
+} => {
   const gm = request.gameMedia as
     | {
         title: string;
@@ -200,6 +206,7 @@ const getNonTmdbInfo = (
       coverUrl: gm.coverUrl,
       href: `/game/${gm.igdbId}`,
       typeLabel: 'Game',
+      platform: gm.platformName,
     };
   }
   if (request.type === MediaType.BOOK && bm) {
@@ -607,6 +614,11 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               >
                 {info.title}
               </Link>
+              {info.platform && (
+                <div className="mt-1">
+                  <Badge>{info.platform}</Badge>
+                </div>
+              )}
             </div>
           </div>
           <div className="z-10 ml-4 mt-4 flex w-full flex-col justify-center gap-1 overflow-hidden pr-4 text-sm sm:ml-2 sm:mt-0 xl:flex-1 xl:pr-0">
