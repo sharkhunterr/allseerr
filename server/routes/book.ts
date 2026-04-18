@@ -34,9 +34,10 @@ const AUDIBLE_VALID_REGIONS: AudibleRegion[] = [
 ];
 
 const getAudibleClient = (): AudibleAPI => {
-  const region = (
-    getSettings().main.discoverRegion?.toLowerCase() || 'us'
-  ) as AudibleRegion;
+  const settings = getSettings();
+  const configured = settings.metadataSettings.audibleRegion?.toLowerCase();
+  const fallback = settings.main.discoverRegion?.toLowerCase();
+  const region = (configured || fallback || 'us') as AudibleRegion;
   return new AudibleAPI(
     AUDIBLE_VALID_REGIONS.includes(region) ? region : 'us'
   );

@@ -115,6 +115,7 @@ export enum MetadataProviderType {
 export interface MetadataSettings {
   tv: MetadataProviderType;
   anime: MetadataProviderType;
+  audibleRegion?: string;
 }
 
 export interface ProxySettings {
@@ -502,6 +503,7 @@ class Settings {
       metadataSettings: {
         tv: MetadataProviderType.TMDB,
         anime: MetadataProviderType.TMDB,
+        audibleRegion: 'us',
       },
       radarr: [],
       sonarr: [],
