@@ -4500,6 +4500,27 @@ paths:
                     type: array
                     items:
                       type: object
+  /book/series/{seriesId}:
+    get:
+      summary: Get a book series and its member works
+      description: Returns the OpenLibrary series definition plus the list of member books with local availability overlayed.
+      tags:
+        - book
+      parameters:
+        - in: path
+          name: seriesId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Series returned
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Series not found
   /book/{id}:
     get:
       summary: Get book details
