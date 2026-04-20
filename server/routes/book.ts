@@ -711,9 +711,6 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
             ratingsCount = hit.ratings_count ?? undefined;
           }
           if (hit.pages && !pageCount) pageCount = hit.pages;
-          if (hit.language?.language && !language) {
-            language = hit.language.language;
-          }
           if (typeof hit.users_count === 'number') {
             readersCount = hit.users_count;
           }

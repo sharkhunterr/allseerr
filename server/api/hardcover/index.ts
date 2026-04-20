@@ -32,13 +32,17 @@ export interface HardcoverSearchHit {
   users_read_count?: number | null;
   pages?: number | null;
   release_date?: string | null;
-  language?: { language?: string } | null;
   image?: { url?: string } | null;
   cached_tags?: HardcoverCachedTags | null;
   contributions?: { author?: { name?: string } | null }[];
   book_series?: { series?: { id: number; name: string } | null; position?: number }[];
   book_characters?: HardcoverCharacter[];
-  book_mappings?: { external_id?: string; platform?: { name?: string } }[];
+}
+
+interface TypesenseSearchResponse {
+  results?: {
+    hits?: { document?: { id?: number | string } }[];
+  };
 }
 
 /**
@@ -125,52 +129,80 @@ class HardcoverAPI {
     }
   }
 
+  // Full book fields we want back from the follow-up books(where: id) query.
+  // Kept here so searchBook / searchByIsbn stay small and identical.
+  private static BOOK_FIELDS = `
+    id
+    title
+    slug
+    rating
+    ratings_count
+    users_count
+    users_read_count
+    pages
+    release_date
+    image { url }
+    cached_tags
+    contributions(where: { contribution: { _eq: "Author" } }, limit: 1) {
+      author { name }
+    }
+    book_series(limit: 3) {
+      position
+      series { id name }
+    }
+    book_characters(limit: 8, order_by: { position: asc_nulls_last }) {
+      only_mentioned
+      spoiler
+      character { name slug }
+    }
+  `;
+
   /**
-   * Look up a book by free-text title or ISBN. Hardcover's books table is
-   * keyed on its own numeric id; we return the first match.
+   * Fetch a book's full record by Hardcover numeric id (equality, allowed
+   * on Hardcover's Hasura instance unlike `_ilike`).
+   */
+  private async getBookById(id: number): Promise<HardcoverSearchHit | null> {
+    const gqlQuery = `
+      query BookById($id: Int!) {
+        books(where: { id: { _eq: $id } }, limit: 1) {
+          ${HardcoverAPI.BOOK_FIELDS}
+        }
+      }
+    `;
+    const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
+      gqlQuery,
+      { id }
+    );
+    return data?.books?.[0] ?? null;
+  }
+
+  /**
+   * Look up a book by free-text title or ISBN. Hardcover exposes a
+   * Typesense-backed `search` query (public API blocks Hasura `_ilike`);
+   * we take the first hit and then fetch the full book by id.
    */
   async searchBook(
     query: string
   ): Promise<HardcoverSearchHit | null> {
     const gqlQuery = `
       query Search($q: String!) {
-        books(
-          where: { title: { _ilike: $q } }
-          order_by: { rating: desc_nulls_last }
-          limit: 5
+        search(
+          query: $q,
+          query_type: "books",
+          per_page: 5,
+          page: 1
         ) {
-          id
-          title
-          slug
-          rating
-          ratings_count
-          users_count
-          users_read_count
-          pages
-          release_date
-          language { language }
-          image { url }
-          cached_tags
-          contributions(where: { contribution: { _eq: "Author" } }, limit: 1) {
-            author { name }
-          }
-          book_series(limit: 3) {
-            position
-            series { id name }
-          }
-          book_characters(limit: 8, order_by: { position: asc_nulls_last }) {
-            only_mentioned
-            spoiler
-            character { name slug }
-          }
+          results
         }
       }
     `;
-    const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
+    const { data } = await this.gql<{ search: TypesenseSearchResponse }>(
       gqlQuery,
-      { q: `%${query}%` }
+      { q: query }
     );
-    return data?.books?.[0] ?? null;
+    const firstId = data?.search?.results?.hits?.[0]?.document?.id;
+    if (firstId == null) return null;
+    return this.getBookById(Number(firstId));
   }
 
   /**
@@ -200,6 +232,7 @@ class HardcoverAPI {
    * Look up a book by ISBN-13 / ISBN-10 through the editions table.
    */
   async searchByIsbn(isbn: string): Promise<HardcoverSearchHit | null> {
+    // editions(_eq) is allowed on Hardcover's public Hasura; _ilike is not.
     const gqlQuery = `
       query ByIsbn($isbn: String!) {
         editions(
@@ -212,22 +245,7 @@ class HardcoverAPI {
           limit: 1
         ) {
           book {
-            id
-            title
-            slug
-            rating
-            ratings_count
-            pages
-            release_date
-            language { language }
-            image { url }
-            contributions(where: { contribution: { _eq: "Author" } }, limit: 1) {
-              author { name }
-            }
-            book_series(limit: 3) {
-              position
-              series { id name }
-            }
+            ${HardcoverAPI.BOOK_FIELDS}
           }
         }
       }
