@@ -14,7 +14,8 @@ export type AvailableCacheIds =
   | 'romm'
   | 'audiobookshelf'
   | 'komga'
-  | 'grimmory';
+  | 'grimmory'
+  | 'bindery';
 
 const DEFAULT_TTL = 300;
 const DEFAULT_CHECK_PERIOD = 120;
@@ -54,6 +55,7 @@ class CacheManager {
     }),
     radarr: new Cache('radarr', 'Radarr API'),
     sonarr: new Cache('sonarr', 'Sonarr API'),
+    bindery: new Cache('bindery', 'Bindery API'),
     rt: new Cache('rt', 'Rotten Tomatoes API', {
       stdTtl: 43200,
       checkPeriod: 60 * 30,

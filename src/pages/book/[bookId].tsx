@@ -13,6 +13,7 @@ import {
 import { MediaStatus, MediaType } from '@server/constants/media';
 import axios from 'axios';
 import type { NextPage } from 'next';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
@@ -39,6 +40,12 @@ const messages = defineMessages('pages.BookDetail', {
   releaseDate: 'Release Date',
   language: 'Language',
   asin: 'ASIN',
+  isbn13: 'ISBN-13',
+  isbn10: 'ISBN-10',
+  pages: 'Pages',
+  partOfSeries: 'Part of',
+  seriesBook: 'Book {position} of {total}',
+  viewSeries: 'View all books in this series',
 });
 
 interface BookDetailData {
@@ -50,12 +57,22 @@ interface BookDetailData {
   coverUrl?: string;
   subjects?: string[];
   authorName?: string;
+  authorKey?: string;
   narratorName?: string;
   year?: number;
   publisher?: string;
   durationSeconds?: number;
   language?: string;
   releaseDate?: string;
+  isbn13?: string;
+  isbn10?: string;
+  pageCount?: number;
+  series?: {
+    key: string;
+    name: string;
+    position?: string;
+    seedCount: number;
+  }[];
   mediaType?: MediaType;
   mediaStatus?: MediaStatus | null;
   bookMediaId?: number | null;
@@ -126,6 +143,7 @@ const BookDetailPage: NextPage = () => {
         title: data.title,
         authorName: data.authorName ?? 'Unknown',
         foreignBookId: data.key,
+        foreignAuthorId: data.authorKey,
         narratorName: data.narratorName,
         asin: isAudiobook ? data.key : undefined,
         coverUrl,
@@ -276,6 +294,37 @@ const BookDetailPage: NextPage = () => {
           ) : null}
         </div>
       </div>
+      {data.series && data.series.length > 0 && (
+        <div className="mb-6 rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-4">
+          {data.series.map((s) => (
+            <div
+              key={s.key}
+              className="flex items-center justify-between gap-4"
+            >
+              <div>
+                <span className="mr-2 text-sm text-gray-400">
+                  {intl.formatMessage(messages.partOfSeries)}
+                </span>
+                <span className="font-semibold text-indigo-300">{s.name}</span>
+                {s.position && s.seedCount > 0 && (
+                  <span className="ml-2 text-sm text-gray-400">
+                    {intl.formatMessage(messages.seriesBook, {
+                      position: s.position,
+                      total: s.seedCount,
+                    })}
+                  </span>
+                )}
+              </div>
+              <Link
+                href={`/book/series/${s.key}`}
+                className="text-sm text-indigo-400 underline hover:text-indigo-300"
+              >
+                {intl.formatMessage(messages.viewSeries)}
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="media-overview">
         <div className="media-overview-left">
           <h2>{intl.formatMessage(messages.overview)}</h2>
@@ -344,6 +393,28 @@ const BookDetailPage: NextPage = () => {
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.asin)}</span>
                 <span className="media-fact-value">{data.key}</span>
+              </div>
+            )}
+            {data.isbn13 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.isbn13)}</span>
+                <span className="media-fact-value font-mono">
+                  {data.isbn13}
+                </span>
+              </div>
+            )}
+            {data.isbn10 && !data.isbn13 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.isbn10)}</span>
+                <span className="media-fact-value font-mono">
+                  {data.isbn10}
+                </span>
+              </div>
+            )}
+            {data.pageCount && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.pages)}</span>
+                <span className="media-fact-value">{data.pageCount}</span>
               </div>
             )}
             {data.subjects && data.subjects.length > 0 && (

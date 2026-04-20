@@ -7,10 +7,39 @@ import {
   LibraryServerInstance,
   LibraryServerType,
 } from '@server/entity/LibraryServerInstance';
+import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { Router } from 'express';
 
 const bookSettingsRoutes = Router();
+
+// ===== Metadata Providers =====
+
+bookSettingsRoutes.get('/metadata-providers', (_req, res) => {
+  const settings = getSettings();
+  return res.status(200).json(settings.book.metadataProviders);
+});
+
+bookSettingsRoutes.put('/metadata-providers', async (req, res) => {
+  const settings = getSettings();
+  const body = req.body as Partial<typeof settings.book.metadataProviders>;
+
+  settings.book = {
+    ...settings.book,
+    metadataProviders: {
+      ...settings.book.metadataProviders,
+      ...(typeof body.bindery === 'boolean' ? { bindery: body.bindery } : {}),
+      ...(typeof body.googleBooks === 'boolean'
+        ? { googleBooks: body.googleBooks }
+        : {}),
+      ...(typeof body.googleBooksApiKey === 'string'
+        ? { googleBooksApiKey: body.googleBooksApiKey }
+        : {}),
+    },
+  };
+  await settings.save();
+  return res.status(200).json(settings.book.metadataProviders);
+});
 
 // ===== Download Manager Instance Routes =====
 

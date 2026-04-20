@@ -7,6 +7,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
 import SubTabs from '@app/components/Common/SubTabs';
+import BinderyModal from '@app/components/Settings/BinderyModal';
 import DownloadManagerSettings from '@app/components/Settings/BooksAudiobooks/DownloadManagerSettings';
 import LibraryServerSettings from '@app/components/Settings/BooksAudiobooks/LibraryServerSettings';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
@@ -16,10 +17,19 @@ import SonarrModal from '@app/components/Settings/SonarrModal';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
-import { PencilIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/solid';
+import {
+  BookOpenIcon,
+  PencilIcon,
+  PlusIcon,
+  TrashIcon,
+} from '@heroicons/react/24/solid';
 import type OverrideRule from '@server/entity/OverrideRule';
 import type { OverrideRuleResultsResponse } from '@server/interfaces/api/overrideRuleInterfaces';
-import type { RadarrSettings, SonarrSettings } from '@server/lib/settings';
+import type {
+  BinderySettings,
+  RadarrSettings,
+  SonarrSettings,
+} from '@server/lib/settings';
 import axios from 'axios';
 import { Fragment, useState } from 'react';
 import { useIntl } from 'react-intl';
@@ -40,6 +50,17 @@ const messages = defineMessages('components.Settings', {
   activeProfile: 'Active Profile',
   addradarr: 'Add Radarr Server',
   addsonarr: 'Add Sonarr Server',
+  addbindery: 'Add Bindery Server',
+  binderysettings: 'Bindery Settings',
+  binderySettingsDescription:
+    'Configure your Bindery server(s) below. Bindery (a Readarr-like service) handles automated downloading and management of books and audiobooks.',
+  deletebinderyserver: 'Delete Bindery Server',
+  noDefaultBindery:
+    'At least one Bindery server must be marked as default for {mediaType} requests to be processed.',
+  mediaTypeBook: 'book',
+  mediaTypeAudiobook: 'audiobook',
+  binderyMediaTypeBook: 'Books',
+  binderyMediaTypeAudiobook: 'Audiobooks',
   noDefaultServer:
     'At least one {serverType} server must be marked as default in order for {mediaType} requests to be processed.',
   noDefaultNon4kServer:
@@ -65,6 +86,7 @@ interface ServerInstanceProps {
   externalUrl?: string;
   profileName: string;
   isSonarr?: boolean;
+  isBindery?: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -105,6 +127,7 @@ const ServerInstance = ({
   isDefault = false,
   isSSL = false,
   isSonarr = false,
+  isBindery = false,
   externalUrl,
   onEdit,
   onDelete,
@@ -173,7 +196,9 @@ const ServerInstance = ({
           rel="noopener noreferrer"
           className="opacity-50 hover:opacity-100"
         >
-          {isSonarr ? (
+          {isBindery ? (
+            <BookOpenIcon className="h-10 w-10 flex-shrink-0 text-indigo-400" />
+          ) : isSonarr ? (
             <SonarrLogo className="h-10 w-10 flex-shrink-0" />
           ) : (
             <RadarrLogo className="h-10 w-10 flex-shrink-0" />
@@ -554,6 +579,142 @@ const MoviesAndTVServices = () => {
   );
 };
 
+interface BinderyServicesProps {
+  mediaType: 'book' | 'audiobook';
+}
+
+const BinderyServices = ({ mediaType }: BinderyServicesProps) => {
+  const intl = useIntl();
+  const {
+    data: binderyData,
+    error: binderyError,
+    mutate: revalidateBindery,
+  } = useSWR<BinderySettings[]>('/api/v1/settings/bindery');
+  const [editBinderyModal, setEditBinderyModal] = useState<{
+    open: boolean;
+    bindery: BinderySettings | null;
+  }>({ open: false, bindery: null });
+  const [deleteBinderyModal, setDeleteBinderyModal] = useState<{
+    open: boolean;
+    serverId: number | null;
+  }>({ open: false, serverId: null });
+
+  const filtered = (binderyData ?? []).filter(
+    (b) => b.mediaType === mediaType
+  );
+
+  const deleteServer = async () => {
+    await axios.delete(`/api/v1/settings/bindery/${deleteBinderyModal.serverId}`);
+    setDeleteBinderyModal({ open: false, serverId: null });
+    revalidateBindery();
+    mutate('/api/v1/settings/public');
+  };
+
+  return (
+    <>
+      <div className="mb-6">
+        <h3 className="heading">
+          {intl.formatMessage(messages.binderysettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.binderySettingsDescription)}
+        </p>
+      </div>
+      {editBinderyModal.open && (
+        <BinderyModal
+          bindery={editBinderyModal.bindery}
+          defaultMediaType={mediaType}
+          onClose={() => setEditBinderyModal({ open: false, bindery: null })}
+          onSave={() => {
+            revalidateBindery();
+            mutate('/api/v1/settings/public');
+            setEditBinderyModal({ open: false, bindery: null });
+          }}
+        />
+      )}
+      <Transition
+        as={Fragment}
+        show={deleteBinderyModal.open}
+        enter="transition-opacity ease-in-out duration-300"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition-opacity ease-in-out duration-300"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <Modal
+          okText={intl.formatMessage(globalMessages.delete)}
+          okButtonType="danger"
+          onOk={() => deleteServer()}
+          onCancel={() =>
+            setDeleteBinderyModal({ open: false, serverId: null })
+          }
+          title={intl.formatMessage(messages.deletebinderyserver)}
+        >
+          {intl.formatMessage(messages.deleteserverconfirm)}
+        </Modal>
+      </Transition>
+      <div className="section">
+        {!binderyData && !binderyError && <LoadingSpinner />}
+        {binderyData && !binderyError && (
+          <>
+            {filtered.length > 0 &&
+              !filtered.some((b) => b.isDefault) && (
+                <Alert
+                  title={intl.formatMessage(messages.noDefaultBindery, {
+                    mediaType: intl.formatMessage(
+                      mediaType === 'book'
+                        ? messages.mediaTypeBook
+                        : messages.mediaTypeAudiobook
+                    ),
+                  })}
+                />
+              )}
+            <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((bindery) => (
+                <ServerInstance
+                  key={`bindery-config-${bindery.id}`}
+                  name={bindery.name}
+                  hostname={bindery.hostname}
+                  port={bindery.port}
+                  profileName={bindery.activeProfileName}
+                  isSSL={bindery.useSsl}
+                  isDefault={bindery.isDefault}
+                  isBindery
+                  externalUrl={bindery.externalUrl}
+                  onEdit={() =>
+                    setEditBinderyModal({ open: true, bindery })
+                  }
+                  onDelete={() =>
+                    setDeleteBinderyModal({
+                      open: true,
+                      serverId: bindery.id,
+                    })
+                  }
+                />
+              ))}
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    className="mb-3 mt-3"
+                    onClick={() =>
+                      setEditBinderyModal({ open: true, bindery: null })
+                    }
+                  >
+                    <PlusIcon />
+                    <span>{intl.formatMessage(messages.addbindery)}</span>
+                  </Button>
+                </div>
+              </li>
+            </ul>
+          </>
+        )}
+      </div>
+    </>
+  );
+};
+
 const SettingsServices = () => {
   const intl = useIntl();
   const [activeTab, setActiveTab] = useState<
@@ -583,12 +744,14 @@ const SettingsServices = () => {
       {activeTab === 'movies-tv' && <MoviesAndTVServices />}
       {activeTab === 'books' && (
         <div className="space-y-8">
+          <BinderyServices mediaType="book" />
           <DownloadManagerSettings mediaTypeFilter="book" />
           <LibraryServerSettings mediaTypeFilter="book" />
         </div>
       )}
       {activeTab === 'audiobooks' && (
         <div className="space-y-8">
+          <BinderyServices mediaType="audiobook" />
           <DownloadManagerSettings mediaTypeFilter="audiobook" />
           <LibraryServerSettings mediaTypeFilter="audiobook" />
         </div>

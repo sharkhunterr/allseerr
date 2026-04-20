@@ -13,11 +13,14 @@ import {
   MediaType,
 } from '@server/constants/media';
 import { getRepository } from '@server/datasource';
+import { AudiobookMedia } from '@server/entity/AudiobookMedia';
+import { BookMedia } from '@server/entity/BookMedia';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import notificationManager, { Notification } from '@server/lib/notifications';
+import { submitToBindery } from '@server/lib/services/binderyDispatcher';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isEqual, truncate } from 'lodash';
@@ -1019,6 +1022,57 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
   }
 
+  /**
+   * Dispatches book/audiobook requests to Bindery on approval. Runs after
+   * `sendToRadarr`/`sendToSonarr` to keep the servarr path unchanged for
+   * movies/TV. Non-book requests are no-op here.
+   */
+  public async sendToBindery(entity: MediaRequest): Promise<void> {
+    if (entity.status !== MediaRequestStatus.APPROVED) {
+      return;
+    }
+    if (
+      entity.type !== MediaType.BOOK &&
+      entity.type !== MediaType.AUDIOBOOK
+    ) {
+      return;
+    }
+
+    // Subscriber events don't eager-load book/audiobook relations; refetch.
+    const requestRepo = getRepository(MediaRequest);
+    const fullRequest = await requestRepo.findOne({
+      where: { id: entity.id },
+      relations: ['bookMedia', 'audiobookMedia'],
+    });
+    const media = fullRequest?.bookMedia ?? fullRequest?.audiobookMedia;
+    if (!media) {
+      return;
+    }
+
+    const result = await submitToBindery(media, entity.type);
+    if (result.success) {
+      const repo =
+        entity.type === MediaType.BOOK
+          ? getRepository(BookMedia)
+          : getRepository(AudiobookMedia);
+      if (entity.type === MediaType.BOOK) {
+        await (repo as ReturnType<typeof getRepository<BookMedia>>).save(
+          media as BookMedia
+        );
+      } else {
+        await (
+          repo as ReturnType<typeof getRepository<AudiobookMedia>>
+        ).save(media as AudiobookMedia);
+      }
+    } else if (!result.noInstance) {
+      logger.warn('Bindery dispatch did not succeed', {
+        label: 'Media Request',
+        requestId: entity.id,
+        message: result.message,
+      });
+    }
+  }
+
   public async afterUpdate(event: UpdateEvent<MediaRequest>): Promise<void> {
     if (!event.entity) {
       return;
@@ -1027,6 +1081,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     try {
       await this.sendToRadarr(event.entity as MediaRequest);
       await this.sendToSonarr(event.entity as MediaRequest);
+      await this.sendToBindery(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterUpdate subscriber', {
         label: 'Media Request',
@@ -1066,6 +1121,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     try {
       await this.sendToRadarr(event.entity as MediaRequest);
       await this.sendToSonarr(event.entity as MediaRequest);
+      await this.sendToBindery(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterInsert subscriber', {
         label: 'Media Request',

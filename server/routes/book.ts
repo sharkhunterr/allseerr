@@ -1,5 +1,7 @@
 import AudibleAPI, { type AudibleRegion } from '@server/api/audible';
+import GoogleBooksAPI from '@server/api/googlebooks';
 import OpenLibraryAPI from '@server/api/openlibrary';
+import BinderyAPI from '@server/api/servarr/bindery';
 import { getSettings } from '@server/lib/settings';
 import {
   MediaRequestStatus,
@@ -12,12 +14,57 @@ import { BookMedia } from '@server/entity/BookMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import { BookDownloadService } from '@server/lib/services/BookDownloadService';
+import { submitToBindery } from '@server/lib/services/binderyDispatcher';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
 
 const bookRoutes = Router();
 const openLibrary = new OpenLibraryAPI();
+
+async function saveBookMedia(
+  media: BookMedia | AudiobookMedia,
+  mediaType: MediaType
+): Promise<void> {
+  if (mediaType === MediaType.BOOK) {
+    await getRepository(BookMedia).save(media as BookMedia);
+  } else {
+    await getRepository(AudiobookMedia).save(media as AudiobookMedia);
+  }
+}
+
+/**
+ * Dispatch a book/audiobook to a configured download service.
+ * Priority: dedicated Bindery settings → generic DownloadManagerInstance.
+ * If neither is configured, silently no-op (request stays APPROVED without
+ * a download handler — users can still pick it up manually).
+ */
+async function dispatchBookMedia(
+  media: BookMedia | AudiobookMedia,
+  mediaType: MediaType
+): Promise<void> {
+  const binderyResult = await submitToBindery(media, mediaType);
+
+  if (binderyResult.success) {
+    await saveBookMedia(media, mediaType);
+    return;
+  }
+
+  if (!binderyResult.noInstance) {
+    // Bindery was configured but failed — do not fall through to the
+    // generic cascade (that'd submit the same request twice if the user
+    // also has a generic DM configured).
+    return;
+  }
+
+  // No Bindery instance — try generic download managers
+  const downloadService = new BookDownloadService();
+  const genericResult = await downloadService.dispatch(media, mediaType);
+
+  if (genericResult.success) {
+    await saveBookMedia(media, mediaType);
+  }
+}
 
 const AUDIBLE_VALID_REGIONS: AudibleRegion[] = [
   'us',
@@ -130,16 +177,166 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       });
     }
 
-    const { results, totalResults } = await openLibrary.search(
-      query,
-      page,
-      limit
+    // Aggregate sources: OpenLibrary (base) + optional Bindery + optional
+    // Google Books. Each source normalizes to the allseerr BookResult shape.
+    // We dedupe by normalized title+author.
+    const settings = getSettings();
+    const providerCfg = settings.book.metadataProviders;
+
+    type AggregatedBook = {
+      openLibraryId: string;
+      title: string;
+      authorName: string;
+      authorKey?: string;
+      isbn13?: string;
+      isbn10?: string;
+      coverUrl?: string;
+      year?: number;
+      publisher?: string;
+      pageCount?: number;
+      subjects?: string[];
+      description?: string;
+      language?: string;
+      source: 'openlibrary' | 'bindery' | 'googlebooks';
+    };
+
+    const normalizeKey = (title: string, author: string) =>
+      `${title}|${author}`
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+
+    const sources: Promise<AggregatedBook[]>[] = [];
+    let olTotal = 0;
+
+    sources.push(
+      openLibrary
+        .search(query, page, limit)
+        .then(({ results, totalResults }) => {
+          olTotal = totalResults;
+          return results.map((r) => ({ ...r, source: 'openlibrary' as const }));
+        })
+        .catch(() => [] as AggregatedBook[])
     );
+
+    if (providerCfg.bindery) {
+      const binderyInstance = settings.bindery.find(
+        (b) => b.mediaType === 'book' && b.isDefault
+      );
+      if (binderyInstance) {
+        const binderyApi = new BinderyAPI({
+          apiKey: binderyInstance.apiKey,
+          url: BinderyAPI.buildUrl(binderyInstance, '/api/v1'),
+        });
+        sources.push(
+          binderyApi
+            .searchBooks(query)
+            .then((items) =>
+              items.slice(0, limit).map(
+                (b): AggregatedBook => ({
+                  openLibraryId: b.foreignBookId.startsWith('OL')
+                    ? `/works/${b.foreignBookId}`
+                    : b.foreignBookId,
+                  title: b.title,
+                  authorName: b.authorName ?? 'Unknown Author',
+                  authorKey: b.foreignAuthorId,
+                  coverUrl: b.imageUrl?.startsWith('http')
+                    ? b.imageUrl
+                    : undefined,
+                  year: b.releaseDate
+                    ? parseInt(b.releaseDate.slice(0, 4), 10) || undefined
+                    : undefined,
+                  language: b.language,
+                  source: 'bindery',
+                })
+              )
+            )
+            .catch(() => [] as AggregatedBook[])
+        );
+      }
+    }
+
+    if (providerCfg.googleBooks) {
+      const gb = new GoogleBooksAPI(providerCfg.googleBooksApiKey);
+      sources.push(
+        gb
+          .search(query, page, limit)
+          .then(({ results }) =>
+            results.map(
+              (r): AggregatedBook => ({
+                openLibraryId: `gbooks:${r.googleBookId}`,
+                title: r.title,
+                authorName: r.authorName,
+                isbn13: r.isbn13,
+                isbn10: r.isbn10,
+                coverUrl: r.coverUrl,
+                year: r.year,
+                publisher: r.publisher,
+                pageCount: r.pageCount,
+                subjects: r.subjects,
+                description: r.description,
+                language: r.language,
+                source: 'googlebooks',
+              })
+            )
+          )
+          .catch(() => [] as AggregatedBook[])
+      );
+    }
+
+    const allResults = (await Promise.all(sources)).flat();
+
+    // Dedupe + merge: prefer bindery > openlibrary > googlebooks for the
+    // requestable identity fields (openLibraryId, source), and UNION
+    // enrichment fields from all providers so the richest description,
+    // ISBN, cover, subjects, etc. end up on the final record.
+    const priority: Record<AggregatedBook['source'], number> = {
+      bindery: 3,
+      openlibrary: 2,
+      googlebooks: 1,
+    };
+    const byKey = new Map<string, AggregatedBook>();
+    const mergeInto = (
+      winner: AggregatedBook,
+      loser: AggregatedBook
+    ): AggregatedBook => ({
+      ...winner,
+      // Enrichment fields: pick whichever is present/longer
+      isbn13: winner.isbn13 || loser.isbn13,
+      isbn10: winner.isbn10 || loser.isbn10,
+      coverUrl: winner.coverUrl || loser.coverUrl,
+      year: winner.year || loser.year,
+      publisher: winner.publisher || loser.publisher,
+      pageCount: winner.pageCount || loser.pageCount,
+      language: winner.language || loser.language,
+      authorKey: winner.authorKey || loser.authorKey,
+      description:
+        winner.description && winner.description.length >=
+        (loser.description?.length ?? 0)
+          ? winner.description
+          : loser.description,
+      subjects: Array.from(
+        new Set([...(winner.subjects ?? []), ...(loser.subjects ?? [])])
+      ).slice(0, 20),
+    });
+
+    for (const item of allResults) {
+      const key = normalizeKey(item.title, item.authorName);
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, item);
+      } else if (priority[item.source] > priority[existing.source]) {
+        byKey.set(key, mergeInto(item, existing));
+      } else {
+        byKey.set(key, mergeInto(existing, item));
+      }
+    }
+    const merged = Array.from(byKey.values());
 
     // Overlay availability from local database
     const bookMediaRepo = getRepository(BookMedia);
     const enrichedResults = await Promise.all(
-      results.map(async (result) => {
+      merged.map(async (result) => {
         const existing = await bookMediaRepo.findOne({
           where: { openLibraryId: result.openLibraryId },
         });
@@ -155,8 +352,8 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
 
     return res.status(200).json({
       page,
-      totalPages: Math.ceil(totalResults / limit),
-      totalResults,
+      totalPages: Math.max(1, Math.ceil(olTotal / limit)),
+      totalResults: enrichedResults.length,
       results: enrichedResults,
     });
   } catch (e) {
@@ -168,6 +365,63 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
     return res.status(500).json({
       status: 500,
       message: 'Book search failed. Please try again.',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/book/series/:seriesId
+ * Return an OpenLibrary series definition plus its member books, enriched
+ * with local availability (mediaStatus) per work.
+ */
+bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
+  const seriesId = req.params.seriesId;
+  try {
+    const [series, members] = await Promise.all([
+      openLibrary.getSeries(seriesId),
+      openLibrary.getSeriesMembers(seriesId),
+    ]);
+
+    if (!series) {
+      return res
+        .status(404)
+        .json({ status: 404, message: 'Series not found.' });
+    }
+
+    const bookMediaRepo = getRepository(BookMedia);
+    const enriched = await Promise.all(
+      members.map(async (m) => {
+        const existing = await bookMediaRepo.findOne({
+          where: { openLibraryId: `/works/${m.workKey}` },
+        });
+        return {
+          openLibraryId: `/works/${m.workKey}`,
+          title: m.title,
+          authorName: '',
+          coverUrl: m.coverUrl,
+          mediaStatus: existing?.status ?? null,
+          bookMediaId: existing?.id ?? null,
+          mediaType: MediaType.BOOK,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      key: series.key,
+      name: series.name,
+      description: series.description,
+      seedCount: series.seedCount,
+      members: enriched,
+    });
+  } catch (e) {
+    logger.error('Book series fetch failed', {
+      label: 'book',
+      seriesId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to fetch series details.',
     });
   }
 });
@@ -231,8 +485,132 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       where: { openLibraryId: workKey },
     });
 
+    // Extract first author's OpenLibrary key (e.g. "OL12345A") from the Work
+    // and fetch the author's display name (Work itself doesn't carry it).
+    const authorKey = work.authors?.[0]?.author?.key?.split('/').pop();
+    const authorName = authorKey
+      ? await openLibrary.getAuthorName(authorKey)
+      : null;
+
+    // Augment with enabled metadata providers (Bindery + Google Books) so the
+    // detail page shows ISBN, page count, richer description/subjects, etc.
+    const settings = getSettings();
+    const cfg = settings.book.metadataProviders;
+
+    let isbn13: string | undefined;
+    let isbn10: string | undefined;
+    let pageCount: number | undefined;
+    let publisher: string | undefined;
+    let language: string | undefined;
+    let enrichedDescription: string | undefined;
+    const mergedSubjects = new Set<string>(work.subjects ?? []);
+
+    const enrichmentCalls: Promise<void>[] = [];
+
+    if (cfg.googleBooks && authorName) {
+      const gb = new GoogleBooksAPI(cfg.googleBooksApiKey);
+      enrichmentCalls.push(
+        gb
+          .search(`${work.title} ${authorName}`, 1, 5)
+          .then(({ results }) => {
+            // Best match: exact-ish title
+            const match =
+              results.find(
+                (r) =>
+                  r.title.toLowerCase().trim() ===
+                  work.title.toLowerCase().trim()
+              ) ?? results[0];
+            if (match) {
+              isbn13 = isbn13 || match.isbn13;
+              isbn10 = isbn10 || match.isbn10;
+              pageCount = pageCount || match.pageCount;
+              publisher = publisher || match.publisher;
+              language = language || match.language;
+              if (
+                match.description &&
+                match.description.length >
+                  (enrichedDescription?.length ?? 0)
+              ) {
+                enrichedDescription = match.description;
+              }
+              (match.subjects ?? []).forEach((s) => mergedSubjects.add(s));
+            }
+          })
+          .catch(() => {})
+      );
+    }
+
+    if (cfg.bindery && authorKey) {
+      const binderyInstance = settings.bindery.find(
+        (b) => b.mediaType === 'book' && b.isDefault
+      );
+      if (binderyInstance) {
+        const binderyApi = new BinderyAPI({
+          apiKey: binderyInstance.apiKey,
+          url: BinderyAPI.buildUrl(binderyInstance, '/api/v1'),
+        });
+        enrichmentCalls.push(
+          binderyApi
+            .searchBooks(`${work.title}`)
+            .then((items) => {
+              const match = items.find(
+                (b) =>
+                  b.title.toLowerCase().trim() ===
+                    work.title.toLowerCase().trim() &&
+                  b.foreignAuthorId === authorKey
+              );
+              if (match) {
+                language = language || match.language;
+              }
+            })
+            .catch(() => {})
+        );
+      }
+    }
+
+    await Promise.all(enrichmentCalls);
+
+    // Series membership (from OpenLibrary's canonical series data).
+    const seriesEntries: {
+      key: string;
+      name: string;
+      position?: string;
+      seedCount: number;
+    }[] = [];
+    if (work.series?.length) {
+      const seriesLookups = work.series.slice(0, 3).map(async (ref) => {
+        const info = await openLibrary.getSeries(ref.series.key);
+        if (info) {
+          seriesEntries.push({
+            key: info.key,
+            name: info.name,
+            position: ref.position,
+            seedCount: info.seedCount,
+          });
+        }
+      });
+      await Promise.all(seriesLookups);
+    }
+
     return res.status(200).json({
       ...work,
+      authorKey,
+      authorName,
+      isbn13,
+      isbn10,
+      pageCount,
+      publisher,
+      language,
+      subjects: Array.from(mergedSubjects).slice(0, 30),
+      series: seriesEntries,
+      description:
+        (enrichedDescription &&
+        enrichedDescription.length >
+          (typeof work.description === 'string'
+            ? work.description.length
+            : (work.description?.value?.length ?? 0))
+          ? enrichedDescription
+          : work.description) ?? enrichedDescription,
       mediaStatus: existing?.status ?? null,
       bookMediaId: existing?.id ?? null,
       libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),
@@ -261,6 +639,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
     title: string;
     authorName: string;
     foreignBookId: string;
+    foreignAuthorId?: string;
     isbn13?: string;
     isbn10?: string;
     asin?: string;
@@ -337,6 +716,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           title: body.title,
           authorName: body.authorName,
           foreignBookId: body.foreignBookId,
+          foreignAuthorId: body.foreignAuthorId,
           isbn13: body.isbn13,
           isbn10: body.isbn10,
           openLibraryId: body.openLibraryId,
@@ -358,6 +738,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           title: body.title,
           authorName: body.authorName,
           foreignBookId: body.foreignBookId,
+          foreignAuthorId: body.foreignAuthorId,
           openLibraryId: body.openLibraryId,
           asin,
           coverUrl: body.coverUrl,
@@ -401,9 +782,9 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
       request.status = MediaRequestStatus.APPROVED;
       await requestRepo.save(request);
 
-      // Dispatch to download manager
-      const downloadService = new BookDownloadService();
-      await downloadService.dispatch(
+      // Dispatch to Bindery (dedicated settings) or fall back to generic
+      // DownloadManagerInstance cascade.
+      await dispatchBookMedia(
         media as BookMedia & AudiobookMedia,
         body.mediaType
       );
@@ -508,8 +889,7 @@ bookRoutes.put(
     // Handle status-specific actions
     if (body.status === MediaRequestStatus.APPROVED) {
       if (media) {
-        const downloadService = new BookDownloadService();
-        await downloadService.dispatch(media, mediaType);
+        await dispatchBookMedia(media, mediaType);
       }
     }
 

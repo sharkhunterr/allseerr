@@ -4,6 +4,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import SubTabs from '@app/components/Common/SubTabs';
 import SettingsAudibleMetadata from '@app/components/Settings/BooksAudiobooks/SettingsAudibleMetadata';
+import SettingsBookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsBookMetadata';
 import SettingsIgdb from '@app/components/Settings/Games/SettingsIgdb';
 import MetadataSelector, {
   MetadataProviderType,
@@ -472,7 +473,7 @@ const MoviesAndTVMetadata = () => {
 const SettingsMetadata = () => {
   const intl = useIntl();
   const [activeTab, setActiveTab] = useState<
-    'movies-tv' | 'audiobooks' | 'games'
+    'movies-tv' | 'books' | 'audiobooks' | 'games'
   >('movies-tv');
 
   const tabs: { key: typeof activeTab; label: string }[] = [
@@ -480,6 +481,7 @@ const SettingsMetadata = () => {
       key: 'movies-tv',
       label: `${intl.formatMessage(globalMessages.movies)} & ${intl.formatMessage(globalMessages.tvshows)}`,
     },
+    { key: 'books', label: intl.formatMessage(globalMessages.book) },
     { key: 'audiobooks', label: intl.formatMessage(globalMessages.audiobook) },
     { key: 'games', label: intl.formatMessage(globalMessages.game) },
   ];
@@ -499,6 +501,7 @@ const SettingsMetadata = () => {
       </div>
       <SubTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
       {activeTab === 'movies-tv' && <MoviesAndTVMetadata />}
+      {activeTab === 'books' && <SettingsBookMetadata />}
       {activeTab === 'audiobooks' && <SettingsAudibleMetadata />}
       {activeTab === 'games' && <SettingsIgdb />}
     </>

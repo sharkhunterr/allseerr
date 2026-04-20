@@ -695,6 +695,73 @@ components:
         - is4k
         - enableSeasonFolders
         - isDefault
+    BinderySettings:
+      type: object
+      properties:
+        id:
+          type: number
+          example: 0
+          readOnly: true
+        name:
+          type: string
+          example: 'Bindery Main'
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 8787
+        apiKey:
+          type: string
+          example: 'exampleapikey'
+        useSsl:
+          type: boolean
+          example: false
+        baseUrl:
+          type: string
+        activeProfileId:
+          type: number
+          example: 1
+        activeProfileName:
+          type: string
+          example: Standard
+        activeDirectory:
+          type: string
+          example: '/books'
+        mediaType:
+          type: string
+          enum: [book, audiobook]
+          example: 'book'
+        isDefault:
+          type: boolean
+          example: false
+        externalUrl:
+          type: string
+          example: http://bindery.example.com
+        syncEnabled:
+          type: boolean
+          example: false
+        preventSearch:
+          type: boolean
+          example: false
+        tagRequests:
+          type: boolean
+          example: false
+        tags:
+          type: array
+          items:
+            type: number
+      required:
+        - name
+        - hostname
+        - port
+        - apiKey
+        - useSsl
+        - activeProfileId
+        - activeProfileName
+        - activeDirectory
+        - mediaType
+        - isDefault
     ServarrTag:
       type: object
       properties:
@@ -2955,6 +3022,150 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SonarrSettings'
+  /settings/bindery:
+    get:
+      summary: Get Bindery settings
+      description: Returns all Bindery settings in a JSON array.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: 'Values were returned'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BinderySettings'
+    post:
+      summary: Create Bindery instance
+      description: Creates a new Bindery instance from the request body.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BinderySettings'
+      responses:
+        '201':
+          description: 'New Bindery instance created'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BinderySettings'
+  /settings/bindery/test:
+    post:
+      summary: Test Bindery configuration
+      description: Tests if the Bindery configuration is valid. Returns profiles and root folders on success.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  example: '127.0.0.1'
+                port:
+                  type: number
+                  example: 8787
+                apiKey:
+                  type: string
+                  example: yourapikey
+                useSsl:
+                  type: boolean
+                  example: false
+                baseUrl:
+                  type: string
+              required:
+                - hostname
+                - port
+                - apiKey
+                - useSsl
+      responses:
+        '200':
+          description: Successfully connected to Bindery instance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServiceProfile'
+  /settings/bindery/{binderyId}:
+    put:
+      summary: Update Bindery instance
+      description: Updates an existing Bindery instance with the provided values.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: binderyId
+          required: true
+          schema:
+            type: integer
+          description: Bindery instance ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BinderySettings'
+      responses:
+        '200':
+          description: 'Bindery instance updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BinderySettings'
+    delete:
+      summary: Delete Bindery instance
+      description: Deletes an existing Bindery instance based on the binderyId parameter.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: binderyId
+          required: true
+          schema:
+            type: integer
+          description: Bindery instance ID
+      responses:
+        '200':
+          description: 'Bindery instance deleted'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BinderySettings'
+  /settings/bindery/{binderyId}/profiles:
+    get:
+      summary: Get available Bindery profiles
+      description: Returns a list of profiles available on the Bindery server instance in a JSON array.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: binderyId
+          required: true
+          schema:
+            type: integer
+          description: Bindery instance ID
+      responses:
+        '200':
+          description: Returned list of profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceProfile'
   /settings/public:
     get:
       summary: Get public settings
@@ -4529,6 +4740,49 @@ paths:
                     type: boolean
                   message:
                     type: string
+  /settings/book/metadata-providers:
+    get:
+      summary: Get book metadata provider config
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bindery:
+                    type: boolean
+                  googleBooks:
+                    type: boolean
+                  googleBooksApiKey:
+                    type: string
+    put:
+      summary: Update book metadata provider config
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bindery:
+                  type: boolean
+                googleBooks:
+                  type: boolean
+                googleBooksApiKey:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
   /settings/book/download-managers:
     get:
       summary: Get book download manager instances

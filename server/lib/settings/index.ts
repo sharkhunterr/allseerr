@@ -102,6 +102,10 @@ export interface SonarrSettings extends DVRSettings {
   monitorNewItems: 'all' | 'none';
 }
 
+export interface BinderySettings extends DVRSettings {
+  mediaType: 'book' | 'audiobook';
+}
+
 interface Quota {
   quotaLimit?: number;
   quotaDays?: number;
@@ -406,6 +410,14 @@ export interface BookSettings {
     pollIntervalMinutes: number;
     enabled: boolean;
   };
+  metadataProviders: {
+    // Optional secondary sources merged with OpenLibrary (always on).
+    // Bindery proxies to its own aggregator (OL+Google+Hardcover+DNB), so
+    // enabling it gives foreignBookIds that Bindery already knows about.
+    bindery: boolean;
+    googleBooks: boolean;
+    googleBooksApiKey?: string;
+  };
 }
 
 export interface GameSettings {
@@ -447,6 +459,7 @@ export interface AllSettings {
   tautulli: TautulliSettings;
   radarr: RadarrSettings[];
   sonarr: SonarrSettings[];
+  bindery: BinderySettings[];
   public: PublicSettings;
   notifications: NotificationSettings;
   jobs: Record<JobId, JobSettings>;
@@ -527,6 +540,7 @@ class Settings {
       },
       radarr: [],
       sonarr: [],
+      bindery: [],
       public: {
         initialized: false,
       },
@@ -744,6 +758,11 @@ class Settings {
           pollIntervalMinutes: 15,
           enabled: false,
         },
+        metadataProviders: {
+          bindery: false,
+          googleBooks: false,
+          googleBooksApiKey: '',
+        },
       },
       oidc: {
         enabled: false,
@@ -820,6 +839,14 @@ class Settings {
 
   set sonarr(data: SonarrSettings[]) {
     this.data.sonarr = data;
+  }
+
+  get bindery(): BinderySettings[] {
+    return this.data.bindery;
+  }
+
+  set bindery(data: BinderySettings[]) {
+    this.data.bindery = data;
   }
 
   get game(): GameSettings {
@@ -899,12 +926,18 @@ class Settings {
           !!this.data.book.audiobookshelf.url &&
           this.data.book.audiobookshelf.libraries.some(
             (l) => l.mediaType === 'book'
-          )),
+          )) ||
+        this.data.bindery.some(
+          (b) => b.mediaType === 'book' && !!b.hostname
+        ),
       audiobookEnabled:
-        this.data.book.audiobookshelf.enabled &&
-        !!this.data.book.audiobookshelf.url &&
-        this.data.book.audiobookshelf.libraries.some(
-          (l) => l.mediaType === 'audiobook'
+        (this.data.book.audiobookshelf.enabled &&
+          !!this.data.book.audiobookshelf.url &&
+          this.data.book.audiobookshelf.libraries.some(
+            (l) => l.mediaType === 'audiobook'
+          )) ||
+        this.data.bindery.some(
+          (b) => b.mediaType === 'audiobook' && !!b.hostname
         ),
       gameEnabled:
         this.data.game.romm.enabled && !!this.data.game.romm.url,
