@@ -420,8 +420,14 @@ export interface BookSettings {
     // Bindery proxies to its own aggregator (OL+Google+Hardcover+DNB), so
     // enabling it gives foreignBookIds that Bindery already knows about.
     bindery: boolean;
+    // Bookshelf (Readarr fork) — when enabled, allseerr augments book
+    // detail with rating, genres, language, pageCount and series info
+    // pulled from Bookshelf's lookup (Goodreads/Hardcover aggregator).
+    bookshelf: boolean;
     googleBooks: boolean;
     googleBooksApiKey?: string;
+    hardcover: boolean;
+    hardcoverApiKey?: string;
   };
 }
 
@@ -767,8 +773,11 @@ class Settings {
         },
         metadataProviders: {
           bindery: false,
+          bookshelf: false,
           googleBooks: false,
           googleBooksApiKey: '',
+          hardcover: false,
+          hardcoverApiKey: '',
         },
       },
       oidc: {

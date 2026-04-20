@@ -4960,9 +4960,15 @@ paths:
                 properties:
                   bindery:
                     type: boolean
+                  bookshelf:
+                    type: boolean
                   googleBooks:
                     type: boolean
                   googleBooksApiKey:
+                    type: string
+                  hardcover:
+                    type: boolean
+                  hardcoverApiKey:
                     type: string
     put:
       summary: Update book metadata provider config
@@ -4977,9 +4983,15 @@ paths:
               properties:
                 bindery:
                   type: boolean
+                bookshelf:
+                  type: boolean
                 googleBooks:
                   type: boolean
                 googleBooksApiKey:
+                  type: string
+                hardcover:
+                  type: boolean
+                hardcoverApiKey:
                   type: string
       responses:
         '200':

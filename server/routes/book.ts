@@ -1,7 +1,9 @@
 import AudibleAPI, { type AudibleRegion } from '@server/api/audible';
 import GoogleBooksAPI from '@server/api/googlebooks';
+import HardcoverAPI from '@server/api/hardcover';
 import OpenLibraryAPI from '@server/api/openlibrary';
 import BinderyAPI from '@server/api/servarr/bindery';
+import BookshelfAPI from '@server/api/servarr/bookshelf';
 import { getSettings } from '@server/lib/settings';
 import {
   MediaRequestStatus,
@@ -578,14 +580,15 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       }
     }
 
-    await Promise.all(enrichmentCalls);
-
-    // Series membership (from OpenLibrary's canonical series data).
+    // Series membership — start with OpenLibrary's canonical series data,
+    // then fill in from Bookshelf/Hardcover below if OL had nothing.
     const seriesEntries: {
       key: string;
       name: string;
       position?: string;
       seedCount: number;
+      /** Whether we can link to an in-app series page (requires OL key). */
+      linkable: boolean;
     }[] = [];
     if (work.series?.length) {
       const seriesLookups = work.series.slice(0, 3).map(async (ref) => {
@@ -596,11 +599,132 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
             name: info.name,
             position: ref.position,
             seedCount: info.seedCount,
+            linkable: true,
           });
         }
       });
       await Promise.all(seriesLookups);
     }
+
+    // Bookshelf enrichment — rating, genres, language, pageCount + series
+    // fallback when OL didn't have one. Bookshelf's /book/lookup returns a
+    // `seriesTitle` like "Silo #3" which we parse into name + position.
+    let rating: number | undefined;
+    let ratingsCount: number | undefined;
+    const mergedGenres = new Set<string>();
+    if (cfg.bookshelf) {
+      const bookshelfInstance = settings.bookshelf?.find(
+        (b) => b.mediaType === 'book' && b.isDefault
+      );
+      if (bookshelfInstance) {
+        const bookshelfApi = new BookshelfAPI({
+          apiKey: bookshelfInstance.apiKey,
+          url: BookshelfAPI.buildUrl(bookshelfInstance, '/api/v1'),
+        });
+        enrichmentCalls.push(
+          (async () => {
+            let hits: unknown[] = [];
+            if (isbn13) {
+              hits = await bookshelfApi.lookupBook(`isbn:${isbn13}`);
+            }
+            if (hits.length === 0 && isbn10) {
+              hits = await bookshelfApi.lookupBook(`isbn:${isbn10}`);
+            }
+            if (hits.length === 0 && authorName) {
+              hits = await bookshelfApi.lookupBook(
+                `${work.title} ${authorName}`
+              );
+            }
+            const targetTitle = work.title.toLowerCase().trim();
+            const match =
+              (hits as Record<string, unknown>[]).find(
+                (h) =>
+                  typeof h.title === 'string' &&
+                  h.title.toLowerCase().trim() === targetTitle
+              ) ?? (hits as Record<string, unknown>[])[0];
+            if (!match) return;
+
+            const r = match.ratings as
+              | { value?: number; votes?: number }
+              | undefined;
+            if (r?.value && !rating) {
+              rating = r.value;
+              ratingsCount = r.votes;
+            }
+            if (typeof match.pageCount === 'number' && !pageCount) {
+              pageCount = match.pageCount;
+            }
+            if (typeof match.language === 'string' && !language) {
+              language = match.language;
+            }
+            (match.genres as string[] | undefined)?.forEach((g) =>
+              mergedGenres.add(g)
+            );
+
+            // Series fallback from "seriesTitle" like "Silo #3"
+            if (
+              seriesEntries.length === 0 &&
+              typeof match.seriesTitle === 'string' &&
+              match.seriesTitle.trim()
+            ) {
+              const m = match.seriesTitle.match(/^(.+?)\s*(?:#(\d+))?\s*$/);
+              if (m?.[1]) {
+                seriesEntries.push({
+                  key: `bookshelf:${m[1]}`,
+                  name: m[1],
+                  position: m[2],
+                  seedCount: 0,
+                  linkable: false,
+                });
+              }
+            }
+          })().catch(() => {})
+        );
+      }
+    }
+
+    // Hardcover enrichment — rating, genres, series (free GraphQL API).
+    if (cfg.hardcover) {
+      const hc = new HardcoverAPI(cfg.hardcoverApiKey);
+      enrichmentCalls.push(
+        (async () => {
+          let hit =
+            (isbn13 && (await hc.searchByIsbn(isbn13))) ||
+            (isbn10 && (await hc.searchByIsbn(isbn10))) ||
+            null;
+          if (!hit) {
+            hit = await hc.searchBook(work.title);
+          }
+          if (!hit) return;
+          if (hit.rating && !rating) {
+            rating = hit.rating;
+            ratingsCount = hit.ratings_count ?? undefined;
+          }
+          if (hit.pages && !pageCount) pageCount = hit.pages;
+          if (hit.language?.language && !language) {
+            language = hit.language.language;
+          }
+          if (seriesEntries.length === 0 && hit.book_series?.length) {
+            for (const bs of hit.book_series) {
+              if (bs.series?.name) {
+                seriesEntries.push({
+                  key: `hardcover:${bs.series.id}`,
+                  name: bs.series.name,
+                  position: bs.position?.toString(),
+                  seedCount: 0,
+                  linkable: false,
+                });
+              }
+            }
+          }
+        })().catch(() => {})
+      );
+    }
+
+    await Promise.all(enrichmentCalls);
+
+    // Merge genres into subjects for display
+    mergedGenres.forEach((g) => mergedSubjects.add(g));
 
     return res.status(200).json({
       ...work,
@@ -611,6 +735,8 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       pageCount,
       publisher,
       language,
+      rating,
+      ratingsCount,
       subjects: Array.from(mergedSubjects).slice(0, 30),
       series: seriesEntries,
       description:

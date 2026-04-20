@@ -46,6 +46,7 @@ const messages = defineMessages('pages.BookDetail', {
   partOfSeries: 'Part of',
   seriesBook: 'Book {position} of {total}',
   viewSeries: 'View all books in this series',
+  rating: 'Rating',
 });
 
 interface BookDetailData {
@@ -72,7 +73,10 @@ interface BookDetailData {
     name: string;
     position?: string;
     seedCount: number;
+    linkable?: boolean;
   }[];
+  rating?: number;
+  ratingsCount?: number;
   mediaType?: MediaType;
   mediaStatus?: MediaStatus | null;
   bookMediaId?: number | null;
@@ -308,21 +312,25 @@ const BookDetailPage: NextPage = () => {
                   {intl.formatMessage(messages.partOfSeries)}
                 </span>
                 <span className="font-semibold text-indigo-300">{s.name}</span>
-                {s.position && s.seedCount > 0 && (
+                {s.position && (
                   <span className="ml-2 text-sm text-gray-400">
-                    {intl.formatMessage(messages.seriesBook, {
-                      position: s.position,
-                      total: s.seedCount,
-                    })}
+                    {s.seedCount > 0
+                      ? intl.formatMessage(messages.seriesBook, {
+                          position: s.position,
+                          total: s.seedCount,
+                        })
+                      : `#${s.position}`}
                   </span>
                 )}
               </div>
-              <Link
-                href={`/book/series/${s.key}`}
-                className="text-sm text-indigo-400 underline hover:text-indigo-300"
-              >
-                {intl.formatMessage(messages.viewSeries)}
-              </Link>
+              {s.linkable !== false && (
+                <Link
+                  href={`/book/series/${s.key}`}
+                  className="text-sm text-indigo-400 underline hover:text-indigo-300"
+                >
+                  {intl.formatMessage(messages.viewSeries)}
+                </Link>
+              )}
             </div>
           ))}
         </div>
@@ -417,6 +425,19 @@ const BookDetailPage: NextPage = () => {
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.pages)}</span>
                 <span className="media-fact-value">{data.pageCount}</span>
+              </div>
+            )}
+            {data.rating && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.rating)}</span>
+                <span className="media-fact-value">
+                  ★ {data.rating.toFixed(2)}
+                  {data.ratingsCount ? (
+                    <span className="ml-2 text-xs text-gray-400">
+                      ({data.ratingsCount.toLocaleString()})
+                    </span>
+                  ) : null}
+                </span>
               </div>
             )}
             {data.subjects && data.subjects.length > 0 && (

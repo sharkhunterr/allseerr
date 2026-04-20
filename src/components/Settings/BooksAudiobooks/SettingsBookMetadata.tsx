@@ -22,10 +22,19 @@ const messages = defineMessages(
       'Use your configured Bindery instance as a metadata source. Bindery already aggregates OpenLibrary, Google Books, Hardcover and DNB; results use foreignBookIds that Bindery recognizes (fewer request failures).',
     binderyNotConfigured:
       'No default Bindery instance is configured. Add one in Services → Books first.',
+    bookshelf: 'Bookshelf',
+    bookshelfHelp:
+      'Enrich book detail with rating, genres, language, page count and series info from your configured Bookshelf instance.',
+    bookshelfNotConfigured:
+      'No default Bookshelf instance is configured. Add one in Services → Books first.',
     googleBooks: 'Google Books',
     googleBooksHelp:
       'Add results from the Google Books catalogue. An API key is optional (unauthenticated calls are rate-limited).',
     googleBooksApiKey: 'Google Books API key (optional)',
+    hardcover: 'Hardcover',
+    hardcoverHelp:
+      'Free GraphQL book API (hardcover.app). Provides ratings, genres, and series data. Get an API token from your Hardcover account settings.',
+    hardcoverApiKey: 'Hardcover API token',
     saved: 'Book metadata provider settings saved.',
     saveFailed: 'Failed to save book metadata provider settings.',
   }
@@ -33,8 +42,11 @@ const messages = defineMessages(
 
 interface MetadataProvidersConfig {
   bindery: boolean;
+  bookshelf: boolean;
   googleBooks: boolean;
   googleBooksApiKey?: string;
+  hardcover: boolean;
+  hardcoverApiKey?: string;
 }
 
 const SettingsBookMetadata = () => {
@@ -46,6 +58,12 @@ const SettingsBookMetadata = () => {
   const binderyConfigured =
     Array.isArray(binderyInstances) &&
     binderyInstances.some((b) => b.mediaType === 'book' && b.isDefault);
+  const { data: bookshelfInstances } = useSWR<
+    { mediaType?: string; isDefault?: boolean }[]
+  >('/api/v1/settings/bookshelf');
+  const bookshelfConfigured =
+    Array.isArray(bookshelfInstances) &&
+    bookshelfInstances.some((b) => b.mediaType === 'book' && b.isDefault);
 
   const { data, error, mutate } = useSWR<MetadataProvidersConfig>(
     '/api/v1/settings/book/metadata-providers'
@@ -55,8 +73,11 @@ const SettingsBookMetadata = () => {
 
   const initial: MetadataProvidersConfig = data ?? {
     bindery: false,
+    bookshelf: false,
     googleBooks: false,
     googleBooksApiKey: '',
+    hardcover: false,
+    hardcoverApiKey: '',
   };
 
   return (
@@ -115,6 +136,31 @@ const SettingsBookMetadata = () => {
                   />
                 </div>
               </div>
+              {!bookshelfConfigured && values.bookshelf && (
+                <Alert
+                  title={intl.formatMessage(messages.bookshelfNotConfigured)}
+                  type="warning"
+                />
+              )}
+              <div className="form-row">
+                <label htmlFor="bookshelf" className="checkbox-label">
+                  <span>{intl.formatMessage(messages.bookshelf)}</span>
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.bookshelfHelp)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <Field
+                    type="checkbox"
+                    id="bookshelf"
+                    name="bookshelf"
+                    disabled={!bookshelfConfigured}
+                    onChange={() =>
+                      setFieldValue('bookshelf', !values.bookshelf)
+                    }
+                  />
+                </div>
+              </div>
               <div className="form-row">
                 <label htmlFor="googleBooks" className="checkbox-label">
                   <span>{intl.formatMessage(messages.googleBooks)}</span>
@@ -147,6 +193,40 @@ const SettingsBookMetadata = () => {
                         as="field"
                         id="googleBooksApiKey"
                         name="googleBooksApiKey"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="form-row">
+                <label htmlFor="hardcover" className="checkbox-label">
+                  <span>{intl.formatMessage(messages.hardcover)}</span>
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.hardcoverHelp)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <Field
+                    type="checkbox"
+                    id="hardcover"
+                    name="hardcover"
+                    onChange={() =>
+                      setFieldValue('hardcover', !values.hardcover)
+                    }
+                  />
+                </div>
+              </div>
+              {values.hardcover && (
+                <div className="form-row">
+                  <label htmlFor="hardcoverApiKey" className="text-label">
+                    {intl.formatMessage(messages.hardcoverApiKey)}
+                  </label>
+                  <div className="form-input-area">
+                    <div className="form-input-field">
+                      <SensitiveInput
+                        as="field"
+                        id="hardcoverApiKey"
+                        name="hardcoverApiKey"
                       />
                     </div>
                   </div>

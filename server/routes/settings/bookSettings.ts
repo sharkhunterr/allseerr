@@ -29,11 +29,20 @@ bookSettingsRoutes.put('/metadata-providers', async (req, res) => {
     metadataProviders: {
       ...settings.book.metadataProviders,
       ...(typeof body.bindery === 'boolean' ? { bindery: body.bindery } : {}),
+      ...(typeof body.bookshelf === 'boolean'
+        ? { bookshelf: body.bookshelf }
+        : {}),
       ...(typeof body.googleBooks === 'boolean'
         ? { googleBooks: body.googleBooks }
         : {}),
       ...(typeof body.googleBooksApiKey === 'string'
         ? { googleBooksApiKey: body.googleBooksApiKey }
+        : {}),
+      ...(typeof body.hardcover === 'boolean'
+        ? { hardcover: body.hardcover }
+        : {}),
+      ...(typeof body.hardcoverApiKey === 'string'
+        ? { hardcoverApiKey: body.hardcoverApiKey }
         : {}),
     },
   };
