@@ -47,7 +47,24 @@ const messages = defineMessages('pages.BookDetail', {
   seriesBook: 'Book {position} of {total}',
   viewSeries: 'View all books in this series',
   rating: 'Rating',
+  readers: 'Readers',
+  readersCountFmt: '{count} saved · {read} read',
+  country: 'Country',
+  moods: 'Moods',
+  contentWarnings: 'Content Warnings',
+  characters: 'Characters',
 });
+
+// Convert an ISO-3166-1 alpha-2 country code to its flag emoji
+// (regional indicator symbols, each = "🇦" + (letter - A) offset).
+const countryFlag = (code: string): string => {
+  if (!/^[A-Z]{2}$/i.test(code)) return '';
+  return code
+    .toUpperCase()
+    .split('')
+    .map((c) => String.fromCodePoint(127397 + c.charCodeAt(0)))
+    .join('');
+};
 
 interface BookDetailData {
   key: string;
@@ -68,6 +85,7 @@ interface BookDetailData {
   isbn13?: string;
   isbn10?: string;
   pageCount?: number;
+  country?: string;
   series?: {
     key: string;
     name: string;
@@ -77,6 +95,11 @@ interface BookDetailData {
   }[];
   rating?: number;
   ratingsCount?: number;
+  readersCount?: number;
+  readCount?: number;
+  moods?: string[];
+  contentWarnings?: string[];
+  characters?: string[];
   mediaType?: MediaType;
   mediaStatus?: MediaStatus | null;
   bookMediaId?: number | null;
@@ -437,6 +460,64 @@ const BookDetailPage: NextPage = () => {
                       ({data.ratingsCount.toLocaleString()})
                     </span>
                   ) : null}
+                </span>
+              </div>
+            )}
+            {data.readersCount !== undefined && data.readersCount > 0 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.readers)}</span>
+                <span className="media-fact-value">
+                  {intl.formatMessage(messages.readersCountFmt, {
+                    count: data.readersCount.toLocaleString(),
+                    read: (data.readCount ?? 0).toLocaleString(),
+                  })}
+                </span>
+              </div>
+            )}
+            {data.country && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.country)}</span>
+                <span className="media-fact-value">
+                  {countryFlag(data.country)}{' '}
+                  <span className="uppercase">{data.country}</span>
+                </span>
+              </div>
+            )}
+            {data.moods && data.moods.length > 0 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.moods)}</span>
+                <span className="media-fact-value flex flex-wrap gap-1">
+                  {data.moods.map((m) => (
+                    <span
+                      key={`mood-${m}`}
+                      className="rounded-full bg-pink-900/40 px-2 py-0.5 text-xs text-pink-200"
+                    >
+                      {m}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
+            {data.contentWarnings && data.contentWarnings.length > 0 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.contentWarnings)}</span>
+                <span className="media-fact-value flex flex-wrap gap-1">
+                  {data.contentWarnings.map((w) => (
+                    <span
+                      key={`cw-${w}`}
+                      className="rounded-full bg-red-900/40 px-2 py-0.5 text-xs text-red-200"
+                    >
+                      {w}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
+            {data.characters && data.characters.length > 0 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.characters)}</span>
+                <span className="media-fact-value">
+                  {data.characters.join(', ')}
                 </span>
               </div>
             )}

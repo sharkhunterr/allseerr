@@ -3,6 +3,34 @@ import axios from 'axios';
 
 const OPENLIBRARY_BASE = 'https://openlibrary.org';
 
+// MARC country-of-publication codes (publish_country) → ISO-2, most common
+// ones. Full list: https://www.loc.gov/marc/countries/cou_home.html
+const MARC_TO_ISO2: Record<string, string> = {
+  // United Kingdom / England / Scotland / Wales / NI
+  enk: 'GB', stk: 'GB', wlk: 'GB', nik: 'GB', uik: 'GB', ukr: 'UA',
+  // United States states — collapsed to US
+  nyu: 'US', cau: 'US', mau: 'US', ilu: 'US', txu: 'US', pau: 'US',
+  vau: 'US', flu: 'US', ohu: 'US', miu: 'US', gau: 'US', ncu: 'US',
+  nju: 'US', mdu: 'US', wau: 'US', inu: 'US', mou: 'US', mnu: 'US',
+  wiu: 'US', azu: 'US', cou: 'US', ctu: 'US', lau: 'US', oru: 'US',
+  tnu: 'US', utu: 'US', alu: 'US', aru: 'US', hiu: 'US', idu: 'US',
+  iau: 'US', ksu: 'US', kyu: 'US', meu: 'US', mpu: 'US', msu: 'US',
+  mtu: 'US', nbu: 'US', ndu: 'US', nhu: 'US', nmu: 'US', nvu: 'US',
+  oku: 'US', riu: 'US', scu: 'US', sdu: 'US', vtu: 'US', wvu: 'US',
+  wyu: 'US', aku: 'US', dcu: 'US', xxu: 'US', xxc: 'CA', xxk: 'GB',
+  // Canada
+  abc: 'CA', bcc: 'CA', mbc: 'CA', nfc: 'CA', nkc: 'CA', nsc: 'CA',
+  ntc: 'CA', nuc: 'CA', onc: 'CA', pic: 'CA', quc: 'CA', snc: 'CA',
+  ykc: 'CA',
+  // Europe
+  fr: 'FR', gw: 'DE', it: 'IT', sp: 'ES', po: 'PT', sw: 'SE', fi: 'FI',
+  dk: 'DK', ne: 'NL', be: 'BE', ci: 'CH', au: 'AT', hu: 'HU', pl: 'PL',
+  rb: 'RS', ru: 'RU', gr: 'GR', ie: 'IE', no: 'NO',
+  // Rest
+  at: 'AU', xxa: 'AU', nz: 'NZ', ja: 'JP', cc: 'CN', ko: 'KR', is: 'IL',
+  ti: 'TH', vm: 'VN', si: 'SG', ii: 'IN', ag: 'AR', bl: 'BR', mx: 'MX',
+};
+
 export interface OpenLibrarySearchResult {
   key: string;
   title: string;
@@ -236,17 +264,27 @@ class OpenLibraryAPI {
   }
 
   /**
-   * Fetch editions for a work and pull a representative ISBN-13 / ISBN-10.
-   * OpenLibrary work objects don't carry ISBNs (those live on editions),
-   * so callers needing ISBN for downstream services must call this.
+   * Fetch editions for a work and pull a representative ISBN-13 / ISBN-10
+   * and publish country. OpenLibrary work objects don't carry these
+   * (they live on editions), so callers needing them must call this.
+   * Country comes back as an ISO-3166 2-letter code (e.g. "us", "gb",
+   * "fr") when an edition has it, `undefined` otherwise.
    */
-  async getWorkIsbns(
+  async getWorkEditionFacts(
     workKey: string
-  ): Promise<{ isbn13?: string; isbn10?: string }> {
+  ): Promise<{
+    isbn13?: string;
+    isbn10?: string;
+    country?: string;
+  }> {
     const key = workKey.replace(/^\/works\//, '').replace(/^\//, '');
     try {
       const response = await axios.get<{
-        entries?: { isbn_13?: string[]; isbn_10?: string[] }[];
+        entries?: {
+          isbn_13?: string[];
+          isbn_10?: string[];
+          publish_country?: string;
+        }[];
       }>(`${OPENLIBRARY_BASE}/works/${key}/editions.json`, {
         params: { limit: 20 },
         timeout: 10000,
@@ -258,7 +296,16 @@ class OpenLibraryAPI {
       const isbn10 = entries
         .flatMap((e) => e.isbn_10 ?? [])
         .find((v) => /^[0-9Xx]{10}$/.test(v));
-      return { isbn13, isbn10 };
+      // MARC publish_country codes are 2-3 chars (e.g. "enk"=England,
+      // "nyu"=NY USA). Map the most common ones to ISO-2 codes, fall
+      // back to the raw value so the UI can still show something.
+      const rawCountry = entries
+        .map((e) => e.publish_country?.trim().toLowerCase())
+        .find((v): v is string => !!v && v.length > 0);
+      const country = rawCountry
+        ? MARC_TO_ISO2[rawCountry] ?? rawCountry.slice(0, 2).toUpperCase()
+        : undefined;
+      return { isbn13, isbn10, country };
     } catch (e) {
       logger.error('OpenLibrary editions fetch failed', {
         label: 'openlibrary',
@@ -267,6 +314,14 @@ class OpenLibraryAPI {
       });
       return {};
     }
+  }
+
+  /** @deprecated kept for back-compat, use getWorkEditionFacts */
+  async getWorkIsbns(
+    workKey: string
+  ): Promise<{ isbn13?: string; isbn10?: string }> {
+    const { isbn13, isbn10 } = await this.getWorkEditionFacts(workKey);
+    return { isbn13, isbn10 };
   }
 
   /**

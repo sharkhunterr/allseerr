@@ -509,13 +509,17 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
 
     const enrichmentCalls: Promise<void>[] = [];
 
-    // Always fetch ISBNs from OpenLibrary editions — OL Works don't carry
-    // ISBN, but downstream services (Bookshelf, Bindery) match much more
-    // reliably on ISBN than on title/author free-text search.
+    let country: string | undefined;
+
+    // Always fetch ISBNs + publish country from OpenLibrary editions —
+    // OL Works don't carry these (editions do). Downstream services
+    // (Bookshelf, Bindery) match much more reliably on ISBN than on
+    // title/author free-text search; country powers the flag badge.
     enrichmentCalls.push(
-      openLibrary.getWorkIsbns(workKey).then((isbns) => {
-        isbn13 = isbn13 ?? isbns.isbn13;
-        isbn10 = isbn10 ?? isbns.isbn10;
+      openLibrary.getWorkEditionFacts(workKey).then((facts) => {
+        isbn13 = isbn13 ?? facts.isbn13;
+        isbn10 = isbn10 ?? facts.isbn10;
+        country = country ?? facts.country;
       })
     );
 
@@ -683,7 +687,13 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       }
     }
 
-    // Hardcover enrichment — rating, genres, series (free GraphQL API).
+    // Hardcover enrichment — rating, genres, series, readers, characters,
+    // moods, content warnings (free GraphQL API).
+    let readersCount: number | undefined;
+    let readCount: number | undefined;
+    const moods: string[] = [];
+    const contentWarnings: string[] = [];
+    const characters: string[] = [];
     if (cfg.hardcover) {
       const hc = new HardcoverAPI(cfg.hardcoverApiKey);
       enrichmentCalls.push(
@@ -704,6 +714,25 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
           if (hit.language?.language && !language) {
             language = hit.language.language;
           }
+          if (typeof hit.users_count === 'number') {
+            readersCount = hit.users_count;
+          }
+          if (typeof hit.users_read_count === 'number') {
+            readCount = hit.users_read_count;
+          }
+          // cached_tags is a JSON blob with Genre/Mood/ContentWarning arrays.
+          if (hit.cached_tags) {
+            hit.cached_tags.Genre?.forEach((t) => mergedGenres.add(t.tag));
+            hit.cached_tags.Mood?.forEach((t) => moods.push(t.tag));
+            hit.cached_tags.ContentWarning?.filter((t) => !t.spoiler).forEach(
+              (t) => contentWarnings.push(t.tag)
+            );
+          }
+          hit.book_characters
+            ?.filter((c) => !c.spoiler && c.character?.name)
+            .forEach((c) => {
+              if (c.character?.name) characters.push(c.character.name);
+            });
           if (seriesEntries.length === 0 && hit.book_series?.length) {
             for (const bs of hit.book_series) {
               if (bs.series?.name) {
@@ -735,8 +764,14 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       pageCount,
       publisher,
       language,
+      country,
       rating,
       ratingsCount,
+      readersCount,
+      readCount,
+      moods: Array.from(new Set(moods)).slice(0, 15),
+      contentWarnings: Array.from(new Set(contentWarnings)).slice(0, 15),
+      characters: Array.from(new Set(characters)).slice(0, 12),
       subjects: Array.from(mergedSubjects).slice(0, 30),
       series: seriesEntries,
       description:

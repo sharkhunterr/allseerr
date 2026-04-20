@@ -3,18 +3,41 @@ import axios from 'axios';
 
 const HARDCOVER_ENDPOINT = 'https://api.hardcover.app/v1/graphql';
 
+export interface HardcoverCachedTag {
+  tag: string;
+  tagSlug?: string;
+  count?: number;
+  spoiler?: boolean;
+}
+
+export interface HardcoverCachedTags {
+  Genre?: HardcoverCachedTag[];
+  Mood?: HardcoverCachedTag[];
+  ContentWarning?: HardcoverCachedTag[];
+}
+
+export interface HardcoverCharacter {
+  character?: { name?: string; slug?: string } | null;
+  only_mentioned?: boolean;
+  spoiler?: boolean;
+}
+
 export interface HardcoverSearchHit {
   id: number;
   title: string;
   slug?: string;
   rating?: number | null;
   ratings_count?: number | null;
+  users_count?: number | null;
+  users_read_count?: number | null;
   pages?: number | null;
   release_date?: string | null;
   language?: { language?: string } | null;
   image?: { url?: string } | null;
+  cached_tags?: HardcoverCachedTags | null;
   contributions?: { author?: { name?: string } | null }[];
   book_series?: { series?: { id: number; name: string } | null; position?: number }[];
+  book_characters?: HardcoverCharacter[];
   book_mappings?: { external_id?: string; platform?: { name?: string } }[];
 }
 
@@ -121,16 +144,24 @@ class HardcoverAPI {
           slug
           rating
           ratings_count
+          users_count
+          users_read_count
           pages
           release_date
           language { language }
           image { url }
+          cached_tags
           contributions(where: { contribution: { _eq: "Author" } }, limit: 1) {
             author { name }
           }
           book_series(limit: 3) {
             position
             series { id name }
+          }
+          book_characters(limit: 8, order_by: { position: asc_nulls_last }) {
+            only_mentioned
+            spoiler
+            character { name slug }
           }
         }
       }
