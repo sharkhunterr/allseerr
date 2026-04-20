@@ -144,6 +144,8 @@ const BookDetailPage: NextPage = () => {
         authorName: data.authorName ?? 'Unknown',
         foreignBookId: data.key,
         foreignAuthorId: data.authorKey,
+        isbn13: data.isbn13,
+        isbn10: data.isbn10,
         narratorName: data.narratorName,
         asin: isAudiobook ? data.key : undefined,
         coverUrl,

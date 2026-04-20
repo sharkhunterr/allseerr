@@ -18,13 +18,27 @@ binderyRoutes.post('/', async (req, res) => {
   const lastItem = settings.bindery[settings.bindery.length - 1];
   newBindery.id = lastItem ? lastItem.id + 1 : 0;
 
-  // Only one default per mediaType
+  // Only one download-manager default per mediaType (across Bindery AND
+  // Bookshelf — they're mutually exclusive for the same media type).
   if (req.body.isDefault) {
     settings.bindery
       .filter((b) => b.mediaType === req.body.mediaType)
       .forEach((b) => {
         b.isDefault = false;
       });
+    const bookshelfCleared = settings.bookshelf.filter(
+      (b) => b.mediaType === req.body.mediaType && b.isDefault
+    );
+    if (bookshelfCleared.length > 0) {
+      bookshelfCleared.forEach((b) => {
+        b.isDefault = false;
+      });
+      settings.bookshelf = [...settings.bookshelf];
+      logger.info(
+        `Cleared Bookshelf default(s) for ${req.body.mediaType} (Bindery is now default)`,
+        { label: 'bindery-settings' }
+      );
+    }
   }
 
   settings.bindery = [...settings.bindery, newBindery];
@@ -90,6 +104,19 @@ binderyRoutes.put<{ id: string }, BinderySettings, BinderySettings>(
         .forEach((b) => {
           b.isDefault = false;
         });
+      const bookshelfCleared = settings.bookshelf.filter(
+        (b) => b.mediaType === req.body.mediaType && b.isDefault
+      );
+      if (bookshelfCleared.length > 0) {
+        bookshelfCleared.forEach((b) => {
+          b.isDefault = false;
+        });
+        settings.bookshelf = [...settings.bookshelf];
+        logger.info(
+          `Cleared Bookshelf default(s) for ${req.body.mediaType} (Bindery is now default)`,
+          { label: 'bindery-settings' }
+        );
+      }
     }
 
     settings.bindery[binderyIndex] = {

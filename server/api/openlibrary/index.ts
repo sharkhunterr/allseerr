@@ -236,6 +236,40 @@ class OpenLibraryAPI {
   }
 
   /**
+   * Fetch editions for a work and pull a representative ISBN-13 / ISBN-10.
+   * OpenLibrary work objects don't carry ISBNs (those live on editions),
+   * so callers needing ISBN for downstream services must call this.
+   */
+  async getWorkIsbns(
+    workKey: string
+  ): Promise<{ isbn13?: string; isbn10?: string }> {
+    const key = workKey.replace(/^\/works\//, '').replace(/^\//, '');
+    try {
+      const response = await axios.get<{
+        entries?: { isbn_13?: string[]; isbn_10?: string[] }[];
+      }>(`${OPENLIBRARY_BASE}/works/${key}/editions.json`, {
+        params: { limit: 20 },
+        timeout: 10000,
+      });
+      const entries = response.data.entries ?? [];
+      const isbn13 = entries
+        .flatMap((e) => e.isbn_13 ?? [])
+        .find((v) => /^[0-9]{13}$/.test(v));
+      const isbn10 = entries
+        .flatMap((e) => e.isbn_10 ?? [])
+        .find((v) => /^[0-9Xx]{10}$/.test(v));
+      return { isbn13, isbn10 };
+    } catch (e) {
+      logger.error('OpenLibrary editions fetch failed', {
+        label: 'openlibrary',
+        workKey,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return {};
+    }
+  }
+
+  /**
    * Get author name by OpenLibrary author key (e.g., "OL12345A" or
    * "/authors/OL12345A").
    */

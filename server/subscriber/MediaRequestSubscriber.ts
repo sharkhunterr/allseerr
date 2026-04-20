@@ -21,6 +21,7 @@ import Season from '@server/entity/Season';
 import SeasonRequest from '@server/entity/SeasonRequest';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { submitToBindery } from '@server/lib/services/binderyDispatcher';
+import { submitToBookshelf } from '@server/lib/services/bookshelfDispatcher';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isEqual, truncate } from 'lodash';
@@ -1051,21 +1052,75 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
 
     const result = await submitToBindery(media, entity.type);
     if (result.success) {
-      const repo =
-        entity.type === MediaType.BOOK
-          ? getRepository(BookMedia)
-          : getRepository(AudiobookMedia);
       if (entity.type === MediaType.BOOK) {
-        await (repo as ReturnType<typeof getRepository<BookMedia>>).save(
-          media as BookMedia
-        );
+        await getRepository(BookMedia).save(media as BookMedia);
       } else {
-        await (
-          repo as ReturnType<typeof getRepository<AudiobookMedia>>
-        ).save(media as AudiobookMedia);
+        await getRepository(AudiobookMedia).save(media as AudiobookMedia);
       }
     } else if (!result.noInstance) {
       logger.warn('Bindery dispatch did not succeed', {
+        label: 'Media Request',
+        requestId: entity.id,
+        message: result.message,
+      });
+    }
+  }
+
+  /**
+   * Dispatches book/audiobook requests to Bookshelf (Readarr fork) on
+   * approval. Only runs when Bindery isn't configured to avoid double-
+   * dispatching if the user configured both for the same mediaType.
+   */
+  public async sendToBookshelf(entity: MediaRequest): Promise<void> {
+    if (entity.status !== MediaRequestStatus.APPROVED) {
+      return;
+    }
+    if (
+      entity.type !== MediaType.BOOK &&
+      entity.type !== MediaType.AUDIOBOOK
+    ) {
+      return;
+    }
+
+    const requestRepo = getRepository(MediaRequest);
+    const fullRequest = await requestRepo.findOne({
+      where: { id: entity.id },
+      relations: ['bookMedia', 'audiobookMedia'],
+    });
+    const media = fullRequest?.bookMedia ?? fullRequest?.audiobookMedia;
+    if (!media) {
+      return;
+    }
+    // Skip if a Bindery instance is currently default for this media type
+    // AND the media already has an externalId — Bindery already handled
+    // it in this subscriber pass (or in a prior run). When Bindery isn't
+    // active anymore, treat any stale externalId as orphaned and let
+    // Bookshelf take over (the user switched download managers).
+    if (media.downloadManagerExternalId) {
+      const settings = getSettings();
+      const targetType =
+        entity.type === MediaType.AUDIOBOOK ? 'audiobook' : 'book';
+      const binderyActive = settings.bindery.some(
+        (b) => b.mediaType === targetType && b.isDefault
+      );
+      if (binderyActive) {
+        return;
+      }
+      logger.info(
+        `BookMedia ${media.id} has stale downloadManagerExternalId from a removed DM; re-dispatching to Bookshelf`,
+        { label: 'Media Request', requestId: entity.id }
+      );
+    }
+
+    const result = await submitToBookshelf(media, entity.type);
+    if (result.success) {
+      if (entity.type === MediaType.BOOK) {
+        await getRepository(BookMedia).save(media as BookMedia);
+      } else {
+        await getRepository(AudiobookMedia).save(media as AudiobookMedia);
+      }
+    } else if (!result.noInstance) {
+      logger.warn('Bookshelf dispatch did not succeed', {
         label: 'Media Request',
         requestId: entity.id,
         message: result.message,
@@ -1082,6 +1137,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToRadarr(event.entity as MediaRequest);
       await this.sendToSonarr(event.entity as MediaRequest);
       await this.sendToBindery(event.entity as MediaRequest);
+      await this.sendToBookshelf(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterUpdate subscriber', {
         label: 'Media Request',
@@ -1122,6 +1178,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToRadarr(event.entity as MediaRequest);
       await this.sendToSonarr(event.entity as MediaRequest);
       await this.sendToBindery(event.entity as MediaRequest);
+      await this.sendToBookshelf(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterInsert subscriber', {
         label: 'Media Request',

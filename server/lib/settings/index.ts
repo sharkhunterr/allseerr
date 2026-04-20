@@ -106,6 +106,11 @@ export interface BinderySettings extends DVRSettings {
   mediaType: 'book' | 'audiobook';
 }
 
+export interface BookshelfSettings extends DVRSettings {
+  mediaType: 'book' | 'audiobook';
+  metadataProfileId?: number;
+}
+
 interface Quota {
   quotaLimit?: number;
   quotaDays?: number;
@@ -460,6 +465,7 @@ export interface AllSettings {
   radarr: RadarrSettings[];
   sonarr: SonarrSettings[];
   bindery: BinderySettings[];
+  bookshelf: BookshelfSettings[];
   public: PublicSettings;
   notifications: NotificationSettings;
   jobs: Record<JobId, JobSettings>;
@@ -541,6 +547,7 @@ class Settings {
       radarr: [],
       sonarr: [],
       bindery: [],
+      bookshelf: [],
       public: {
         initialized: false,
       },
@@ -849,6 +856,14 @@ class Settings {
     this.data.bindery = data;
   }
 
+  get bookshelf(): BookshelfSettings[] {
+    return this.data.bookshelf;
+  }
+
+  set bookshelf(data: BookshelfSettings[]) {
+    this.data.bookshelf = data;
+  }
+
   get game(): GameSettings {
     return this.data.game;
   }
@@ -929,6 +944,9 @@ class Settings {
           )) ||
         this.data.bindery.some(
           (b) => b.mediaType === 'book' && !!b.hostname
+        ) ||
+        this.data.bookshelf.some(
+          (b) => b.mediaType === 'book' && !!b.hostname
         ),
       audiobookEnabled:
         (this.data.book.audiobookshelf.enabled &&
@@ -937,6 +955,9 @@ class Settings {
             (l) => l.mediaType === 'audiobook'
           )) ||
         this.data.bindery.some(
+          (b) => b.mediaType === 'audiobook' && !!b.hostname
+        ) ||
+        this.data.bookshelf.some(
           (b) => b.mediaType === 'audiobook' && !!b.hostname
         ),
       gameEnabled:

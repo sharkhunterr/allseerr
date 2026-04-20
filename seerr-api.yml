@@ -762,6 +762,76 @@ components:
         - activeDirectory
         - mediaType
         - isDefault
+    BookshelfSettings:
+      type: object
+      properties:
+        id:
+          type: number
+          example: 0
+          readOnly: true
+        name:
+          type: string
+          example: 'Bookshelf Main'
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 8787
+        apiKey:
+          type: string
+          example: 'exampleapikey'
+        useSsl:
+          type: boolean
+          example: false
+        baseUrl:
+          type: string
+        activeProfileId:
+          type: number
+          example: 1
+        activeProfileName:
+          type: string
+          example: Standard
+        activeDirectory:
+          type: string
+          example: '/books'
+        metadataProfileId:
+          type: number
+          example: 1
+        mediaType:
+          type: string
+          enum: [book, audiobook]
+          example: 'book'
+        isDefault:
+          type: boolean
+          example: false
+        externalUrl:
+          type: string
+          example: http://bookshelf.example.com
+        syncEnabled:
+          type: boolean
+          example: false
+        preventSearch:
+          type: boolean
+          example: false
+        tagRequests:
+          type: boolean
+          example: false
+        tags:
+          type: array
+          items:
+            type: number
+      required:
+        - name
+        - hostname
+        - port
+        - apiKey
+        - useSsl
+        - activeProfileId
+        - activeProfileName
+        - activeDirectory
+        - mediaType
+        - isDefault
     ServarrTag:
       type: object
       properties:
@@ -3160,6 +3230,120 @@ paths:
       responses:
         '200':
           description: Returned list of profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceProfile'
+  /settings/bookshelf:
+    get:
+      summary: Get Bookshelf settings
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookshelfSettings'
+    post:
+      summary: Create Bookshelf instance
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookshelfSettings'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookshelfSettings'
+  /settings/bookshelf/test:
+    post:
+      summary: Test Bookshelf configuration
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname: { type: string }
+                port: { type: number }
+                apiKey: { type: string }
+                useSsl: { type: boolean }
+                baseUrl: { type: string }
+              required: [hostname, port, apiKey, useSsl]
+      responses:
+        '200':
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/bookshelf/{bookshelfId}:
+    put:
+      summary: Update Bookshelf instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: bookshelfId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookshelfSettings'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookshelfSettings'
+    delete:
+      summary: Delete Bookshelf instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: bookshelfId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookshelfSettings'
+  /settings/bookshelf/{bookshelfId}/profiles:
+    get:
+      summary: Get available Bookshelf profiles
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: bookshelfId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
           content:
             application/json:
               schema:

@@ -507,6 +507,16 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
 
     const enrichmentCalls: Promise<void>[] = [];
 
+    // Always fetch ISBNs from OpenLibrary editions — OL Works don't carry
+    // ISBN, but downstream services (Bookshelf, Bindery) match much more
+    // reliably on ISBN than on title/author free-text search.
+    enrichmentCalls.push(
+      openLibrary.getWorkIsbns(workKey).then((isbns) => {
+        isbn13 = isbn13 ?? isbns.isbn13;
+        isbn10 = isbn10 ?? isbns.isbn10;
+      })
+    );
+
     if (cfg.googleBooks && authorName) {
       const gb = new GoogleBooksAPI(cfg.googleBooksApiKey);
       enrichmentCalls.push(
@@ -708,8 +718,56 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
   }
 
   try {
-    // Create or reuse media entity
+    // Create or reuse media entity. When reusing, back-fill stale/empty
+    // fields with fresh metadata from the request body so downstream
+    // dispatchers (Bindery / Bookshelf) get a complete payload even when
+    // the BookMedia was created before a particular field was plumbed
+    // through the UI (e.g. legacy records with authorName="Unknown").
     let media = existingMedia;
+    if (media) {
+      const isEmpty = (v: string | number | null | undefined) =>
+        v == null ||
+        v === '' ||
+        (typeof v === 'string' && v.toLowerCase().trim() === 'unknown');
+      let changed = false;
+      const assign = <T extends Record<string, unknown>>(
+        target: T,
+        key: keyof T,
+        fresh: unknown
+      ) => {
+        if (isEmpty(target[key] as never) && fresh) {
+          (target as Record<string, unknown>)[key as string] = fresh;
+          changed = true;
+        }
+      };
+      const m = media as unknown as Record<string, unknown>;
+      assign(m, 'authorName', body.authorName);
+      assign(m, 'foreignAuthorId', body.foreignAuthorId);
+      assign(m, 'openLibraryId', body.openLibraryId);
+      assign(m, 'coverUrl', body.coverUrl);
+      assign(m, 'year', body.year);
+      assign(m, 'publisher', body.publisher);
+      if (isBook) {
+        // BookMedia-only fields
+        assign(m, 'isbn13', body.isbn13);
+        assign(m, 'isbn10', body.isbn10);
+      } else {
+        // AudiobookMedia-only
+        assign(m, 'asin', body.asin);
+        assign(m, 'narratorName', body.narratorName);
+      }
+      if (changed) {
+        if (isBook) {
+          await bookMediaRepo.save(media as BookMedia);
+        } else {
+          await audiobookMediaRepo.save(media as AudiobookMedia);
+        }
+        logger.info(
+          `Back-filled stale metadata on existing ${isBook ? 'BookMedia' : 'AudiobookMedia'} ${media.id}`,
+          { label: 'book' }
+        );
+      }
+    }
     if (!media) {
       if (isBook) {
         media = new BookMedia({

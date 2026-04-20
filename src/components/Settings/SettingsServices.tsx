@@ -8,6 +8,7 @@ import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
 import SubTabs from '@app/components/Common/SubTabs';
 import BinderyModal from '@app/components/Settings/BinderyModal';
+import BookshelfModal from '@app/components/Settings/BookshelfModal';
 import DownloadManagerSettings from '@app/components/Settings/BooksAudiobooks/DownloadManagerSettings';
 import LibraryServerSettings from '@app/components/Settings/BooksAudiobooks/LibraryServerSettings';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
@@ -27,6 +28,7 @@ import type OverrideRule from '@server/entity/OverrideRule';
 import type { OverrideRuleResultsResponse } from '@server/interfaces/api/overrideRuleInterfaces';
 import type {
   BinderySettings,
+  BookshelfSettings,
   RadarrSettings,
   SonarrSettings,
 } from '@server/lib/settings';
@@ -57,6 +59,13 @@ const messages = defineMessages('components.Settings', {
   deletebinderyserver: 'Delete Bindery Server',
   noDefaultBindery:
     'At least one Bindery server must be marked as default for {mediaType} requests to be processed.',
+  addbookshelf: 'Add Bookshelf Server',
+  bookshelfsettings: 'Bookshelf Settings',
+  bookshelfSettingsDescription:
+    'Configure your Bookshelf server(s) below. Bookshelf is a Readarr fork (revival) with the same API; it handles automated downloading and management of books and audiobooks.',
+  deletebookshelfserver: 'Delete Bookshelf Server',
+  noDefaultBookshelf:
+    'At least one Bookshelf server must be marked as default for {mediaType} requests to be processed.',
   mediaTypeBook: 'book',
   mediaTypeAudiobook: 'audiobook',
   binderyMediaTypeBook: 'Books',
@@ -715,6 +724,145 @@ const BinderyServices = ({ mediaType }: BinderyServicesProps) => {
   );
 };
 
+interface BookshelfServicesProps {
+  mediaType: 'book' | 'audiobook';
+}
+
+const BookshelfServices = ({ mediaType }: BookshelfServicesProps) => {
+  const intl = useIntl();
+  const {
+    data: bookshelfData,
+    error: bookshelfError,
+    mutate: revalidateBookshelf,
+  } = useSWR<BookshelfSettings[]>('/api/v1/settings/bookshelf');
+  const [editBookshelfModal, setEditBookshelfModal] = useState<{
+    open: boolean;
+    bookshelf: BookshelfSettings | null;
+  }>({ open: false, bookshelf: null });
+  const [deleteBookshelfModal, setDeleteBookshelfModal] = useState<{
+    open: boolean;
+    serverId: number | null;
+  }>({ open: false, serverId: null });
+
+  const filtered = (bookshelfData ?? []).filter(
+    (b) => b.mediaType === mediaType
+  );
+
+  const deleteServer = async () => {
+    await axios.delete(
+      `/api/v1/settings/bookshelf/${deleteBookshelfModal.serverId}`
+    );
+    setDeleteBookshelfModal({ open: false, serverId: null });
+    revalidateBookshelf();
+    mutate('/api/v1/settings/public');
+  };
+
+  return (
+    <>
+      <div className="mb-6">
+        <h3 className="heading">
+          {intl.formatMessage(messages.bookshelfsettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.bookshelfSettingsDescription)}
+        </p>
+      </div>
+      {editBookshelfModal.open && (
+        <BookshelfModal
+          bookshelf={editBookshelfModal.bookshelf}
+          defaultMediaType={mediaType}
+          onClose={() =>
+            setEditBookshelfModal({ open: false, bookshelf: null })
+          }
+          onSave={() => {
+            revalidateBookshelf();
+            mutate('/api/v1/settings/public');
+            setEditBookshelfModal({ open: false, bookshelf: null });
+          }}
+        />
+      )}
+      <Transition
+        as={Fragment}
+        show={deleteBookshelfModal.open}
+        enter="transition-opacity ease-in-out duration-300"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition-opacity ease-in-out duration-300"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <Modal
+          okText={intl.formatMessage(globalMessages.delete)}
+          okButtonType="danger"
+          onOk={() => deleteServer()}
+          onCancel={() =>
+            setDeleteBookshelfModal({ open: false, serverId: null })
+          }
+          title={intl.formatMessage(messages.deletebookshelfserver)}
+        >
+          {intl.formatMessage(messages.deleteserverconfirm)}
+        </Modal>
+      </Transition>
+      <div className="section">
+        {!bookshelfData && !bookshelfError && <LoadingSpinner />}
+        {bookshelfData && !bookshelfError && (
+          <>
+            {filtered.length > 0 && !filtered.some((b) => b.isDefault) && (
+              <Alert
+                title={intl.formatMessage(messages.noDefaultBookshelf, {
+                  mediaType: intl.formatMessage(
+                    mediaType === 'book'
+                      ? messages.mediaTypeBook
+                      : messages.mediaTypeAudiobook
+                  ),
+                })}
+              />
+            )}
+            <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((bookshelf) => (
+                <ServerInstance
+                  key={`bookshelf-config-${bookshelf.id}`}
+                  name={bookshelf.name}
+                  hostname={bookshelf.hostname}
+                  port={bookshelf.port}
+                  profileName={bookshelf.activeProfileName}
+                  isSSL={bookshelf.useSsl}
+                  isDefault={bookshelf.isDefault}
+                  isBindery
+                  externalUrl={bookshelf.externalUrl}
+                  onEdit={() =>
+                    setEditBookshelfModal({ open: true, bookshelf })
+                  }
+                  onDelete={() =>
+                    setDeleteBookshelfModal({
+                      open: true,
+                      serverId: bookshelf.id,
+                    })
+                  }
+                />
+              ))}
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    className="mb-3 mt-3"
+                    onClick={() =>
+                      setEditBookshelfModal({ open: true, bookshelf: null })
+                    }
+                  >
+                    <PlusIcon />
+                    <span>{intl.formatMessage(messages.addbookshelf)}</span>
+                  </Button>
+                </div>
+              </li>
+            </ul>
+          </>
+        )}
+      </div>
+    </>
+  );
+};
+
 const SettingsServices = () => {
   const intl = useIntl();
   const [activeTab, setActiveTab] = useState<
@@ -745,6 +893,7 @@ const SettingsServices = () => {
       {activeTab === 'books' && (
         <div className="space-y-8">
           <BinderyServices mediaType="book" />
+          <BookshelfServices mediaType="book" />
           <DownloadManagerSettings mediaTypeFilter="book" />
           <LibraryServerSettings mediaTypeFilter="book" />
         </div>
@@ -752,6 +901,7 @@ const SettingsServices = () => {
       {activeTab === 'audiobooks' && (
         <div className="space-y-8">
           <BinderyServices mediaType="audiobook" />
+          <BookshelfServices mediaType="audiobook" />
           <DownloadManagerSettings mediaTypeFilter="audiobook" />
           <LibraryServerSettings mediaTypeFilter="audiobook" />
         </div>
