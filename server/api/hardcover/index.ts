@@ -32,10 +32,23 @@ class HardcoverAPI {
     this.apiKey = apiKey || undefined;
   }
 
-  private async gql<T>(query: string, variables?: Record<string, unknown>): Promise<T | null> {
-    if (!this.apiKey) {
-      return null;
-    }
+  private normalisedAuth(): string | null {
+    if (!this.apiKey) return null;
+    // Accept tokens pasted with or without the "Bearer " prefix — Hardcover's
+    // docs page shows it prefixed, which trips up users who copy the whole
+    // line and end up double-prefixed.
+    const trimmed = this.apiKey.trim();
+    return trimmed.toLowerCase().startsWith('bearer ')
+      ? trimmed
+      : `Bearer ${trimmed}`;
+  }
+
+  private async gql<T>(
+    query: string,
+    variables?: Record<string, unknown>
+  ): Promise<{ data: T | null; error?: string }> {
+    const auth = this.normalisedAuth();
+    if (!auth) return { data: null, error: 'missing api key' };
     try {
       const response = await axios.post<{
         data?: T;
@@ -45,26 +58,47 @@ class HardcoverAPI {
         { query, variables },
         {
           headers: {
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: auth,
             'Content-Type': 'application/json',
+            'User-Agent': 'allseerr',
           },
           timeout: 15000,
         }
       );
       if (response.data.errors?.length) {
+        const errorMessage = response.data.errors
+          .map((e) => e.message)
+          .join('; ');
         logger.warn('Hardcover GraphQL returned errors', {
           label: 'hardcover',
-          errors: response.data.errors.map((e) => e.message).join('; '),
+          errors: errorMessage,
         });
-        return null;
+        return { data: null, error: errorMessage };
       }
-      return response.data.data ?? null;
+      return { data: response.data.data ?? null };
     } catch (e) {
+      const status = (e as { response?: { status?: number } })?.response
+        ?.status;
+      const body = (e as { response?: { data?: unknown } })?.response?.data;
+      const bodyStr =
+        typeof body === 'string'
+          ? body.slice(0, 300)
+          : body
+            ? JSON.stringify(body).slice(0, 300)
+            : undefined;
+      const message =
+        status === 401 || status === 403
+          ? `${status} ${status === 401 ? 'Unauthorized' : 'Forbidden'} — token rejected by Hardcover${bodyStr ? ` (${bodyStr})` : ''}`
+          : e instanceof Error
+            ? e.message
+            : String(e);
       logger.error('Hardcover GraphQL call failed', {
         label: 'hardcover',
-        error: e instanceof Error ? e.message : String(e),
+        status,
+        error: message,
+        body: bodyStr,
       });
-      return null;
+      return { data: null, error: message };
     }
   }
 
@@ -101,11 +135,34 @@ class HardcoverAPI {
         }
       }
     `;
-    const result = await this.gql<{ books: HardcoverSearchHit[] }>(
+    const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
       gqlQuery,
       { q: `%${query}%` }
     );
-    return result?.books?.[0] ?? null;
+    return data?.books?.[0] ?? null;
+  }
+
+  /**
+   * Minimal connectivity check — returns a descriptive error message on
+   * failure so the settings UI can tell the user exactly what went wrong.
+   */
+  async testConnection(): Promise<{ success: boolean; message: string }> {
+    const { data, error } = await this.gql<{ books: { id: number }[] }>(
+      'query { books(limit: 1) { id } }'
+    );
+    if (error) {
+      return { success: false, message: error };
+    }
+    if (!data) {
+      return {
+        success: false,
+        message: 'Hardcover returned no data (unexpected)',
+      };
+    }
+    return {
+      success: true,
+      message: `Connected to Hardcover (${data.books.length} sample book returned)`,
+    };
   }
 
   /**
@@ -144,10 +201,10 @@ class HardcoverAPI {
         }
       }
     `;
-    const result = await this.gql<{
+    const { data } = await this.gql<{
       editions: { book: HardcoverSearchHit }[];
     }>(gqlQuery, { isbn });
-    return result?.editions?.[0]?.book ?? null;
+    return data?.editions?.[0]?.book ?? null;
   }
 }
 

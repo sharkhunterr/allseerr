@@ -79,20 +79,8 @@ bookSettingsRoutes.post('/metadata-providers/test', async (req, res) => {
         });
       }
       const hc = new HardcoverAPI(body.apiKey);
-      // A trivially small query — Hardcover returns {data:{books:[...]}}
-      // for any term; an auth failure comes back as 401 or GraphQL error.
-      const result = await hc.searchBook('test');
-      if (result === null) {
-        return res.status(400).json({
-          success: false,
-          message:
-            'Hardcover rejected the request. Check the token and try again.',
-        });
-      }
-      return res.status(200).json({
-        success: true,
-        message: `Connected to Hardcover (found sample book "${result.title}")`,
-      });
+      const result = await hc.testConnection();
+      return res.status(200).json(result);
     }
 
     if (body.provider === 'googleBooks') {
