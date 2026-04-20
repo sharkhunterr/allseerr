@@ -1,3 +1,5 @@
+import GoogleBooksAPI from '@server/api/googlebooks';
+import HardcoverAPI from '@server/api/hardcover';
 import { getRepository } from '@server/datasource';
 import {
   DownloadManagerInstance,
@@ -48,6 +50,76 @@ bookSettingsRoutes.put('/metadata-providers', async (req, res) => {
   };
   await settings.save();
   return res.status(200).json(settings.book.metadataProviders);
+});
+
+/**
+ * Test a metadata provider's credentials without saving. Called from the
+ * settings UI "Test" button. Body: { provider: 'hardcover' | 'googleBooks',
+ * apiKey?: string }. For hardcover the key is required; for googleBooks
+ * the key is optional (unauthenticated calls also work, just rate-limited).
+ */
+bookSettingsRoutes.post('/metadata-providers/test', async (req, res) => {
+  const body = req.body as {
+    provider?: 'hardcover' | 'googleBooks';
+    apiKey?: string;
+  };
+
+  if (!body.provider) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'provider is required' });
+  }
+
+  try {
+    if (body.provider === 'hardcover') {
+      if (!body.apiKey) {
+        return res.status(400).json({
+          success: false,
+          message: 'Hardcover requires an API token',
+        });
+      }
+      const hc = new HardcoverAPI(body.apiKey);
+      // A trivially small query — Hardcover returns {data:{books:[...]}}
+      // for any term; an auth failure comes back as 401 or GraphQL error.
+      const result = await hc.searchBook('test');
+      if (result === null) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Hardcover rejected the request. Check the token and try again.',
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        message: `Connected to Hardcover (found sample book "${result.title}")`,
+      });
+    }
+
+    if (body.provider === 'googleBooks') {
+      const gb = new GoogleBooksAPI(body.apiKey);
+      const { results, totalResults } = await gb.search('test', 1, 1);
+      return res.status(200).json({
+        success: true,
+        message: `Google Books reachable (${totalResults} results for "test"${
+          results[0] ? `, first: "${results[0].title}"` : ''
+        })`,
+      });
+    }
+
+    return res
+      .status(400)
+      .json({ success: false, message: `Unknown provider: ${body.provider}` });
+  } catch (e) {
+    logger.error('Metadata provider test failed', {
+      label: 'book-settings',
+      provider: body.provider,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(200).json({
+      success: false,
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
 });
 
 // ===== Download Manager Instance Routes =====

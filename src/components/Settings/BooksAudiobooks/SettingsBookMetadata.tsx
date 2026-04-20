@@ -4,9 +4,10 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
-import { ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
+import { ArrowDownOnSquareIcon, BeakerIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { Field, Form, Formik } from 'formik';
+import { useState } from 'react';
 import { useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
@@ -35,6 +36,10 @@ const messages = defineMessages(
     hardcoverHelp:
       'Free GraphQL book API (hardcover.app). Provides ratings, genres, and series data. Get an API token from your Hardcover account settings.',
     hardcoverApiKey: 'Hardcover API token',
+    test: 'Test',
+    testing: 'Testing…',
+    testSuccess: 'Test OK: {message}',
+    testFailure: 'Test failed: {message}',
     saved: 'Book metadata provider settings saved.',
     saveFailed: 'Failed to save book metadata provider settings.',
   }
@@ -52,6 +57,39 @@ interface MetadataProvidersConfig {
 const SettingsBookMetadata = () => {
   const intl = useIntl();
   const { addToast } = useToasts();
+  const [testing, setTesting] = useState<string | null>(null);
+
+  const runTest = async (
+    provider: 'hardcover' | 'googleBooks',
+    apiKey?: string
+  ) => {
+    setTesting(provider);
+    try {
+      const resp = await axios.post<{ success: boolean; message: string }>(
+        '/api/v1/settings/book/metadata-providers/test',
+        { provider, apiKey }
+      );
+      addToast(
+        intl.formatMessage(
+          resp.data.success ? messages.testSuccess : messages.testFailure,
+          { message: resp.data.message }
+        ),
+        {
+          appearance: resp.data.success ? 'success' : 'error',
+          autoDismiss: true,
+        }
+      );
+    } catch (e) {
+      addToast(
+        intl.formatMessage(messages.testFailure, {
+          message: e instanceof Error ? e.message : String(e),
+        }),
+        { appearance: 'error', autoDismiss: true }
+      );
+    } finally {
+      setTesting(null);
+    }
+  };
   const { data: binderyInstances } = useSWR<
     { mediaType?: string; isDefault?: boolean }[]
   >('/api/v1/settings/bindery');
@@ -129,7 +167,10 @@ const SettingsBookMetadata = () => {
                     type="checkbox"
                     id="bindery"
                     name="bindery"
-                    disabled={!binderyConfigured}
+                    // Only block ENABLING when no instance exists —
+                    // always allow disabling so users can clear an
+                    // obsolete toggle after removing the service.
+                    disabled={!binderyConfigured && !values.bindery}
                     onChange={() =>
                       setFieldValue('bindery', !values.bindery)
                     }
@@ -154,7 +195,7 @@ const SettingsBookMetadata = () => {
                     type="checkbox"
                     id="bookshelf"
                     name="bookshelf"
-                    disabled={!bookshelfConfigured}
+                    disabled={!bookshelfConfigured && !values.bookshelf}
                     onChange={() =>
                       setFieldValue('bookshelf', !values.bookshelf)
                     }
@@ -195,6 +236,23 @@ const SettingsBookMetadata = () => {
                         name="googleBooksApiKey"
                       />
                     </div>
+                    <div className="mt-2 flex justify-end">
+                      <Button
+                        type="button"
+                        buttonType="warning"
+                        disabled={testing === 'googleBooks'}
+                        onClick={() =>
+                          runTest('googleBooks', values.googleBooksApiKey)
+                        }
+                      >
+                        <BeakerIcon />
+                        <span>
+                          {testing === 'googleBooks'
+                            ? intl.formatMessage(messages.testing)
+                            : intl.formatMessage(messages.test)}
+                        </span>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -228,6 +286,25 @@ const SettingsBookMetadata = () => {
                         id="hardcoverApiKey"
                         name="hardcoverApiKey"
                       />
+                    </div>
+                    <div className="mt-2 flex justify-end">
+                      <Button
+                        type="button"
+                        buttonType="warning"
+                        disabled={
+                          testing === 'hardcover' || !values.hardcoverApiKey
+                        }
+                        onClick={() =>
+                          runTest('hardcover', values.hardcoverApiKey)
+                        }
+                      >
+                        <BeakerIcon />
+                        <span>
+                          {testing === 'hardcover'
+                            ? intl.formatMessage(messages.testing)
+                            : intl.formatMessage(messages.test)}
+                        </span>
+                      </Button>
                     </div>
                   </div>
                 </div>

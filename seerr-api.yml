@@ -5000,6 +5000,34 @@ paths:
             application/json:
               schema:
                 type: object
+  /settings/book/metadata-providers/test:
+    post:
+      summary: Test a book metadata provider's credentials
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  enum: [hardcover, googleBooks]
+                apiKey:
+                  type: string
+              required: [provider]
+      responses:
+        '200':
+          description: Test complete (see success flag in body)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
   /settings/book/download-managers:
     get:
       summary: Get book download manager instances
