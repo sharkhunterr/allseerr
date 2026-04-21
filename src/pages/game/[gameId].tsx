@@ -3,6 +3,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import GameRequestModal from '@app/components/GameRequestModal';
+import StatusBadge from '@app/components/StatusBadge';
 import useSettings from '@app/hooks/useSettings';
 import defineMessages from '@app/utils/defineMessages';
 import { ExclamationTriangleIcon, PlayIcon } from '@heroicons/react/24/outline';
@@ -21,7 +22,6 @@ const messages = defineMessages('pages.GameDetail', {
   partiallyAvailable: 'Partially Available',
   playOnRomm: 'Play on ROMM',
   selectPlatform: 'Select platform...',
-  requested: 'Requested',
   awaitingAddition: 'Approved — Awaiting Manual Addition',
   manualWorkflow:
     'Games are added manually by the admin. There is no automatic download.',
@@ -58,8 +58,7 @@ const PlayOnRommAction = ({
 
   if (platforms.length === 0) return null;
 
-  const current =
-    platforms.find((p) => p.id === selected) ?? platforms[0];
+  const current = platforms.find((p) => p.id === selected) ?? platforms[0];
 
   if (platforms.length === 1) {
     return (
@@ -135,10 +134,11 @@ const PlatformRequestButton = ({
 
   const effectiveStatus = localOverride ?? platform.mediaStatus ?? null;
   const isAvailable = effectiveStatus === MediaStatus.AVAILABLE;
-  const isRequested =
-    effectiveStatus !== null &&
-    effectiveStatus !== undefined &&
-    effectiveStatus !== MediaStatus.UNKNOWN;
+  const showRequestButton =
+    effectiveStatus === null ||
+    effectiveStatus === undefined ||
+    effectiveStatus === MediaStatus.UNKNOWN ||
+    effectiveStatus === MediaStatus.DELETED;
 
   const handleRequest = async () => {
     setIsRequesting(true);
@@ -180,16 +180,7 @@ const PlatformRequestButton = ({
         <span className="text-sm font-medium text-gray-200">
           {platform.name}
         </span>
-        {isAvailable && (
-          <span className="rounded-full bg-green-500 px-2 py-0.5 text-xs font-bold text-white">
-            {intl.formatMessage(messages.available)}
-          </span>
-        )}
-        {isRequested && !isAvailable && (
-          <span className="rounded-full bg-yellow-500 px-2 py-0.5 text-xs font-bold text-white">
-            {intl.formatMessage(messages.requested)}
-          </span>
-        )}
+        <StatusBadge status={effectiveStatus ?? undefined} title={game.title} />
       </div>
       {isAvailable && platform.rommUrl ? (
         <a href={platform.rommUrl} target="_blank" rel="noopener noreferrer">
@@ -198,20 +189,16 @@ const PlatformRequestButton = ({
             <span>{intl.formatMessage(messages.playOnRomm)}</span>
           </Button>
         </a>
-      ) : isAvailable || isRequested || !gameEnabled ? null : (
+      ) : showRequestButton && gameEnabled ? (
         <Button
           buttonType="primary"
           buttonSize="sm"
           disabled={isRequesting}
           onClick={handleRequest}
         >
-          {isRequesting ? (
-            <Spinner />
-          ) : (
-            intl.formatMessage(messages.request)
-          )}
+          {isRequesting ? <Spinner /> : intl.formatMessage(messages.request)}
         </Button>
-      )}
+      ) : null}
     </div>
   );
 };

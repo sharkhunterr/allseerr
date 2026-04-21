@@ -3,6 +3,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tag from '@app/components/Common/Tag';
+import StatusBadge from '@app/components/StatusBadge';
 import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -23,8 +24,6 @@ import useSWR from 'swr';
 const messages = defineMessages('pages.BookDetail', {
   requestBook: 'Request Book',
   requestAudiobook: 'Request Audiobook',
-  available: 'Available',
-  requested: 'Already Requested',
   requestSuccess: 'Request submitted successfully!',
   requestFailed: 'Failed to submit request.',
   notFound: 'Not found.',
@@ -162,10 +161,10 @@ const BookDetailPage: NextPage = () => {
       : undefined);
 
   const isAvailable = data.mediaStatus === MediaStatus.AVAILABLE;
-  const isRequested =
-    data.mediaStatus !== null &&
-    data.mediaStatus !== undefined &&
-    data.mediaStatus !== MediaStatus.UNKNOWN;
+  const showRequestButton =
+    !data.mediaStatus ||
+    data.mediaStatus === MediaStatus.UNKNOWN ||
+    data.mediaStatus === MediaStatus.DELETED;
 
   const handleRequest = async () => {
     setIsRequesting(true);
@@ -240,22 +239,14 @@ const BookDetailPage: NextPage = () => {
             >
               {isAudiobook ? 'Audiobook' : 'Book'}
             </span>
-            {isAvailable && (
-              <span className="rounded-full bg-green-500 px-3 py-1 text-xs font-bold text-white">
-                {intl.formatMessage(messages.available)}
-              </span>
-            )}
-            {isRequested && !isAvailable && (
-              <span className="rounded-full bg-yellow-500 px-3 py-1 text-xs font-bold text-white">
-                {intl.formatMessage(messages.requested)}
-              </span>
-            )}
+            <StatusBadge
+              status={data.mediaStatus ?? undefined}
+              title={data.title}
+            />
           </div>
           <h1 data-testid="media-title">
             {data.title}{' '}
-            {data.year && (
-              <span className="media-year">({data.year})</span>
-            )}
+            {data.year && <span className="media-year">({data.year})</span>}
           </h1>
           {data.subtitle && (
             <p className="text-lg text-gray-400">{data.subtitle}</p>
@@ -285,34 +276,25 @@ const BookDetailPage: NextPage = () => {
           )}
         </div>
         <div className="media-actions">
-          {isAvailable ? (
-            data.libraryServerUrl ? (
-              <a
-                href={data.libraryServerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button buttonType="primary">
-                  <PlayIcon />
-                  <span>
-                    {intl.formatMessage(
-                      isAudiobook
-                        ? messages.playOnAudiobookshelf
-                        : messages.openInLibrary
-                    )}
-                  </span>
-                </Button>
-              </a>
-            ) : (
-              <span className="rounded bg-green-600 px-4 py-2 font-bold text-white">
-                {intl.formatMessage(messages.available)}
-              </span>
-            )
-          ) : isRequested ? (
-            <span className="rounded bg-yellow-600 px-4 py-2 font-bold text-white">
-              {intl.formatMessage(messages.requested)}
-            </span>
-          ) : canRequest ? (
+          {isAvailable && data.libraryServerUrl && (
+            <a
+              href={data.libraryServerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button buttonType="primary">
+                <PlayIcon />
+                <span>
+                  {intl.formatMessage(
+                    isAudiobook
+                      ? messages.playOnAudiobookshelf
+                      : messages.openInLibrary
+                  )}
+                </span>
+              </Button>
+            </a>
+          )}
+          {showRequestButton && canRequest && (
             <Button
               buttonType="primary"
               disabled={isRequesting}
@@ -326,7 +308,7 @@ const BookDetailPage: NextPage = () => {
                 )
               )}
             </Button>
-          ) : null}
+          )}
         </div>
       </div>
       <div className="media-overview">
@@ -346,9 +328,7 @@ const BookDetailPage: NextPage = () => {
           )}
         </div>
         <div className="media-overview-right">
-          {(data.authorName ||
-            data.authorPhotoUrl ||
-            data.authorBio) && (
+          {(data.authorName || data.authorPhotoUrl || data.authorBio) && (
             <button
               type="button"
               disabled={!data.authorKey}

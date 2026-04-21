@@ -334,6 +334,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           title: string;
           coverUrl?: string;
           igdbId: number;
+          status?: MediaStatus | null;
         }
       | undefined;
     const bm = typedRequest.bookMedia as
@@ -343,6 +344,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           openLibraryId?: string;
           foreignBookId?: string;
           covers?: number[];
+          status?: MediaStatus | null;
         }
       | undefined;
     const am = typedRequest.audiobookMedia as
@@ -352,6 +354,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           openLibraryId?: string;
           foreignBookId?: string;
           covers?: number[];
+          status?: MediaStatus | null;
         }
       | undefined;
 
@@ -386,7 +389,19 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
     }
 
     const statusBadge = (() => {
-      switch (requestData?.status ?? request.status) {
+      const reqStatus = requestData?.status ?? request.status;
+      // Mirror movies/TV: drive the badge from the underlying media's
+      // status (PENDING/PROCESSING/AVAILABLE) so an approved request
+      // reads as "Requested" (blue), not "Approved" (green). Only the
+      // request-only terminal states still use the request status.
+      if (
+        reqStatus !== MediaRequestStatus.DECLINED &&
+        reqStatus !== MediaRequestStatus.FAILED
+      ) {
+        const mediaStatus = bm?.status ?? am?.status ?? gm?.status ?? undefined;
+        return <StatusBadge status={mediaStatus} title={infoTitle} />;
+      }
+      switch (reqStatus) {
         case MediaRequestStatus.PENDING:
           return (
             <Badge badgeType="warning">

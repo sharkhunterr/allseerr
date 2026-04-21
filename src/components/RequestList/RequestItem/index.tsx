@@ -179,6 +179,7 @@ const getNonTmdbInfo = (
         coverUrl?: string;
         igdbId: number;
         platformName?: string;
+        status?: MediaStatus | null;
       }
     | undefined;
   const bm = request.bookMedia as
@@ -188,6 +189,7 @@ const getNonTmdbInfo = (
         openLibraryId?: string;
         foreignBookId?: string;
         covers?: number[];
+        status?: MediaStatus | null;
       }
     | undefined;
   const am = request.audiobookMedia as
@@ -197,6 +199,7 @@ const getNonTmdbInfo = (
         openLibraryId?: string;
         foreignBookId?: string;
         covers?: number[];
+        status?: MediaStatus | null;
       }
     | undefined;
 
@@ -565,6 +568,20 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
   if (isNonTmdb) {
     const info = getNonTmdbInfo(request);
 
+    // Show the underlying media's status the same way movies/TV do — that
+    // way an APPROVED request reads as "Requested" (blue, PROCESSING) and
+    // an AVAILABLE one as green, matching the detail-page badge.
+    // Fall back to the request status only for terminal request states
+    // that aren't reflected on the media (DECLINED, FAILED).
+    const mediaWithStatus = (request.bookMedia ??
+      request.audiobookMedia ??
+      request.gameMedia) as { status?: MediaStatus | null } | undefined;
+    const mediaStatus = mediaWithStatus?.status ?? null;
+    const requestStatus = requestData?.status ?? request.status;
+    const showRequestBadge =
+      requestStatus === MediaRequestStatus.DECLINED ||
+      requestStatus === MediaRequestStatus.FAILED;
+
     return (
       <div
         ref={ref}
@@ -626,9 +643,14 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               <span className="card-field-name">
                 {intl.formatMessage(globalMessages.status)}
               </span>
-              <NonTmdbStatusBadge
-                status={requestData?.status ?? request.status}
-              />
+              {showRequestBadge ? (
+                <NonTmdbStatusBadge status={requestStatus} />
+              ) : (
+                <StatusBadge
+                  status={mediaStatus ?? undefined}
+                  title={info.title}
+                />
+              )}
             </div>
             {renderMetadata()}
           </div>
