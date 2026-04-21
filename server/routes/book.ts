@@ -153,6 +153,21 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       providerCfg.preferredLanguage?.toLowerCase().trim() ?? '';
     const languagePolicy = providerCfg.languagePolicy ?? 'prefer';
 
+    type ProviderId =
+      | 'openlibrary'
+      | 'bindery'
+      | 'googlebooks'
+      | 'hardcover'
+      | 'bookshelf';
+
+    type ProviderIds = {
+      openlibrary?: string;
+      bindery?: string;
+      googlebooks?: string;
+      hardcover?: number;
+      bookshelf?: number;
+    };
+
     type AggregatedBook = {
       openLibraryId: string;
       title: string;
@@ -167,12 +182,8 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       subjects?: string[];
       description?: string;
       language?: string;
-      source:
-        | 'openlibrary'
-        | 'bindery'
-        | 'googlebooks'
-        | 'hardcover'
-        | 'bookshelf';
+      source: ProviderId;
+      providerIds: ProviderIds;
     };
 
     const isOLKey = (key?: string) => !!key?.startsWith('/works/');
@@ -199,19 +210,24 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
     if (providerCfg.hardcover && providerCfg.hardcoverApiKey) {
       const hcForSeries = new HardcoverAPI(providerCfg.hardcoverApiKey);
       seriesPromise = hcForSeries
-        .searchSeries(query, 3)
+        .searchSeries(query, 5)
         .then((hits) =>
-          hits.map(
-            (s): SeriesHit => ({
-              type: 'series',
-              key: `hardcover:${s.id}`,
-              name: s.name,
-              authorName: s.authorName,
-              coverUrl: s.coverUrl,
-              memberCount: s.booksCount,
-              description: s.description,
-            })
-          )
+          hits
+            // Hardcover sometimes returns stub series with 0 books —
+            // no use linking to an empty page, so drop them.
+            .filter((s) => (s.booksCount ?? 0) > 0)
+            .slice(0, 3)
+            .map(
+              (s): SeriesHit => ({
+                type: 'series',
+                key: `hardcover:${s.id}`,
+                name: s.name,
+                authorName: s.authorName,
+                coverUrl: s.coverUrl,
+                memberCount: s.booksCount,
+                description: s.description,
+              })
+            )
         )
         .catch(() => [] as SeriesHit[]);
     }
@@ -221,7 +237,13 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         .search(query, page, limit, preferredLanguage || undefined)
         .then(({ results, totalResults }) => {
           olTotal = totalResults;
-          return results.map((r) => ({ ...r, source: 'openlibrary' as const }));
+          return results.map(
+            (r): AggregatedBook => ({
+              ...r,
+              source: 'openlibrary',
+              providerIds: { openlibrary: r.openLibraryId },
+            })
+          );
         })
         .catch(() => [] as AggregatedBook[])
     );
@@ -240,22 +262,29 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
             .searchBooks(query)
             .then((items) =>
               items.slice(0, limit).map(
-                (b): AggregatedBook => ({
-                  openLibraryId: b.foreignBookId.startsWith('OL')
+                (b): AggregatedBook => {
+                  const olId = b.foreignBookId.startsWith('OL')
                     ? `/works/${b.foreignBookId}`
-                    : b.foreignBookId,
-                  title: b.title,
-                  authorName: b.authorName ?? 'Unknown Author',
-                  authorKey: b.foreignAuthorId,
-                  coverUrl: b.imageUrl?.startsWith('http')
-                    ? b.imageUrl
-                    : undefined,
-                  year: b.releaseDate
-                    ? parseInt(b.releaseDate.slice(0, 4), 10) || undefined
-                    : undefined,
-                  language: b.language,
-                  source: 'bindery',
-                })
+                    : b.foreignBookId;
+                  return {
+                    openLibraryId: olId,
+                    title: b.title,
+                    authorName: b.authorName ?? 'Unknown Author',
+                    authorKey: b.foreignAuthorId,
+                    coverUrl: b.imageUrl?.startsWith('http')
+                      ? b.imageUrl
+                      : undefined,
+                    year: b.releaseDate
+                      ? parseInt(b.releaseDate.slice(0, 4), 10) || undefined
+                      : undefined,
+                    language: b.language,
+                    source: 'bindery',
+                    providerIds: {
+                      bindery: b.foreignBookId,
+                      ...(isOLKey(olId) ? { openlibrary: olId } : {}),
+                    },
+                  };
+                }
               )
             )
             .catch(() => [] as AggregatedBook[])
@@ -284,6 +313,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
                 description: r.description,
                 language: r.language,
                 source: 'googlebooks',
+                providerIds: { googlebooks: r.googleBookId },
               })
             )
           )
@@ -306,6 +336,11 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
                   ? olMap.external_id
                   : `/works/${olMap.external_id}`
                 : `hardcover:${h.id}`;
+              const gbMap = h.book_mappings?.find((m) =>
+                ['google books', 'googlebooks'].includes(
+                  m.platform?.name?.toLowerCase() ?? ''
+                )
+              );
               return {
                 openLibraryId: olKey,
                 title: h.title,
@@ -319,6 +354,13 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
                   : undefined,
                 pageCount: h.pages ?? undefined,
                 source: 'hardcover',
+                providerIds: {
+                  hardcover: h.id,
+                  ...(isOLKey(olKey) ? { openlibrary: olKey } : {}),
+                  ...(gbMap?.external_id
+                    ? { googlebooks: gbMap.external_id }
+                    : {}),
+                },
               };
             })
           )
@@ -344,15 +386,16 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
                 const olMappings = (loose.book_mappings ?? loose.links) as
                   | Array<Record<string, unknown>>
                   | undefined;
-                const olKey = olMappings
+                const olKeyRaw = olMappings
                   ?.map((m) => String(m.foreignId ?? m.external_id ?? ''))
                   .find((v) => v.startsWith('OL') || v.startsWith('/works/'));
+                const olKey = olKeyRaw
+                  ? olKeyRaw.startsWith('/works/')
+                    ? olKeyRaw
+                    : `/works/${olKeyRaw}`
+                  : `bookshelf:${b.id}`;
                 return {
-                  openLibraryId: olKey
-                    ? olKey.startsWith('/works/')
-                      ? olKey
-                      : `/works/${olKey}`
-                    : `bookshelf:${b.id}`,
+                  openLibraryId: olKey,
                   title: b.title,
                   authorName:
                     ((loose.author as { authorName?: string })?.authorName ??
@@ -366,6 +409,10 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
                       ) || undefined
                     : undefined,
                   source: 'bookshelf',
+                  providerIds: {
+                    bookshelf: b.id,
+                    ...(isOLKey(olKey) ? { openlibrary: olKey } : {}),
+                  },
                 };
               })
             )
@@ -392,7 +439,6 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       openlibrary: 2,
       googlebooks: 1,
     };
-    const byKey = new Map<string, AggregatedBook>();
     const mergeInto = (
       winner: AggregatedBook,
       loser: AggregatedBook
@@ -421,18 +467,75 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       subjects: Array.from(
         new Set([...(winner.subjects ?? []), ...(loser.subjects ?? [])])
       ).slice(0, 20),
+      providerIds: { ...loser.providerIds, ...winner.providerIds },
     });
 
+    // Multi-key grouping. Each record exposes several identity signals
+    // (OL work key, ISBN-13, ISBN-10, normalised title+author). Two
+    // records sharing ANY signal land in the same group, then the group
+    // collapses into one AggregatedBook keeping the highest-priority
+    // source's identity but unioning providerIds and enrichment fields.
+    //
+    // Matters because OL search rarely includes ISBN while Google Books /
+    // Hardcover do — and Hardcover's OL mapping lets us cross-reference
+    // with OL hits that share the same `/works/OLxxx` key but have a
+    // different (localised) title.
+    const itemKeys = (b: AggregatedBook): string[] => {
+      const keys: string[] = [];
+      if (isOLKey(b.openLibraryId)) keys.push(`ol:${b.openLibraryId}`);
+      if (b.isbn13) keys.push(`i13:${b.isbn13}`);
+      if (b.isbn10) keys.push(`i10:${b.isbn10}`);
+      keys.push(`ta:${normalizeKey(b.title, b.authorName)}`);
+      return keys;
+    };
+
+    const groupItems = new Map<number, AggregatedBook[]>();
+    const keyToGroup = new Map<string, number>();
+    let nextGid = 0;
     for (const item of allResults) {
-      const key = normalizeKey(item.title, item.authorName);
-      const existing = byKey.get(key);
-      if (!existing) {
-        byKey.set(key, item);
-      } else if (priority[item.source] > priority[existing.source]) {
-        byKey.set(key, mergeInto(item, existing));
-      } else {
-        byKey.set(key, mergeInto(existing, item));
+      const keys = itemKeys(item);
+      const touched = new Set<number>();
+      for (const k of keys) {
+        const gid = keyToGroup.get(k);
+        if (gid !== undefined) touched.add(gid);
       }
+      let gid: number;
+      if (touched.size === 0) {
+        gid = nextGid++;
+        groupItems.set(gid, [item]);
+      } else {
+        const ids = [...touched];
+        gid = ids[0];
+        const primary = groupItems.get(gid) ?? [];
+        // Collapse any extra groups this item bridges.
+        for (const other of ids.slice(1)) {
+          const extras = groupItems.get(other);
+          if (extras) {
+            primary.push(...extras);
+            groupItems.delete(other);
+            for (const [k, v] of keyToGroup) {
+              if (v === other) keyToGroup.set(k, gid);
+            }
+          }
+        }
+        primary.push(item);
+        groupItems.set(gid, primary);
+      }
+      for (const k of keys) keyToGroup.set(k, gid);
+    }
+
+    // Collapse each group into a single AggregatedBook. Sort group items
+    // by source priority descending, then fold into one record.
+    const byKey = new Map<number, AggregatedBook>();
+    for (const [gid, items] of groupItems) {
+      const sorted = [...items].sort(
+        (a, b) => priority[b.source] - priority[a.source]
+      );
+      const folded = sorted.reduce(
+        (acc: AggregatedBook | null, cur) =>
+          acc ? mergeInto(acc, cur) : cur
+      );
+      if (folded) byKey.set(gid, folded);
     }
     // Drop results without an OL key — GET /book/:id expects OL or Audible
     // ASIN. Hardcover / Bookshelf hits without an OL mapping (rare) and
@@ -615,9 +718,58 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           .status(404)
           .json({ status: 404, message: 'Series not found.' });
       }
+      const prefLang = cfg.preferredLanguage?.toLowerCase().trim() ?? '';
+      const policy = cfg.languagePolicy ?? 'prefer';
+      const rawMembers = detail.book_series ?? [];
+
+      // Hardcover series mix original + localised editions as separate
+      // book records ("Blood of Elves" + "Krew elfów" + …). Deduplicate
+      // by normalised title, keeping the entry whose language matches
+      // the user's preference first. Falls back to alphabetical source
+      // order (Hardcover's `position` keeps the original chronology).
+      const normalise = (t: string) =>
+        t
+          .toLowerCase()
+          .replace(/^(the|a|an|le|la|les|un|une)\s+/, '')
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      const groups = new Map<string, typeof rawMembers>();
+      for (const m of rawMembers) {
+        const title = m.book?.title ?? '';
+        if (!title.trim()) continue;
+        const key = normalise(title);
+        const bucket = groups.get(key) ?? [];
+        bucket.push(m);
+        groups.set(key, bucket);
+      }
+      const langRank = (code?: string | null): number => {
+        if (!prefLang) return 0;
+        if (!code) return 1;
+        return code.toLowerCase() === prefLang ? 0 : 2;
+      };
+      let deduped = [...groups.values()].map(
+        (bucket) =>
+          [...bucket].sort(
+            (a, b) =>
+              langRank(a.book?.language?.code2) -
+              langRank(b.book?.language?.code2)
+          )[0]
+      );
+      // "strict": drop any book whose language isn't the preferred one.
+      // Unknown-language entries are kept (data is patchy).
+      if (prefLang && policy === 'strict') {
+        deduped = deduped.filter((m) => {
+          const code = m.book?.language?.code2?.toLowerCase();
+          return !code || code === prefLang;
+        });
+      }
+      // Preserve the original (chronological) order by re-sorting on
+      // Hardcover's `position`.
+      deduped.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
       const bookMediaRepo = getRepository(BookMedia);
       const enriched = await Promise.all(
-        (detail.book_series ?? []).map(async (m) => {
+        deduped.map(async (m) => {
           const olMapping = m.book?.book_mappings?.find(
             (bm) => bm.platform?.name?.toLowerCase() === 'openlibrary'
           );
@@ -636,8 +788,7 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           return {
             openLibraryId,
             title: m.book?.title ?? '',
-            authorName:
-              m.book?.contributions?.[0]?.author?.name ?? '',
+            authorName: m.book?.contributions?.[0]?.author?.name ?? '',
             coverUrl: imageUrl?.startsWith('http') ? imageUrl : undefined,
             mediaStatus: existing?.status ?? null,
             bookMediaId: existing?.id ?? null,
@@ -649,7 +800,7 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
         key: `hardcover:${detail.id}`,
         name: detail.name,
         description: detail.description ?? undefined,
-        seedCount: detail.book_series?.length ?? 0,
+        seedCount: enriched.length,
         members: enriched,
       });
     }

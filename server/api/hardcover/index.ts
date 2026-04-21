@@ -80,6 +80,7 @@ export interface HardcoverSeriesMember {
     id: number;
     title: string;
     image?: { url?: string } | null;
+    language?: { code2?: string | null } | null;
     contributions?: { author?: { name?: string } | null }[];
     book_mappings?: HardcoverBookMapping[];
   } | null;
@@ -462,6 +463,7 @@ class HardcoverAPI {
               id
               title
               image { url }
+              language { code2 }
               contributions(
                 where: { contribution: { _eq: "Author" } }
                 limit: 1
