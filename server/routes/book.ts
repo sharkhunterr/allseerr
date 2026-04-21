@@ -967,7 +967,12 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       }
       const hcId = Number(id.slice('hardcover:'.length));
       const hc = new HardcoverAPI(cfg.hardcoverApiKey);
-      const hit = await hc.getBookById(hcId);
+      // Filter editions server-side to the configured metadata
+      // language — avoids pulling 50 editions in other languages and
+      // then discarding them client-side, so books with dozens of
+      // French editions actually show them all.
+      const prefLang = cfg.preferredLanguage?.toLowerCase().trim() || undefined;
+      const hit = await hc.getBookById(hcId, prefLang);
       if (!hit) {
         return res.status(404).json({
           status: 404,
@@ -982,45 +987,24 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         hit.cached_tags?.Genre?.map((t) => t.tag).filter(
           (t): t is string => !!t
         ) ?? [];
-      // Hardcover tracks ISBNs + publisher + country + language on
-      // the edition, not the book. Editions come back ordered by
-      // release_date asc. We use THREE views over that list:
-      //
-      //   originalEdition  — first edition with a release_date AND a
-      //                      country set. That's the country of origin
-      //                      of the work (Dune → US 1965,
-      //                      Witcher → PL 1986, HP → GB 1997). We
-      //                      don't require ISBN-13 here because many
-      //                      pre-2007 originals are pre-ISBN-13.
-      //   preferredEdition — first edition whose language matches the
-      //                      user's preferredLanguage (if any).
-      //   displayEdition   — preferredEdition when we have one;
-      //                      otherwise the first edition with an
-      //                      ISBN-13 (so the detail page still renders
-      //                      a dispatchable ISBN) falling back to
-      //                      originalEdition.
-      //
-      // Publisher is only exposed when a preferredEdition exists so we
-      // never show e.g. the US publisher on a French user's page.
-      const prefLang = cfg.preferredLanguage?.toLowerCase().trim() || '';
+      // Editions are now server-filtered to prefLang (when set) and
+      // sorted desc by release_date, so editions[0] is the most
+      // recent edition in the user's language. Country comes from a
+      // separate call so it stays locked to the book's first
+      // publication country (independent of which translation the
+      // user is browsing) — matches the user's "le pays du livre
+      // s'affiche dans l'encadré auteur" brief.
       const editions = hit.editions ?? [];
-      const originalEdition =
-        editions.find((e) => e.release_date && e.country) ??
-        editions.find((e) => e.release_date) ??
-        editions[0];
-      const preferredEdition = prefLang
-        ? editions.find(
-            (e) => e.language?.code2?.toLowerCase() === prefLang
-          )
-        : undefined;
-      const editionWithIsbn = editions.find((e) => e.isbn_13);
-      const displayEdition =
-        preferredEdition ?? editionWithIsbn ?? originalEdition;
+      const displayEdition = editions[0];
       const hcIsbn13 = displayEdition?.isbn_13 ?? undefined;
       const hcIsbn10 = displayEdition?.isbn_10 ?? undefined;
-      const hcPublisher = preferredEdition?.publisher?.name ?? undefined;
-      const hcCountry = hardcoverCountryIso2(originalEdition?.country);
+      const hcPublisher = displayEdition?.publisher?.name ?? undefined;
       const hcLang = displayEdition?.language?.code2 ?? undefined;
+      // Fetch origin country in parallel with the author data below.
+      const originalCountry = await hc
+        .getBookOriginalCountry(hcId)
+        .catch(() => null);
+      const hcCountry = hardcoverCountryIso2(originalCountry ?? undefined);
       const primaryAuthorId = hardcoverPrimaryAuthorId(hit.contributions);
       // Photo + bio + dates come from the authors table, not the book
       // row. Best-effort: if we can resolve a primary author id, fetch

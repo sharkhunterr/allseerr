@@ -331,68 +331,99 @@ class HardcoverAPI {
     }
   }
 
-  // Full book fields we want back from the follow-up books(where: id) query.
-  // Kept here so searchBook / searchByIsbn stay small and identical.
-  private static BOOK_FIELDS = `
+  // Fields for a single edition row. Reused by the parameterised
+  // bookFields() builder below.
+  private static EDITION_FIELDS = `
     id
     title
     subtitle
-    description
-    slug
-    rating
-    ratings_count
-    users_count
-    users_read_count
-    pages
+    isbn_13
+    isbn_10
     release_date
+    pages
+    edition_format
     image { url }
-    cached_tags
-    contributions(limit: 5) {
-      contribution
-      author { id name }
-    }
-    book_series(limit: 3) {
-      position
-      series { id name }
-    }
-    book_characters(limit: 8, order_by: { position: asc_nulls_last }) {
-      only_mentioned
-      spoiler
-      character { name slug }
-    }
-    book_mappings {
-      external_id
-      platform { name }
-    }
-    editions(
-      limit: 30
-      order_by: { release_date: asc_nulls_last }
-    ) {
-      id
-      title
-      subtitle
-      isbn_13
-      isbn_10
-      release_date
-      pages
-      edition_format
-      image { url }
-      publisher { name }
-      country { name code2 }
-      language { code2 }
-    }
+    publisher { name }
+    country { name code2 }
+    language { code2 }
   `;
 
   /**
-   * Fetch a book's full record by Hardcover numeric id (equality, allowed
-   * on Hardcover's Hasura instance unlike `_ilike`).
+   * Builds the book-level GraphQL fragment. `editionLang` filters the
+   * `editions` sub-query to a single ISO-639-1 language — used by the
+   * detail handler so the UI only ever sees editions in the user's
+   * configured preferredLanguage. When omitted, all editions come
+   * back (search paths keep their current behaviour).
    */
-  public async getBookById(id: number): Promise<HardcoverSearchHit | null> {
-    return cached(`book:${id}`, async () => {
+  private static bookFields(opts?: { editionLang?: string }): string {
+    const lang = opts?.editionLang?.toLowerCase().trim();
+    const langFilter = lang
+      ? `where: { language: { code2: { _eq: "${lang}" } } }`
+      : '';
+    // Detail view: newest edition first so Dune / HP users see the
+    // currently-printed edition at the top of the dropdown. Search
+    // paths (no filter) keep release_date ASC so enrichment picks up
+    // the canonical / original edition.
+    const order = lang
+      ? 'desc_nulls_last'
+      : 'asc_nulls_last';
+    return `
+      id
+      title
+      subtitle
+      description
+      slug
+      rating
+      ratings_count
+      users_count
+      users_read_count
+      pages
+      release_date
+      image { url }
+      cached_tags
+      contributions(limit: 5) {
+        contribution
+        author { id name }
+      }
+      book_series(limit: 3) {
+        position
+        series { id name }
+      }
+      book_characters(limit: 8, order_by: { position: asc_nulls_last }) {
+        only_mentioned
+        spoiler
+        character { name slug }
+      }
+      book_mappings {
+        external_id
+        platform { name }
+      }
+      editions(
+        limit: 50
+        order_by: { release_date: ${order} }
+        ${langFilter}
+      ) {
+        ${HardcoverAPI.EDITION_FIELDS}
+      }
+    `;
+  }
+
+  /**
+   * Fetch a book's full record by Hardcover numeric id. When
+   * `editionLanguage` is set, the `editions` sub-query is pre-filtered
+   * server-side so the caller only sees editions in that language —
+   * used by the detail handler with the user's preferredLanguage.
+   */
+  public async getBookById(
+    id: number,
+    editionLanguage?: string
+  ): Promise<HardcoverSearchHit | null> {
+    const cacheKey = `book:${id}:${editionLanguage ?? 'all'}`;
+    return cached(cacheKey, async () => {
       const gqlQuery = `
         query BookById($id: Int!) {
           books(where: { id: { _eq: $id } }, limit: 1) {
-            ${HardcoverAPI.BOOK_FIELDS}
+            ${HardcoverAPI.bookFields({ editionLang: editionLanguage })}
           }
         }
       `;
@@ -401,6 +432,46 @@ class HardcoverAPI {
         { id }
       );
       return data?.books?.[0] ?? null;
+    });
+  }
+
+  /**
+   * First publication country of a book — the earliest edition that
+   * has both a release_date and a country. Independent of the
+   * language filter we apply on the main editions query, so the
+   * author-card flag stays tied to the book's origin (e.g. US for
+   * Dune) even when the user is viewing French editions.
+   */
+  public async getBookOriginalCountry(
+    id: number
+  ): Promise<{ name?: string; code2?: string } | null> {
+    return cached(`book:${id}:origin-country`, async () => {
+      const gqlQuery = `
+        query OriginalCountry($id: Int!) {
+          editions(
+            where: {
+              book_id: { _eq: $id }
+              release_date: { _is_null: false }
+              country_id: { _is_null: false }
+            }
+            order_by: { release_date: asc_nulls_last }
+            limit: 1
+          ) {
+            country { name code2 }
+          }
+        }
+      `;
+      const { data } = await this.gql<{
+        editions: Array<{
+          country?: { name?: string | null; code2?: string | null } | null;
+        }>;
+      }>(gqlQuery, { id });
+      const c = data?.editions?.[0]?.country;
+      if (!c) return null;
+      return {
+        name: c.name ?? undefined,
+        code2: c.code2 ?? undefined,
+      };
     });
   }
 
@@ -477,7 +548,7 @@ class HardcoverAPI {
         const batchGql = `
           query BooksByIds($ids: [Int!]!) {
             books(where: { id: { _in: $ids } }, limit: ${ids.length}) {
-              ${HardcoverAPI.BOOK_FIELDS}
+              ${HardcoverAPI.bookFields()}
             }
           }
         `;
@@ -743,7 +814,7 @@ class HardcoverAPI {
           limit: 1
         ) {
           book {
-            ${HardcoverAPI.BOOK_FIELDS}
+            ${HardcoverAPI.bookFields()}
           }
         }
       }
