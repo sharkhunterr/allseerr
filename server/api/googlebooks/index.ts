@@ -91,7 +91,11 @@ class GoogleBooksAPI {
         results: (response.data.items ?? []).map((v) => this.mapVolume(v)),
         totalResults: response.data.totalItems ?? 0,
       };
-      cache.set(cacheKey, value, 3600);
+      // Only cache non-empty successful results — an empty array is
+      // usually a transient 429/5xx pre-empting real results.
+      if (value.results.length > 0) {
+        cache.set(cacheKey, value, 3600);
+      }
       return value;
     } catch (e) {
       logger.error('Google Books search failed', {

@@ -5,6 +5,12 @@ import ServarrBase from './base';
 
 const bookshelfCache = cacheManager.getCache('bookshelf').data;
 
+function setCacheable<T>(key: string, value: T, ttl: number) {
+  if (value === null || value === undefined) return;
+  if (Array.isArray(value) && value.length === 0) return;
+  bookshelfCache.set(key, value, ttl);
+}
+
 export interface BookshelfBookAddOptions {
   /** Free-text title used to look up the book in Bookshelf's metadata. */
   title: string;
@@ -133,7 +139,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       const value = response.data ?? [];
       // Cache 1h — same lookup during a session is a common flow
       // (book detail opens it twice: once for metadata, once for dispatch).
-      bookshelfCache.set(cacheKey, value, 3600);
+      setCacheable(cacheKey, value, 3600);
       return value;
     } catch (e) {
       logger.error('Bookshelf book lookup failed', {
@@ -167,7 +173,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         timeout: 25000,
       });
       const value = response.data ?? [];
-      bookshelfCache.set(cacheKey, value, 120);
+      setCacheable(cacheKey, value, 120);
       return value;
     } catch {
       return [];
@@ -275,7 +281,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         { params: { term }, timeout: 25000 }
       );
       const value = response.data ?? [];
-      bookshelfCache.set(cacheKey, value, 3600);
+      setCacheable(cacheKey, value, 3600);
       return value;
     } catch (e) {
       logger.error('Bookshelf author lookup failed', {

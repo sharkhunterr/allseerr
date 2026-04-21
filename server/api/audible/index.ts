@@ -159,8 +159,11 @@ class AudibleAPI {
         results: audiobooks.map(toResult),
         totalResults: response.data.total_results ?? audiobooks.length,
       };
-      // Searches tolerate shorter TTL (1h) — catalog does evolve.
-      audibleCache.set(cacheKey, value, 3600);
+      // Don't cache empty results — they're usually transient Audible
+      // errors rather than a genuine "no match" answer.
+      if (value.results.length > 0) {
+        audibleCache.set(cacheKey, value, 3600);
+      }
       return value;
     } catch (e) {
       logger.error('Audible search failed', {
@@ -190,7 +193,10 @@ class AudibleAPI {
       const value = response.data.product
         ? toResult(response.data.product)
         : null;
-      audibleCache.set(cacheKey, value); // default 24h TTL
+      // Only cache positive hits; a null might be a transient API issue.
+      if (value) {
+        audibleCache.set(cacheKey, value); // default 24h TTL
+      }
       return value;
     } catch (e) {
       logger.error('Audible getProduct failed', {

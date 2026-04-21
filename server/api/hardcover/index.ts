@@ -13,12 +13,23 @@ async function cached<T>(
   const hit = cache.get<T>(key);
   if (hit !== undefined) return hit;
   const value = await fetcher();
-  // Don't cache obvious transient failures (null means "call failed");
-  // keep negative success caching only for definite misses.
-  if (value !== null || ttlSeconds === undefined) {
+  if (isCacheable(value)) {
     cache.set(key, value, ttlSeconds ?? 0);
   }
   return value;
+}
+
+function isCacheable(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value) && value.length === 0) return false;
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.keys(value).length === 0
+  ) {
+    return false;
+  }
+  return true;
 }
 
 export interface HardcoverCachedTag {

@@ -11,6 +11,12 @@ const cache = cacheManager.getCache('openlibrary').data;
  * Negative / null results are cached too to avoid retrying known-empty
  * calls repeatedly.
  */
+/**
+ * Wrap an async fetch with node-cache. Only caches **positive** results:
+ * null / undefined / empty arrays and empty objects are treated as
+ * "probable failure" (OL timeout, 404 during an outage, etc.) and left
+ * out of the cache so the next call re-tries upstream.
+ */
 async function cached<T>(
   key: string,
   fetcher: () => Promise<T>,
@@ -19,8 +25,23 @@ async function cached<T>(
   const hit = cache.get<T>(key);
   if (hit !== undefined) return hit;
   const value = await fetcher();
-  cache.set(key, value, ttlSeconds ?? 0);
+  if (isCacheable(value)) {
+    cache.set(key, value, ttlSeconds ?? 0);
+  }
   return value;
+}
+
+function isCacheable(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value) && value.length === 0) return false;
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.keys(value).length === 0
+  ) {
+    return false;
+  }
+  return true;
 }
 
 // MARC country-of-publication codes (publish_country) → ISO-2, most common
