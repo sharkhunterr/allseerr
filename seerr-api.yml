@@ -4500,6 +4500,27 @@ paths:
                     type: array
                     items:
                       type: object
+  /book/author/{authorKey}:
+    get:
+      summary: Get author details and their works
+      description: Returns the OpenLibrary author with photo, bio, dates and a list of their works enriched with local availability.
+      tags:
+        - book
+      parameters:
+        - in: path
+          name: authorKey
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Author returned
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Author not found
   /book/series/{seriesId}:
     get:
       summary: Get a book series and its member works

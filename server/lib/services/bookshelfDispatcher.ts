@@ -1,5 +1,5 @@
 import BookshelfAPI from '@server/api/servarr/bookshelf';
-import { MediaStatus, MediaType } from '@server/constants/media';
+import { MediaType } from '@server/constants/media';
 import type { AudiobookMedia } from '@server/entity/AudiobookMedia';
 import type { BookMedia } from '@server/entity/BookMedia';
 import { getSettings } from '@server/lib/settings';
@@ -80,15 +80,6 @@ export async function submitToBookshelf(
     });
 
     media.downloadManagerExternalId = String(book.id);
-    // Flip to PROCESSING so the book detail / search UI shows the blue
-    // "requested" badge. Skip if already AVAILABLE (library scanner
-    // might have marked it between request creation and dispatch).
-    if (
-      media.status === MediaStatus.UNKNOWN ||
-      media.status === MediaStatus.PENDING
-    ) {
-      media.status = MediaStatus.PROCESSING;
-    }
 
     logger.info(
       `Dispatched to Bookshelf (${instance.name}): ${media.title}`,

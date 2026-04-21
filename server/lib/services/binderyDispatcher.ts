@@ -1,5 +1,5 @@
 import BinderyAPI from '@server/api/servarr/bindery';
-import { MediaStatus, MediaType } from '@server/constants/media';
+import { MediaType } from '@server/constants/media';
 import type { AudiobookMedia } from '@server/entity/AudiobookMedia';
 import type { BookMedia } from '@server/entity/BookMedia';
 import { getSettings } from '@server/lib/settings';
@@ -135,12 +135,6 @@ export async function submitToBindery(
     }
 
     media.downloadManagerExternalId = String(binderyBookId);
-    if (
-      media.status === MediaStatus.UNKNOWN ||
-      media.status === MediaStatus.PENDING
-    ) {
-      media.status = MediaStatus.PROCESSING;
-    }
 
     logger.info(
       `Dispatched to Bindery (${instance.name}): ${media.title}`,

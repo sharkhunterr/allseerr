@@ -392,6 +392,63 @@ class OpenLibraryAPI {
    * Get full author details by OpenLibrary author key. Returns name,
    * photo URL (if available), bio, birth/death dates.
    */
+  /**
+   * List works by an OpenLibrary author. Returns up to `limit` entries
+   * (OL default 50, max 1000). `size` is the total count regardless of
+   * limit — useful for "N books" summary.
+   */
+  async getAuthorWorks(
+    authorKey: string,
+    limit = 50
+  ): Promise<{
+    size: number;
+    works: {
+      workKey: string;
+      title: string;
+      coverUrl?: string;
+    }[];
+  }> {
+    const key = authorKey.replace(/^\/authors\//, '').replace(/^\//, '');
+    return cached(
+      `author-works:${key}:${limit}`,
+      async () => {
+        try {
+          const response = await axios.get<{
+            size?: number;
+            entries?: {
+              key: string;
+              title?: string;
+              covers?: number[];
+            }[];
+          }>(`${OPENLIBRARY_BASE}/authors/${key}/works.json`, {
+            params: { limit },
+            timeout: 15000,
+          });
+          const entries = response.data.entries ?? [];
+          return {
+            size: response.data.size ?? entries.length,
+            works: entries
+              .filter((e) => e.key?.startsWith('/works/'))
+              .map((e) => ({
+                workKey: e.key.replace('/works/', ''),
+                title: e.title ?? '(untitled)',
+                coverUrl: e.covers?.[0]
+                  ? `https://covers.openlibrary.org/b/id/${e.covers[0]}-L.jpg`
+                  : undefined,
+              })),
+          };
+        } catch (e) {
+          logger.error('OpenLibrary author works fetch failed', {
+            label: 'openlibrary',
+            authorKey,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          return { size: 0, works: [] };
+        }
+      }
+    );
+  }
+
   async getAuthor(authorKey: string): Promise<{
     name?: string;
     photoUrl?: string;

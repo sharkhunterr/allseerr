@@ -554,6 +554,67 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
 });
 
 /**
+ * GET /api/v1/book/author/:authorKey
+ * Author details + their works list, keyed by OpenLibrary author key
+ * (e.g. "OL19981A"). Each work is enriched with local availability so
+ * the UI can show a "requested" / "available" badge per card.
+ */
+bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
+  const rawKey = decodeURIComponent(req.params.authorKey);
+  const key = rawKey.replace(/^\/authors\//, '').replace(/^\//, '');
+  try {
+    const [info, worksResp] = await Promise.all([
+      openLibrary.getAuthor(key),
+      openLibrary.getAuthorWorks(key, 100),
+    ]);
+    if (!info) {
+      return res
+        .status(404)
+        .json({ status: 404, message: 'Author not found.' });
+    }
+
+    const bookMediaRepo = getRepository(BookMedia);
+    const works = await Promise.all(
+      worksResp.works.map(async (w) => {
+        const existing = await bookMediaRepo.findOne({
+          where: { openLibraryId: `/works/${w.workKey}` },
+        });
+        return {
+          openLibraryId: `/works/${w.workKey}`,
+          title: w.title,
+          authorName: info.name ?? '',
+          coverUrl: w.coverUrl,
+          mediaStatus: existing?.status ?? null,
+          bookMediaId: existing?.id ?? null,
+          mediaType: MediaType.BOOK,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      key,
+      name: info.name,
+      photoUrl: info.photoUrl,
+      bio: info.bio,
+      birthDate: info.birthDate,
+      deathDate: info.deathDate,
+      totalWorks: worksResp.size,
+      works,
+    });
+  } catch (e) {
+    logger.error('Author fetch failed', {
+      label: 'book',
+      authorKey: rawKey,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to fetch author details.',
+    });
+  }
+});
+
+/**
  * GET /api/v1/book/:id
  * Get book detail by OpenLibrary work key.
  */

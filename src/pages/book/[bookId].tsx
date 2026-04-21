@@ -349,7 +349,14 @@ const BookDetailPage: NextPage = () => {
           {(data.authorName ||
             data.authorPhotoUrl ||
             data.authorBio) && (
-            <div className="mb-6 overflow-hidden rounded-lg bg-gray-800 shadow-md ring-1 ring-gray-700">
+            <button
+              type="button"
+              disabled={!data.authorKey}
+              onClick={() =>
+                data.authorKey && router.push(`/book/author/${data.authorKey}`)
+              }
+              className="group mb-6 block w-full cursor-pointer overflow-hidden rounded-lg bg-gray-800 text-left shadow-md ring-1 ring-gray-700 transition hover:ring-indigo-400 disabled:cursor-default disabled:hover:ring-gray-700"
+            >
               <div className="flex items-start gap-4 p-4">
                 <div className="flex-shrink-0">
                   {data.authorPhotoUrl ? (
@@ -369,7 +376,7 @@ const BookDetailPage: NextPage = () => {
                   <div className="text-xs uppercase tracking-wide text-gray-400">
                     {intl.formatMessage(messages.aboutAuthor)}
                   </div>
-                  <div className="text-base font-semibold text-white">
+                  <div className="text-base font-semibold text-white group-hover:text-indigo-300">
                     {data.authorName}
                   </div>
                   {(data.authorBirthDate || data.authorDeathDate) && (
@@ -385,15 +392,13 @@ const BookDetailPage: NextPage = () => {
               </div>
               {data.authorBio && (
                 <p className="max-h-32 overflow-hidden px-4 pb-4 text-sm text-gray-300">
-                  {/* OpenLibrary bios often have Markdown-like refs — strip
-                      the common "*[From X][1]*" footer cruft and link refs. */}
                   {data.authorBio
                     .replace(/\s*\*\[From[^\]]*\]\[\d+\]\.?\*\s*$/s, '')
                     .replace(/\[\d+\]:\s*https?:\/\/[^\s]+/g, '')
                     .trim()}
                 </p>
               )}
-            </div>
+            </button>
           )}
           {data.series && data.series.length > 0 && (
             <>
