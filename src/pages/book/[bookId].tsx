@@ -541,6 +541,7 @@ const BookDetailPage: NextPage = () => {
                 <span>{intl.formatMessage(messages.rating)}</span>
                 <span className="media-fact-value">
                   ★ {data.rating.toFixed(2)}
+                  <span className="text-gray-400"> / 5</span>
                   {data.ratingsCount ? (
                     <span className="ml-2 text-xs text-gray-400">
                       ({data.ratingsCount.toLocaleString()})
