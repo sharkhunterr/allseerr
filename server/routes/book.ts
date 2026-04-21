@@ -984,25 +984,38 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         ) ?? [];
       // Hardcover tracks ISBNs + publisher + country + language on
       // the edition, not the book. Editions come back ordered by
-      // release_date asc, so edition[0] is the original / earliest
-      // edition — we take `country` from there because the country
-      // of origin shouldn't flip when translations come out later.
-      // For the edition the user actually cares about (title /
-      // publisher / language / ISBN on the detail page), we pick the
-      // first edition matching the preferred language, falling back
-      // to the original when no match exists. Publisher in
-      // particular is only shown when a preferred-language edition
-      // exists — a US publisher on a French user's page would be
-      // misleading.
+      // release_date asc. We use THREE views over that list:
+      //
+      //   originalEdition  — first edition with a release_date AND a
+      //                      country set. That's the country of origin
+      //                      of the work (Dune → US 1965,
+      //                      Witcher → PL 1986, HP → GB 1997). We
+      //                      don't require ISBN-13 here because many
+      //                      pre-2007 originals are pre-ISBN-13.
+      //   preferredEdition — first edition whose language matches the
+      //                      user's preferredLanguage (if any).
+      //   displayEdition   — preferredEdition when we have one;
+      //                      otherwise the first edition with an
+      //                      ISBN-13 (so the detail page still renders
+      //                      a dispatchable ISBN) falling back to
+      //                      originalEdition.
+      //
+      // Publisher is only exposed when a preferredEdition exists so we
+      // never show e.g. the US publisher on a French user's page.
       const prefLang = cfg.preferredLanguage?.toLowerCase().trim() || '';
       const editions = hit.editions ?? [];
-      const originalEdition = editions[0];
+      const originalEdition =
+        editions.find((e) => e.release_date && e.country) ??
+        editions.find((e) => e.release_date) ??
+        editions[0];
       const preferredEdition = prefLang
         ? editions.find(
             (e) => e.language?.code2?.toLowerCase() === prefLang
           )
         : undefined;
-      const displayEdition = preferredEdition ?? originalEdition;
+      const editionWithIsbn = editions.find((e) => e.isbn_13);
+      const displayEdition =
+        preferredEdition ?? editionWithIsbn ?? originalEdition;
       const hcIsbn13 = displayEdition?.isbn_13 ?? undefined;
       const hcIsbn10 = displayEdition?.isbn_10 ?? undefined;
       const hcPublisher = preferredEdition?.publisher?.name ?? undefined;

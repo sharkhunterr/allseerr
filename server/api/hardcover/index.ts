@@ -359,9 +359,8 @@ class HardcoverAPI {
       platform { name }
     }
     editions(
-      limit: 20
+      limit: 30
       order_by: { release_date: asc_nulls_last }
-      where: { isbn_13: { _is_null: false } }
     ) {
       isbn_13
       isbn_10
