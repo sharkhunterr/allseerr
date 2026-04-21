@@ -761,7 +761,7 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
       ].sort((a, b) => (a.position ?? 1e9) - (b.position ?? 1e9));
 
       const bookMediaRepo = getRepository(BookMedia);
-      const enriched = await Promise.all(
+      const enrichedRaw = await Promise.all(
         deduped.map(async (m) => {
           const olMapping = m.book?.book_mappings?.find(
             (bm) => bm.platform?.name?.toLowerCase() === 'openlibrary'
@@ -778,14 +778,37 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           return {
             openLibraryId,
             title: m.book?.title ?? '',
-            authorName:
-              hardcoverPrimaryAuthor(m.book?.contributions) ?? '',
+            authorName: hardcoverPrimaryAuthor(m.book?.contributions) ?? '',
             coverUrl: imageUrl?.startsWith('http') ? imageUrl : undefined,
             mediaStatus: existing?.status ?? null,
             bookMediaId: existing?.id ?? null,
             mediaType: MediaType.BOOK,
+            // Keep users_count on the side so a second-pass dedupe can
+            // pick the most-read edition when several translations
+            // collapse onto the same OL work key.
+            _usersCount: m.book?.users_count ?? 0,
           };
         })
+      );
+      // Final collapse by openLibraryId: translations that share the
+      // same `/works/OLxxxW` mapping are the same underlying work, so
+      // keep only the highest-readership entry (usually the canonical
+      // / English edition). `hardcover:<id>` keys stay distinct by
+      // construction. Fixes cases where Hardcover returns multiple
+      // translated `book_series` rows whose mappings all point at the
+      // same OL work but that had no / different `position` values.
+      const byOLKey = new Map<string, (typeof enrichedRaw)[number]>();
+      for (const m of enrichedRaw) {
+        const existing = byOLKey.get(m.openLibraryId);
+        if (!existing || m._usersCount > existing._usersCount) {
+          byOLKey.set(m.openLibraryId, m);
+        }
+      }
+      const enriched = [...byOLKey.values()].map(
+        ({ _usersCount, ...rest }) => {
+          void _usersCount;
+          return rest;
+        }
       );
       return res.status(200).json({
         key: `hardcover:${detail.id}`,
