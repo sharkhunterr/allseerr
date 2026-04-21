@@ -55,10 +55,9 @@ const messages = defineMessages('pages.BookDetail', {
   aboutAuthor: 'About the author',
   authorLivedFmt: '{birth}{dash}{death}',
   edition: 'Edition',
-  editionLabelFmt: '{year} · {lang} · {format}',
-  editionLabelYearLang: '{year} · {lang}',
-  editionLabelYearFormat: '{year} · {format}',
   editionOriginal: 'Original edition',
+  otherLanguages: 'Other languages',
+  editionLangUnknown: 'Unknown language',
 });
 
 // Convert an ISO-3166-1 alpha-2 country code to its flag emoji
@@ -131,6 +130,7 @@ interface BookDetailData {
   bookMediaId?: number | null;
   libraryServerUrl?: string | null;
   editions?: Edition[];
+  preferredLanguage?: string;
 }
 
 const formatDuration = (seconds: number): string => {
@@ -138,6 +138,129 @@ const formatDuration = (seconds: number): string => {
   const minutes = Math.floor((seconds % 3600) / 60);
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
+};
+
+/**
+ * Groups editions by language for the <select>. The configured
+ * preferred language bubbles to the top (its own optgroup), then a
+ * disabled separator option, then one optgroup per other language
+ * with the label "Other languages — <name>". Every group is sorted
+ * by year descending so the most recent printing appears first.
+ */
+interface EditionSelectProps {
+  editions: Edition[];
+  selectedId: number | null;
+  onSelect: (id: number | null) => void;
+  preferredLanguage?: string;
+  localeCode: string;
+  unknownLanguageLabel: string;
+  otherLanguagesLabel: string;
+  originalLabel: string;
+}
+
+const EditionSelect = ({
+  editions,
+  selectedId,
+  onSelect,
+  preferredLanguage,
+  localeCode,
+  unknownLanguageLabel,
+  otherLanguagesLabel,
+  originalLabel,
+}: EditionSelectProps) => {
+  // Resolve a human-readable language name from a 2-letter code using
+  // the browser's own Intl.DisplayNames — falls back to the
+  // uppercase code when unavailable / unknown.
+  const langName = (code?: string): string => {
+    if (!code) return unknownLanguageLabel;
+    try {
+      const dn = new Intl.DisplayNames([localeCode, 'en'], {
+        type: 'language',
+      });
+      return dn.of(code) ?? code.toUpperCase();
+    } catch {
+      return code.toUpperCase();
+    }
+  };
+
+  const editionLabel = (ed: Edition): string => {
+    const bits: string[] = [];
+    if (ed.year) bits.push(String(ed.year));
+    if (ed.format) bits.push(ed.format);
+    if (ed.publisher) bits.push(ed.publisher);
+    return bits.length > 0
+      ? bits.join(' · ')
+      : ed.title ?? originalLabel;
+  };
+
+  const sortByYearDesc = (a: Edition, b: Edition) =>
+    (b.year ?? 0) - (a.year ?? 0);
+
+  // Bucket editions by language (lowercased 2-letter code, or '' for unknown).
+  const byLang = new Map<string, Edition[]>();
+  for (const ed of editions) {
+    const key = ed.language?.toLowerCase() ?? '';
+    const bucket = byLang.get(key) ?? [];
+    bucket.push(ed);
+    byLang.set(key, bucket);
+  }
+  for (const bucket of byLang.values()) bucket.sort(sortByYearDesc);
+
+  const prefKey = preferredLanguage?.toLowerCase();
+  const preferredBucket =
+    prefKey && byLang.has(prefKey) ? byLang.get(prefKey)! : [];
+  if (prefKey) byLang.delete(prefKey);
+
+  // Order remaining language groups by the newest edition's year desc
+  // so the reader sees the most active translations first. Unknown-
+  // language bucket falls to the very end.
+  const otherBuckets = [...byLang.entries()]
+    .filter(([, arr]) => arr.length > 0)
+    .sort(([langA, arrA], [langB, arrB]) => {
+      if (!langA) return 1;
+      if (!langB) return -1;
+      return (arrB[0]?.year ?? 0) - (arrA[0]?.year ?? 0);
+    });
+
+  return (
+    <select
+      id="edition-select"
+      value={selectedId ?? ''}
+      onChange={(e) => onSelect(Number(e.target.value) || null)}
+      className="rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none"
+    >
+      {preferredBucket.length > 0 && (
+        <optgroup label={langName(prefKey)}>
+          {preferredBucket.map((ed) => (
+            <option key={ed.id} value={ed.id}>
+              {editionLabel(ed)}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {preferredBucket.length > 0 && otherBuckets.length > 0 && (
+        // Separator — a disabled option renders with dimmed text in
+        // native <select> across all major browsers.
+        <option disabled>────────────────────────</option>
+      )}
+      {otherBuckets.map(([lang, group]) => (
+        <optgroup
+          key={lang || 'unknown'}
+          label={
+            preferredBucket.length > 0
+              ? `${otherLanguagesLabel} — ${langName(lang)}`
+              : langName(lang)
+          }
+        >
+          {group.map((ed) => (
+            <option key={ed.id} value={ed.id}>
+              {editionLabel(ed)}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
 };
 
 const BookDetailPage: NextPage = () => {
@@ -175,10 +298,23 @@ const BookDetailPage: NextPage = () => {
     : currentSettings.bookEnabled;
 
   const editions = data.editions ?? [];
+  // Default edition: most recent in the user's preferred language if
+  // we have one; otherwise most recent overall. Beats "editions[0]"
+  // which was the earliest release (often out-of-stock originals).
+  const getDefaultEdition = (): Edition | undefined => {
+    if (editions.length === 0) return undefined;
+    const prefKey = data.preferredLanguage?.toLowerCase();
+    if (prefKey) {
+      const prefs = editions
+        .filter((e) => e.language?.toLowerCase() === prefKey)
+        .sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+      if (prefs.length > 0) return prefs[0];
+    }
+    return [...editions].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))[0];
+  };
   const selectedEdition =
     editions.find((e) => e.id === selectedEditionId) ??
-    editions[0] ??
-    undefined;
+    getDefaultEdition();
 
   // Edition-aware overrides. Book-level fields are the default, but
   // any field the selected edition supplies wins — lets the user flip
@@ -370,44 +506,20 @@ const BookDetailPage: NextPage = () => {
               >
                 {intl.formatMessage(messages.edition)}
               </label>
-              <select
-                id="edition-select"
-                value={selectedEdition?.id ?? ''}
-                onChange={(e) =>
-                  setSelectedEditionId(Number(e.target.value) || null)
-                }
-                className="rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none"
-              >
-                {editions.map((ed) => {
-                  const year = ed.year;
-                  const lang = ed.language?.toUpperCase();
-                  const format = ed.format;
-                  const label =
-                    year && lang && format
-                      ? intl.formatMessage(messages.editionLabelFmt, {
-                          year,
-                          lang,
-                          format,
-                        })
-                      : year && lang
-                        ? intl.formatMessage(messages.editionLabelYearLang, {
-                            year,
-                            lang,
-                          })
-                        : year && format
-                          ? intl.formatMessage(
-                              messages.editionLabelYearFormat,
-                              { year, format }
-                            )
-                          : ed.title ||
-                            intl.formatMessage(messages.editionOriginal);
-                  return (
-                    <option key={ed.id} value={ed.id}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
+              <EditionSelect
+                editions={editions}
+                selectedId={selectedEdition?.id ?? null}
+                onSelect={setSelectedEditionId}
+                preferredLanguage={data.preferredLanguage}
+                unknownLanguageLabel={intl.formatMessage(
+                  messages.editionLangUnknown
+                )}
+                otherLanguagesLabel={intl.formatMessage(
+                  messages.otherLanguages
+                )}
+                originalLabel={intl.formatMessage(messages.editionOriginal)}
+                localeCode={intl.locale}
+              />
             </div>
           )}
           <h2>{intl.formatMessage(messages.overview)}</h2>

@@ -1131,6 +1131,9 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         bookMediaId: existing?.id ?? null,
         libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),
         editions: exposedEditions,
+        // Let the UI group / sort editions by language with the
+        // configured language in front of the separator line.
+        preferredLanguage: prefLang || undefined,
       });
     }
 
