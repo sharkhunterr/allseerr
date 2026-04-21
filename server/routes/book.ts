@@ -1155,6 +1155,18 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
         assign(m, 'asin', body.asin);
         assign(m, 'narratorName', body.narratorName);
       }
+      // A brand-new BookMedia gets status=PROCESSING at construction; an
+      // existing row that has been requested again should match — otherwise
+      // the UI keeps showing the Request button because mediaStatus is
+      // still UNKNOWN from a prior state. Don't touch AVAILABLE /
+      // PARTIALLY_AVAILABLE: those come from the library scanner.
+      if (
+        media.status === MediaStatus.UNKNOWN ||
+        media.status === MediaStatus.PENDING
+      ) {
+        media.status = MediaStatus.PROCESSING;
+        changed = true;
+      }
       if (changed) {
         if (isBook) {
           await bookMediaRepo.save(media as BookMedia);
