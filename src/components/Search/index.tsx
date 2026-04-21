@@ -9,6 +9,8 @@ import useDiscover from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
+import { BookOpenIcon } from '@heroicons/react/24/solid';
+import Link from 'next/link';
 import type {
   MovieResult,
   PersonResult,
@@ -27,11 +29,59 @@ const messages = defineMessages('components.Search', {
   tabAudiobooks: 'Audiobooks',
   tabGames: 'Games',
   noResults: 'No results found.',
+  seriesBadge: 'Series',
+  seriesCountFmt: '{count, plural, one {# book} other {# books}}',
 });
 
 type MediaTab = 'all' | 'books' | 'audiobooks' | 'games';
 
+const SeriesSearchCard = ({ result }: { result: SeriesResult }) => {
+  const intl = useIntl();
+  return (
+    <Link
+      href={`/book/series/${encodeURIComponent(result.key)}`}
+      className="group relative flex w-full items-center gap-4 overflow-hidden rounded-lg bg-gray-800 p-3 shadow-md ring-1 ring-gray-700 transition hover:ring-indigo-400"
+    >
+      <div className="relative h-20 w-14 flex-shrink-0 overflow-hidden rounded-md bg-gray-700">
+        {result.coverUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={result.coverUrl}
+            alt={result.name}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <BookOpenIcon className="h-8 w-8 text-gray-500" />
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="mb-1">
+          <span className="rounded-full border border-indigo-500 bg-indigo-600/80 px-2 py-0.5 text-xs font-semibold uppercase leading-5 text-white shadow">
+            {intl.formatMessage(messages.seriesBadge)}
+          </span>
+        </div>
+        <div className="truncate text-base font-bold text-white group-hover:text-indigo-300 xl:text-lg">
+          {result.name}
+        </div>
+        <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-400">
+          {result.authorName && <span>{result.authorName}</span>}
+          {result.memberCount !== undefined && (
+            <span>
+              {intl.formatMessage(messages.seriesCountFmt, {
+                count: result.memberCount,
+              })}
+            </span>
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+};
+
 interface BookResult {
+  type?: 'book';
   openLibraryId: string;
   title: string;
   authorName: string;
@@ -45,11 +95,23 @@ interface BookResult {
   durationSeconds?: number;
 }
 
+interface SeriesResult {
+  type: 'series';
+  key: string;
+  name: string;
+  authorName?: string;
+  coverUrl?: string;
+  memberCount?: number;
+  description?: string;
+}
+
+type BookOrSeriesResult = BookResult | SeriesResult;
+
 interface BookSearchResponse {
   page: number;
   totalPages: number;
   totalResults: number;
-  results: BookResult[];
+  results: BookOrSeriesResult[];
 }
 
 interface GameResult {
@@ -82,7 +144,7 @@ const Search = () => {
   const audiobookEnabled = currentSettings.audiobookEnabled;
   const gameEnabled = currentSettings.gameEnabled;
   const [activeTab, setActiveTab] = useState<MediaTab>('all');
-  const [bookResults, setBookResults] = useState<BookResult[]>([]);
+  const [bookResults, setBookResults] = useState<BookOrSeriesResult[]>([]);
   const [audiobookResults, setAudiobookResults] = useState<BookResult[]>([]);
   const [gameResults, setGameResults] = useState<GameResult[]>([]);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
@@ -145,7 +207,12 @@ const Search = () => {
           params: { query, type: 'audiobook', limit: 40 },
           paramsSerializer,
         })
-        .then((res) => setAudiobookResults(res.data.results))
+        .then((res) =>
+          // Audiobook search never returns series items; narrow the union.
+          setAudiobookResults(
+            res.data.results.filter((r): r is BookResult => r.type !== 'series')
+          )
+        )
         .catch(() => setAudiobookResults([]))
         .finally(() => setIsLoadingAudiobooks(false));
     } else {
@@ -274,21 +341,27 @@ const Search = () => {
             </p>
           ) : (
             <ul className="cards-vertical">
-              {bookResults.map((book) => (
-                <li key={book.openLibraryId}>
-                  <BookCard
-                    openLibraryId={book.openLibraryId}
-                    title={book.title}
-                    authorName={book.authorName}
-                    coverUrl={book.coverUrl}
-                    year={book.year}
-                    publisher={book.publisher}
-                    seriesName={book.seriesName}
-                    seriesPosition={book.seriesPosition}
-                    mediaStatus={book.mediaStatus ?? undefined}
-                  />
-                </li>
-              ))}
+              {bookResults.map((item) =>
+                item.type === 'series' ? (
+                  <li key={`series:${item.key}`}>
+                    <SeriesSearchCard result={item} />
+                  </li>
+                ) : (
+                  <li key={item.openLibraryId}>
+                    <BookCard
+                      openLibraryId={item.openLibraryId}
+                      title={item.title}
+                      authorName={item.authorName}
+                      coverUrl={item.coverUrl}
+                      year={item.year}
+                      publisher={item.publisher}
+                      seriesName={item.seriesName}
+                      seriesPosition={item.seriesPosition}
+                      mediaStatus={item.mediaStatus ?? undefined}
+                    />
+                  </li>
+                )
+              )}
             </ul>
           )}
         </div>

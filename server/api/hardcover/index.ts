@@ -92,6 +92,15 @@ export interface HardcoverSeriesDetail {
   book_series?: HardcoverSeriesMember[];
 }
 
+export interface HardcoverSeriesSearchHit {
+  id: number;
+  name: string;
+  description?: string;
+  booksCount?: number;
+  authorName?: string;
+  coverUrl?: string;
+}
+
 interface TypesenseSearchResponse {
   results?: {
     hits?: { document?: { id?: number | string } }[];
@@ -208,6 +217,10 @@ class HardcoverAPI {
       spoiler
       character { name slug }
     }
+    book_mappings {
+      external_id
+      platform { name }
+    }
   `;
 
   /**
@@ -263,6 +276,139 @@ class HardcoverAPI {
         const firstId = data?.search?.results?.hits?.[0]?.document?.id;
         if (firstId == null) return null;
         return this.getBookById(Number(firstId));
+      },
+      3600
+    );
+  }
+
+  /**
+   * Multi-hit variant used by the aggregated book search. One Typesense
+   * query → follow-up `books(where: {id: {_in}})` batch → full metadata
+   * (incl. OpenLibrary mapping) for every hit in a single GraphQL call.
+   */
+  async searchBooks(
+    query: string,
+    limit = 10
+  ): Promise<HardcoverSearchHit[]> {
+    return cached(
+      `search-books:${query.toLowerCase()}:${limit}`,
+      async () => {
+        const searchGql = `
+          query Search($q: String!, $per: Int!) {
+            search(
+              query: $q,
+              query_type: "books",
+              per_page: $per,
+              page: 1
+            ) {
+              results
+            }
+          }
+        `;
+        const { data: searchData } = await this.gql<{
+          search: TypesenseSearchResponse;
+        }>(searchGql, { q: query, per: limit });
+        const ids = (searchData?.search?.results?.hits ?? [])
+          .map((h) => h.document?.id)
+          .filter((v): v is number | string => v != null)
+          .map((v) => Number(v))
+          .filter((v) => Number.isFinite(v));
+        if (ids.length === 0) return [];
+        const batchGql = `
+          query BooksByIds($ids: [Int!]!) {
+            books(where: { id: { _in: $ids } }, limit: ${ids.length}) {
+              ${HardcoverAPI.BOOK_FIELDS}
+            }
+          }
+        `;
+        const { data: batch } = await this.gql<{
+          books: HardcoverSearchHit[];
+        }>(batchGql, { ids });
+        // Preserve Typesense score ordering (books(where:_in) returns by id).
+        const byId = new Map(
+          (batch?.books ?? []).map((b) => [b.id, b])
+        );
+        return ids
+          .map((id) => byId.get(id))
+          .filter((b): b is HardcoverSearchHit => !!b);
+      },
+      3600
+    );
+  }
+
+  /**
+   * Find series by free-text name (e.g. "The Witcher"). Typesense search
+   * → one batched `series(where: {id: {_in}})` for metadata.
+   */
+  async searchSeries(
+    query: string,
+    limit = 5
+  ): Promise<HardcoverSeriesSearchHit[]> {
+    return cached(
+      `search-series:${query.toLowerCase()}:${limit}`,
+      async () => {
+        const searchGql = `
+          query SearchSeries($q: String!, $per: Int!) {
+            search(
+              query: $q,
+              query_type: "series",
+              per_page: $per,
+              page: 1
+            ) {
+              results
+            }
+          }
+        `;
+        const { data: searchData } = await this.gql<{
+          search: TypesenseSearchResponse;
+        }>(searchGql, { q: query, per: limit });
+        const ids = (searchData?.search?.results?.hits ?? [])
+          .map((h) => h.document?.id)
+          .filter((v): v is number | string => v != null)
+          .map((v) => Number(v))
+          .filter((v) => Number.isFinite(v));
+        if (ids.length === 0) return [];
+        const batchGql = `
+          query SeriesByIds($ids: [Int!]!) {
+            series(where: { id: { _in: $ids } }, limit: ${ids.length}) {
+              id
+              name
+              description
+              books_count
+              author { name }
+              book_series(order_by: { position: asc_nulls_last }, limit: 1) {
+                book { image { url } }
+              }
+            }
+          }
+        `;
+        const { data: batch } = await this.gql<{
+          series: Array<{
+            id: number;
+            name: string;
+            description?: string | null;
+            books_count?: number | null;
+            author?: { name?: string } | null;
+            book_series?: {
+              book?: { image?: { url?: string } | null } | null;
+            }[];
+          }>;
+        }>(batchGql, { ids });
+        const byId = new Map(
+          (batch?.series ?? []).map((s) => [s.id, s])
+        );
+        return ids
+          .map((id) => byId.get(id))
+          .filter((s): s is NonNullable<typeof s> => !!s)
+          .map((s) => ({
+            id: s.id,
+            name: s.name,
+            description: s.description ?? undefined,
+            booksCount: s.books_count ?? undefined,
+            authorName: s.author?.name ?? undefined,
+            coverUrl:
+              s.book_series?.[0]?.book?.image?.url ?? undefined,
+          }));
       },
       3600
     );

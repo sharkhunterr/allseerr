@@ -167,8 +167,15 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       subjects?: string[];
       description?: string;
       language?: string;
-      source: 'openlibrary' | 'bindery' | 'googlebooks';
+      source:
+        | 'openlibrary'
+        | 'bindery'
+        | 'googlebooks'
+        | 'hardcover'
+        | 'bookshelf';
     };
+
+    const isOLKey = (key?: string) => !!key?.startsWith('/works/');
 
     const normalizeKey = (title: string, author: string) =>
       `${title}|${author}`
@@ -178,6 +185,36 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
 
     const sources: Promise<AggregatedBook[]>[] = [];
     let olTotal = 0;
+
+    type SeriesHit = {
+      type: 'series';
+      key: string;
+      name: string;
+      authorName?: string;
+      coverUrl?: string;
+      memberCount?: number;
+      description?: string;
+    };
+    let seriesPromise: Promise<SeriesHit[]> = Promise.resolve([]);
+    if (providerCfg.hardcover && providerCfg.hardcoverApiKey) {
+      const hcForSeries = new HardcoverAPI(providerCfg.hardcoverApiKey);
+      seriesPromise = hcForSeries
+        .searchSeries(query, 3)
+        .then((hits) =>
+          hits.map(
+            (s): SeriesHit => ({
+              type: 'series',
+              key: `hardcover:${s.id}`,
+              name: s.name,
+              authorName: s.authorName,
+              coverUrl: s.coverUrl,
+              memberCount: s.booksCount,
+              description: s.description,
+            })
+          )
+        )
+        .catch(() => [] as SeriesHit[]);
+    }
 
     sources.push(
       openLibrary
@@ -254,13 +291,103 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       );
     }
 
-    const allResults = (await Promise.all(sources)).flat();
+    if (providerCfg.hardcover && providerCfg.hardcoverApiKey) {
+      const hc = new HardcoverAPI(providerCfg.hardcoverApiKey);
+      sources.push(
+        hc
+          .searchBooks(query, limit)
+          .then((hits) =>
+            hits.map((h): AggregatedBook => {
+              const olMap = h.book_mappings?.find(
+                (m) => m.platform?.name?.toLowerCase() === 'openlibrary'
+              );
+              const olKey = olMap?.external_id
+                ? olMap.external_id.startsWith('/works/')
+                  ? olMap.external_id
+                  : `/works/${olMap.external_id}`
+                : `hardcover:${h.id}`;
+              return {
+                openLibraryId: olKey,
+                title: h.title,
+                authorName:
+                  h.contributions?.[0]?.author?.name ?? 'Unknown Author',
+                coverUrl: h.image?.url?.startsWith('http')
+                  ? h.image.url
+                  : undefined,
+                year: h.release_date
+                  ? parseInt(h.release_date.slice(0, 4), 10) || undefined
+                  : undefined,
+                pageCount: h.pages ?? undefined,
+                source: 'hardcover',
+              };
+            })
+          )
+          .catch(() => [] as AggregatedBook[])
+      );
+    }
 
-    // Dedupe + merge: prefer bindery > openlibrary > googlebooks for the
-    // requestable identity fields (openLibraryId, source), and UNION
-    // enrichment fields from all providers so the richest description,
-    // ISBN, cover, subjects, etc. end up on the final record.
+    if (providerCfg.bookshelf) {
+      const bookshelfInstance = settings.bookshelf?.find(
+        (b) => b.mediaType === 'book' && b.isDefault
+      );
+      if (bookshelfInstance) {
+        const bs = new BookshelfAPI({
+          apiKey: bookshelfInstance.apiKey,
+          url: BookshelfAPI.buildUrl(bookshelfInstance, '/api/v1'),
+        });
+        sources.push(
+          bs
+            .lookupBook(query)
+            .then((hits) =>
+              hits.slice(0, limit).map((b): AggregatedBook => {
+                const loose = b as unknown as Record<string, unknown>;
+                const olMappings = (loose.book_mappings ?? loose.links) as
+                  | Array<Record<string, unknown>>
+                  | undefined;
+                const olKey = olMappings
+                  ?.map((m) => String(m.foreignId ?? m.external_id ?? ''))
+                  .find((v) => v.startsWith('OL') || v.startsWith('/works/'));
+                return {
+                  openLibraryId: olKey
+                    ? olKey.startsWith('/works/')
+                      ? olKey
+                      : `/works/${olKey}`
+                    : `bookshelf:${b.id}`,
+                  title: b.title,
+                  authorName:
+                    ((loose.author as { authorName?: string })?.authorName ??
+                      (loose.authorName as string | undefined)) ??
+                    'Unknown Author',
+                  coverUrl: undefined,
+                  year: (loose.releaseDate as string | undefined)
+                    ? parseInt(
+                        String(loose.releaseDate).slice(0, 4),
+                        10
+                      ) || undefined
+                    : undefined,
+                  source: 'bookshelf',
+                };
+              })
+            )
+            .catch(() => [] as AggregatedBook[])
+        );
+      }
+    }
+
+    const [allResults, seriesHits] = await Promise.all([
+      Promise.all(sources).then((arr) => arr.flat()),
+      seriesPromise,
+    ]);
+
+    // Dedupe + merge. Priority decides identity (title, author) — higher
+    // wins. Hardcover and Bookshelf sit above the rest when enabled
+    // because their titles are better curated (canonical English vs OL's
+    // mix of regional editions). But the dispatch path needs an OL work
+    // key, so mergeInto always lifts an OL-shaped openLibraryId from any
+    // contributor, regardless of who wins identity.
     const priority: Record<AggregatedBook['source'], number> = {
+      hardcover: 5,
+      bookshelf: 4,
       bindery: 3,
       openlibrary: 2,
       googlebooks: 1,
@@ -271,6 +398,12 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       loser: AggregatedBook
     ): AggregatedBook => ({
       ...winner,
+      // Keep the dispatchable OL key whenever either side has one.
+      openLibraryId: isOLKey(winner.openLibraryId)
+        ? winner.openLibraryId
+        : isOLKey(loser.openLibraryId)
+          ? loser.openLibraryId
+          : winner.openLibraryId,
       // Enrichment fields: pick whichever is present/longer
       isbn13: winner.isbn13 || loser.isbn13,
       isbn10: winner.isbn10 || loser.isbn10,
@@ -281,8 +414,8 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       language: winner.language || loser.language,
       authorKey: winner.authorKey || loser.authorKey,
       description:
-        winner.description && winner.description.length >=
-        (loser.description?.length ?? 0)
+        winner.description &&
+        winner.description.length >= (loser.description?.length ?? 0)
           ? winner.description
           : loser.description,
       subjects: Array.from(
@@ -301,13 +434,12 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         byKey.set(key, mergeInto(existing, item));
       }
     }
-    // Drop pure Google Books results (no OpenLibrary counterpart) — they
-    // can't open a detail page because GET /book/:id depends on an OL work
-    // key, and we can't dispatch reliably without one either. Google Books
-    // data is still used to enrich OL/Bindery matches via the dedupe pass
-    // above.
-    let merged = Array.from(byKey.values()).filter(
-      (r) => r.source !== 'googlebooks'
+    // Drop results without an OL key — GET /book/:id expects OL or Audible
+    // ASIN. Hardcover / Bookshelf hits without an OL mapping (rare) and
+    // pure Google Books results fall in that bucket. Their metadata is
+    // still used to enrich OL/Bindery winners through the merge pass.
+    let merged = Array.from(byKey.values()).filter((r) =>
+      isOLKey(r.openLibraryId)
     );
 
     // Apply the language preference:
@@ -333,13 +465,14 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
 
     // Overlay availability from local database
     const bookMediaRepo = getRepository(BookMedia);
-    const enrichedResults = await Promise.all(
+    const enrichedBooks = await Promise.all(
       merged.map(async (result) => {
         const existing = await bookMediaRepo.findOne({
           where: { openLibraryId: result.openLibraryId },
         });
 
         return {
+          type: 'book' as const,
           ...result,
           mediaType: MediaType.BOOK,
           mediaStatus: existing?.status ?? null,
@@ -348,11 +481,33 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       })
     );
 
+    // Series hits appear ahead of books when the query strongly matches a
+    // series name (naive heuristic: case-insensitive substring match on
+    // either side). Everything else still lands in the results list
+    // unchanged so users searching for an individual title aren't buried
+    // under series entries.
+    const queryLc = query.toLowerCase().trim();
+    const strongSeriesMatches: SeriesHit[] = [];
+    const weakSeriesMatches: SeriesHit[] = [];
+    for (const s of seriesHits) {
+      const nameLc = s.name.toLowerCase();
+      if (nameLc === queryLc || nameLc.includes(queryLc)) {
+        strongSeriesMatches.push(s);
+      } else {
+        weakSeriesMatches.push(s);
+      }
+    }
+    const finalResults = [
+      ...strongSeriesMatches,
+      ...enrichedBooks,
+      ...weakSeriesMatches,
+    ];
+
     return res.status(200).json({
       page,
       totalPages: Math.max(1, Math.ceil(olTotal / limit)),
-      totalResults: enrichedResults.length,
-      results: enrichedResults,
+      totalResults: finalResults.length,
+      results: finalResults,
     });
   } catch (e) {
     logger.error('Book search failed', {

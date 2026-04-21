@@ -44,7 +44,7 @@ const messages = defineMessages(
     saveFailed: 'Failed to save book metadata provider settings.',
     preferredLanguage: 'Preferred language',
     preferredLanguageHelp:
-      'Passed to every provider. Leave empty for no preference. Applied to OpenLibrary and Google Books search queries; aggregated results are then reordered / filtered by the policy below.',
+      'Filters on the language of the book\'s text (title, description) — NOT on the country of origin or the author\'s nationality. Passed to OpenLibrary (&language=<MARC>) and Google Books (&langRestrict=<iso2>) search queries. Aggregated results are then reordered / filtered by the policy below. Leave empty for no preference.',
     languagePolicy: 'Language policy',
     languagePolicyHelp:
       '"Prefer": matching-language results float to the top, others are still returned. "Strict": drop results that aren\'t in the preferred language (books with unknown language are kept either way).',
