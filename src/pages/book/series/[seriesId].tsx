@@ -16,6 +16,7 @@ const messages = defineMessages('pages.BookSeries', {
   booksInSeries: '{count, plural, one {# book} other {# books}}',
   overview: 'Overview',
   books: 'Books',
+  aboutAuthor: 'About the author',
 });
 
 interface SeriesMember {
@@ -33,6 +34,10 @@ interface SeriesDetail {
   description?: string;
   seedCount: number;
   members: SeriesMember[];
+  authorName?: string;
+  authorKey?: string;
+  authorPhotoUrl?: string;
+  authorBio?: string;
 }
 
 const BookSeriesPage: NextPage = () => {
@@ -98,6 +103,49 @@ const BookSeriesPage: NextPage = () => {
           <p>
             {data.description ?? intl.formatMessage(messages.empty)}
           </p>
+        </div>
+        <div className="media-overview-right">
+          {(data.authorName || data.authorPhotoUrl || data.authorBio) && (
+            <button
+              type="button"
+              disabled={!data.authorKey}
+              onClick={() =>
+                data.authorKey &&
+                router.push(`/book/author/${data.authorKey}`)
+              }
+              className="group mb-6 block w-full cursor-pointer overflow-hidden rounded-lg bg-gray-800 text-left shadow-md ring-1 ring-gray-700 transition hover:ring-indigo-400 disabled:cursor-default disabled:hover:ring-gray-700"
+            >
+              <div className="flex items-start gap-4 p-4">
+                <div className="flex-shrink-0">
+                  {data.authorPhotoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={data.authorPhotoUrl}
+                      alt={data.authorName ?? ''}
+                      className="h-20 w-20 rounded-full object-cover ring-2 ring-indigo-500/40"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-700 text-2xl font-semibold text-gray-300">
+                      {data.authorName?.[0]?.toUpperCase() ?? '?'}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs uppercase tracking-wide text-gray-400">
+                    {intl.formatMessage(messages.aboutAuthor)}
+                  </div>
+                  <div className="text-base font-semibold text-white group-hover:text-indigo-300">
+                    {data.authorName}
+                  </div>
+                </div>
+              </div>
+              {data.authorBio && (
+                <p className="max-h-32 overflow-hidden px-4 pb-4 text-sm text-gray-300">
+                  {data.authorBio}
+                </p>
+              )}
+            </button>
+          )}
         </div>
       </div>
       <div className="slider-header">

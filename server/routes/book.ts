@@ -623,12 +623,51 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           return rest;
         }
       );
+
+      // Author enrichment — pick the primary author from the most-read
+      // member's contributions, then fetch their full record so the
+      // series page can render the same "About the author" card the
+      // book detail already uses. Best-effort: if we can't resolve an
+      // id, we skip.
+      let seriesAuthorName: string | undefined;
+      let seriesAuthorKey: string | undefined;
+      let seriesAuthorPhotoUrl: string | undefined;
+      let seriesAuthorBio: string | undefined;
+      const mostReadMember = [...(detail.book_series ?? [])]
+        .sort(
+          (a, b) =>
+            (b.book?.users_count ?? 0) - (a.book?.users_count ?? 0)
+        )[0];
+      const seriesAuthorId = hardcoverPrimaryAuthorId(
+        mostReadMember?.book?.contributions
+      );
+      seriesAuthorName = hardcoverPrimaryAuthor(
+        mostReadMember?.book?.contributions
+      );
+      if (seriesAuthorId !== undefined) {
+        seriesAuthorKey = `hardcover:${seriesAuthorId}`;
+        try {
+          const author = await hc.getAuthor(seriesAuthorId);
+          if (author) {
+            seriesAuthorName = seriesAuthorName ?? author.name;
+            seriesAuthorPhotoUrl = author.cached_image_url;
+            seriesAuthorBio = author.bio;
+          }
+        } catch {
+          /* best-effort */
+        }
+      }
+
       return res.status(200).json({
         key: `hardcover:${detail.id}`,
         name: detail.name,
         description: detail.description ?? undefined,
         seedCount: enriched.length,
         members: enriched,
+        authorName: seriesAuthorName,
+        authorKey: seriesAuthorKey,
+        authorPhotoUrl: seriesAuthorPhotoUrl,
+        authorBio: seriesAuthorBio,
       });
     }
 
@@ -889,6 +928,23 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       const hcCountryName = topEdition?.country?.name ?? undefined;
       const hcLang = topEdition?.language?.code2 ?? undefined;
       const primaryAuthorId = hardcoverPrimaryAuthorId(hit.contributions);
+      // Photo + bio come from the authors table, not the book row.
+      // Best-effort: if we can resolve a primary author id, fetch the
+      // author detail so the "About the author" card on the book page
+      // renders with photo / bio just like the OpenLibrary path.
+      let authorPhotoUrl: string | undefined;
+      let authorBio: string | undefined;
+      if (primaryAuthorId !== undefined) {
+        try {
+          const authorDetail = await hc.getAuthor(primaryAuthorId);
+          if (authorDetail) {
+            authorPhotoUrl = authorDetail.cached_image_url;
+            authorBio = authorDetail.bio;
+          }
+        } catch {
+          /* best-effort */
+        }
+      }
       return res.status(200).json({
         key: `hardcover:${hcId}`,
         title: hit.title,
@@ -903,6 +959,8 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
           primaryAuthorId !== undefined
             ? `hardcover:${primaryAuthorId}`
             : undefined,
+        authorPhotoUrl,
+        authorBio,
         year: hit.release_date
           ? parseInt(hit.release_date.slice(0, 4), 10) || undefined
           : undefined,
