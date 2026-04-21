@@ -29,6 +29,7 @@ const messages = defineMessages('components.Search', {
   tabAudiobooks: 'Audiobooks',
   tabGames: 'Games',
   noResults: 'No results found.',
+  bookBadge: 'Book',
   seriesBadge: 'Series',
   seriesCountFmt: '{count, plural, one {# book} other {# books}}',
 });
@@ -53,8 +54,17 @@ const SeriesSearchCard = ({ result }: { result: SeriesResult }) => {
               <BookOpenIcon className="h-12 w-12 text-gray-500" />
             </div>
           )}
-          <div className="absolute left-0 right-0 top-0 flex items-center justify-between p-2">
-            <div className="pointer-events-none z-40 self-start rounded-full border border-indigo-500 bg-indigo-600/80 shadow-md">
+          <div className="absolute left-0 right-0 top-0 flex items-center gap-1 p-2">
+            {/* Book badge (orange) — kept for visual parity with book
+                cards; tells the user the series contains book items. */}
+            <div className="pointer-events-none z-40 rounded-full border border-orange-500 bg-orange-600/80 shadow-md">
+              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                {intl.formatMessage(messages.bookBadge)}
+              </div>
+            </div>
+            {/* Series badge (indigo) — marks this card as a series
+                entry rather than an individual book. */}
+            <div className="pointer-events-none z-40 rounded-full border border-indigo-500 bg-indigo-600/80 shadow-md">
               <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
                 {intl.formatMessage(messages.seriesBadge)}
               </div>

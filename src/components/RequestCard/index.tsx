@@ -8,6 +8,7 @@ import StatusBadge from '@app/components/StatusBadge';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
+import { stripOLWorkPrefix } from '@app/utils/bookIds';
 import defineMessages from '@app/utils/defineMessages';
 import { refreshIntervalHelper } from '@app/utils/refreshIntervalHelper';
 import { withProperties } from '@app/utils/typeHelpers';
@@ -375,7 +376,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
         (bm.covers?.[0]
           ? `https://covers.openlibrary.org/b/id/${bm.covers[0]}-L.jpg`
           : undefined);
-      href = `/book/${(bm.openLibraryId || bm.foreignBookId || '').replace('/works/', '')}`;
+      href = `/book/${stripOLWorkPrefix(bm.openLibraryId || bm.foreignBookId || '')}`;
       typeLabel = 'Book';
     } else if (request.type === MediaType.AUDIOBOOK && am) {
       infoTitle = am.title;
@@ -384,7 +385,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
         (am.covers?.[0]
           ? `https://covers.openlibrary.org/b/id/${am.covers[0]}-L.jpg`
           : undefined);
-      href = `/book/${(am.openLibraryId || am.foreignBookId || '').replace('/works/', '')}`;
+      href = `/book/${stripOLWorkPrefix(am.openLibraryId || am.foreignBookId || '')}`;
       typeLabel = 'Audiobook';
     }
 

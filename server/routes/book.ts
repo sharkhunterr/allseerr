@@ -3,6 +3,7 @@ import GoogleBooksAPI from '@server/api/googlebooks';
 import HardcoverAPI, {
   hardcoverPrimaryAuthor,
 } from '@server/api/hardcover';
+import { isOLWorkKey, toOLWorkKey } from '@server/lib/bookIds';
 import OpenLibraryAPI, { cleanOpenLibraryText } from '@server/api/openlibrary';
 import BinderyAPI from '@server/api/servarr/bindery';
 import BookshelfAPI from '@server/api/servarr/bookshelf';
@@ -188,7 +189,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       providerIds: ProviderIds;
     };
 
-    const isOLKey = (key?: string) => !!key?.startsWith('/works/');
+    const isOLKey = isOLWorkKey;
 
     const normalizeKey = (title: string, author: string) =>
       `${title}|${author}`
@@ -265,9 +266,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
             .then((items) =>
               items.slice(0, limit).map(
                 (b): AggregatedBook => {
-                  const olId = b.foreignBookId.startsWith('OL')
-                    ? `/works/${b.foreignBookId}`
-                    : b.foreignBookId;
+                  const olId = toOLWorkKey(b.foreignBookId) ?? b.foreignBookId;
                   return {
                     openLibraryId: olId,
                     title: b.title,
@@ -333,11 +332,8 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
               const olMap = h.book_mappings?.find(
                 (m) => m.platform?.name?.toLowerCase() === 'openlibrary'
               );
-              const olKey = olMap?.external_id
-                ? olMap.external_id.startsWith('/works/')
-                  ? olMap.external_id
-                  : `/works/${olMap.external_id}`
-                : `hardcover:${h.id}`;
+              const olKey =
+                toOLWorkKey(olMap?.external_id) ?? `hardcover:${h.id}`;
               const gbMap = h.book_mappings?.find((m) =>
                 ['google books', 'googlebooks'].includes(
                   m.platform?.name?.toLowerCase() ?? ''
@@ -390,12 +386,9 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
                   | undefined;
                 const olKeyRaw = olMappings
                   ?.map((m) => String(m.foreignId ?? m.external_id ?? ''))
-                  .find((v) => v.startsWith('OL') || v.startsWith('/works/'));
-                const olKey = olKeyRaw
-                  ? olKeyRaw.startsWith('/works/')
-                    ? olKeyRaw
-                    : `/works/${olKeyRaw}`
-                  : `bookshelf:${b.id}`;
+                  .find((v) => /OL\d+W/i.test(v));
+                const olKey =
+                  toOLWorkKey(olKeyRaw) ?? `bookshelf:${b.id}`;
                 return {
                   openLibraryId: olKey,
                   title: b.title,
@@ -720,51 +713,29 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           .status(404)
           .json({ status: 404, message: 'Series not found.' });
       }
-      const prefLang = cfg.preferredLanguage?.toLowerCase().trim() ?? '';
-      const policy = cfg.languagePolicy ?? 'prefer';
       const rawMembers = detail.book_series ?? [];
 
       // Hardcover series mix original + localised editions as separate
       // book records ("Blood of Elves" + "Krew elfów" + …). Deduplicate
-      // by normalised title, keeping the entry whose language matches
-      // the user's preference first. Falls back to alphabetical source
-      // order (Hardcover's `position` keeps the original chronology).
+      // by normalised title so we keep one entry per book — Hardcover
+      // doesn't expose a per-book language on the `books` type (it lives
+      // on editions we don't fetch), so we can't language-filter here;
+      // the title-normalised key collapses most translation duplicates.
       const normalise = (t: string) =>
         t
           .toLowerCase()
           .replace(/^(the|a|an|le|la|les|un|une)\s+/, '')
           .replace(/[^a-z0-9]+/g, ' ')
           .trim();
-      const groups = new Map<string, typeof rawMembers>();
-      for (const m of rawMembers) {
+      const seen = new Set<string>();
+      const deduped = rawMembers.filter((m) => {
         const title = m.book?.title ?? '';
-        if (!title.trim()) continue;
+        if (!title.trim()) return false;
         const key = normalise(title);
-        const bucket = groups.get(key) ?? [];
-        bucket.push(m);
-        groups.set(key, bucket);
-      }
-      const langRank = (code?: string | null): number => {
-        if (!prefLang) return 0;
-        if (!code) return 1;
-        return code.toLowerCase() === prefLang ? 0 : 2;
-      };
-      let deduped = [...groups.values()].map(
-        (bucket) =>
-          [...bucket].sort(
-            (a, b) =>
-              langRank(a.book?.language?.code2) -
-              langRank(b.book?.language?.code2)
-          )[0]
-      );
-      // "strict": drop any book whose language isn't the preferred one.
-      // Unknown-language entries are kept (data is patchy).
-      if (prefLang && policy === 'strict') {
-        deduped = deduped.filter((m) => {
-          const code = m.book?.language?.code2?.toLowerCase();
-          return !code || code === prefLang;
-        });
-      }
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
       // Preserve the original (chronological) order by re-sorting on
       // Hardcover's `position`.
       deduped.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -775,15 +746,12 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           const olMapping = m.book?.book_mappings?.find(
             (bm) => bm.platform?.name?.toLowerCase() === 'openlibrary'
           );
-          const olKey = olMapping?.external_id;
-          const openLibraryId = olKey
-            ? olKey.startsWith('/works/')
-              ? olKey
-              : `/works/${olKey}`
-            : `hardcover:${m.book?.id ?? ''}`;
-          const existing = olKey
+          const normalisedOL = toOLWorkKey(olMapping?.external_id);
+          const openLibraryId =
+            normalisedOL ?? `hardcover:${m.book?.id ?? ''}`;
+          const existing = normalisedOL
             ? await bookMediaRepo.findOne({
-                where: { openLibraryId },
+                where: { openLibraryId: normalisedOL },
               })
             : null;
           const imageUrl = m.book?.image?.url;

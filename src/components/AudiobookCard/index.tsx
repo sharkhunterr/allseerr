@@ -1,4 +1,5 @@
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
+import { stripOLWorkPrefix } from '@app/utils/bookIds';
 import defineMessages from '@app/utils/defineMessages';
 import { MusicalNoteIcon } from '@heroicons/react/24/solid';
 import { MediaStatus } from '@server/constants/media';
@@ -40,7 +41,7 @@ const AudiobookCard = ({
   mediaStatus,
 }: AudiobookCardProps) => {
   const intl = useIntl();
-  const bookId = openLibraryId.replace('/works/', '');
+  const bookId = stripOLWorkPrefix(openLibraryId);
 
   return (
     <Link href={`/book/${bookId}`}>

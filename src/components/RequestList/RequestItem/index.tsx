@@ -8,6 +8,7 @@ import StatusBadge from '@app/components/StatusBadge';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
+import { stripOLWorkPrefix } from '@app/utils/bookIds';
 import defineMessages from '@app/utils/defineMessages';
 import { refreshIntervalHelper } from '@app/utils/refreshIntervalHelper';
 import {
@@ -213,10 +214,7 @@ const getNonTmdbInfo = (
     };
   }
   if (request.type === MediaType.BOOK && bm) {
-    const bookId = (bm.openLibraryId || bm.foreignBookId || '').replace(
-      '/works/',
-      ''
-    );
+    const bookId = stripOLWorkPrefix(bm.openLibraryId || bm.foreignBookId || '');
     return {
       title: bm.title,
       coverUrl:
@@ -229,10 +227,7 @@ const getNonTmdbInfo = (
     };
   }
   if (request.type === MediaType.AUDIOBOOK && am) {
-    const bookId = (am.openLibraryId || am.foreignBookId || '').replace(
-      '/works/',
-      ''
-    );
+    const bookId = stripOLWorkPrefix(am.openLibraryId || am.foreignBookId || '');
     return {
       title: am.title,
       coverUrl:
