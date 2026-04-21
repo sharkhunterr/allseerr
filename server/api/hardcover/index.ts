@@ -56,6 +56,14 @@ export interface HardcoverBookMapping {
   platform?: { name?: string };
 }
 
+export interface HardcoverEdition {
+  isbn_13?: string | null;
+  isbn_10?: string | null;
+  publisher?: { name?: string | null } | null;
+  country?: { name?: string | null } | null;
+  language?: { code2?: string | null } | null;
+}
+
 export interface HardcoverSearchHit {
   id: number;
   title: string;
@@ -77,6 +85,7 @@ export interface HardcoverSearchHit {
   book_series?: { series?: { id: number; name: string } | null; position?: number }[];
   book_characters?: HardcoverCharacter[];
   book_mappings?: HardcoverBookMapping[];
+  editions?: HardcoverEdition[];
 }
 
 /**
@@ -254,6 +263,17 @@ class HardcoverAPI {
     book_mappings {
       external_id
       platform { name }
+    }
+    editions(
+      limit: 5
+      order_by: { users_count: desc_nulls_last }
+      where: { isbn_13: { _is_null: false } }
+    ) {
+      isbn_13
+      isbn_10
+      publisher { name }
+      country { name }
+      language { code2 }
     }
   `;
 

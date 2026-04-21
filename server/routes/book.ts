@@ -614,12 +614,31 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       }
     }
 
-    // Overlay availability from local database
+    // Overlay availability from local database. We check every id we
+    // know about for this book (OL, hardcover:<id>, bookshelf:<id>)
+    // so a BookMedia row stored under one provider's key still lights
+    // up the badge when the same book later shows up under a
+    // different key in the merged result (Hardcover merge may drop
+    // the OL key or vice versa depending on which providers hit).
     const bookMediaRepo = getRepository(BookMedia);
     const enrichedBooks = await Promise.all(
       merged.map(async (result) => {
+        const candidateKeys = Array.from(
+          new Set(
+            [
+              result.openLibraryId,
+              result.providerIds.openlibrary,
+              result.providerIds.hardcover !== undefined
+                ? `hardcover:${result.providerIds.hardcover}`
+                : undefined,
+              result.providerIds.bookshelf !== undefined
+                ? `bookshelf:${result.providerIds.bookshelf}`
+                : undefined,
+            ].filter((k): k is string => !!k)
+          )
+        );
         const existing = await bookMediaRepo.findOne({
-          where: { openLibraryId: result.openLibraryId },
+          where: candidateKeys.map((k) => ({ openLibraryId: k })),
         });
 
         return {
@@ -820,11 +839,22 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
             (bm) => bm.platform?.name?.toLowerCase() === 'openlibrary'
           );
           const normalisedOL = toOLWorkKey(olMapping?.external_id);
-          const openLibraryId =
-            normalisedOL ?? `hardcover:${m.book?.id ?? ''}`;
-          const existing = normalisedOL
+          const hardcoverKey = `hardcover:${m.book?.id ?? ''}`;
+          const openLibraryId = normalisedOL ?? hardcoverKey;
+          // Check BookMedia under every key we know for this book — if
+          // the user previously requested it via one id we don't want
+          // the badge to go missing just because another provider
+          // wins identity in the current aggregation.
+          const candidateKeys = Array.from(
+            new Set(
+              [normalisedOL, hardcoverKey].filter(
+                (k): k is string => !!k
+              )
+            )
+          );
+          const existing = candidateKeys.length
             ? await bookMediaRepo.findOne({
-                where: { openLibraryId: normalisedOL },
+                where: candidateKeys.map((k) => ({ openLibraryId: k })),
               })
             : null;
           const imageUrl = m.book?.image?.url;
@@ -1066,6 +1096,15 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         hit.cached_tags?.Genre?.map((t) => t.tag).filter(
           (t): t is string => !!t
         ) ?? [];
+      // Hardcover tracks ISBNs + publisher + country + language on
+      // the edition, not the book. Take the most-read edition (the
+      // default order_by in BOOK_FIELDS) as the representative one.
+      const topEdition = hit.editions?.[0];
+      const hcIsbn13 = topEdition?.isbn_13 ?? undefined;
+      const hcIsbn10 = topEdition?.isbn_10 ?? undefined;
+      const hcPublisher = topEdition?.publisher?.name ?? undefined;
+      const hcCountryName = topEdition?.country?.name ?? undefined;
+      const hcLang = topEdition?.language?.code2 ?? undefined;
       return res.status(200).json({
         key: `hardcover:${hcId}`,
         title: hit.title,
@@ -1080,6 +1119,15 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
           ? parseInt(hit.release_date.slice(0, 4), 10) || undefined
           : undefined,
         pageCount: hit.pages ?? undefined,
+        publisher: hcPublisher,
+        isbn13: hcIsbn13,
+        isbn10: hcIsbn10,
+        // Detail page renders `country` as a flag. Hardcover gives a
+        // human-readable name, not an ISO code — the detail-page
+        // component falls back to rendering it as text when the
+        // 2-letter regex fails, so it still shows up.
+        country: hcCountryName,
+        language: hcLang,
         rating: hit.rating ?? undefined,
         ratingsCount: hit.ratings_count ?? undefined,
         readersCount: hit.users_count ?? undefined,
