@@ -65,7 +65,6 @@ export interface HardcoverEdition {
   release_date?: string | null;
   pages?: number | null;
   edition_format?: string | null;
-  description?: string | null;
   image?: { url?: string | null } | null;
   publisher?: { name?: string | null } | null;
   country?: { name?: string | null; code2?: string | null } | null;
@@ -377,7 +376,6 @@ class HardcoverAPI {
       release_date
       pages
       edition_format
-      description
       image { url }
       publisher { name }
       country { name code2 }

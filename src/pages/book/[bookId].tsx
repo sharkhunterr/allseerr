@@ -82,7 +82,6 @@ interface Edition {
   releaseDate?: string;
   pageCount?: number;
   format?: string;
-  description?: string;
   coverUrl?: string;
   publisher?: string;
   country?: string;
@@ -184,12 +183,13 @@ const BookDetailPage: NextPage = () => {
   // Edition-aware overrides. Book-level fields are the default, but
   // any field the selected edition supplies wins — lets the user flip
   // between hardcover / paperback / translations and see the cover,
-  // ISBN, publisher, page count, release year update live.
-  const baseDescription =
+  // ISBN, publisher, page count, release year update live. The
+  // description stays at the book level (Hardcover doesn't store it
+  // per edition).
+  const description =
     typeof data.description === 'string'
       ? data.description
       : data.description?.value;
-  const description = selectedEdition?.description ?? baseDescription;
 
   const coverUrl =
     selectedEdition?.coverUrl ||

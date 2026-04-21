@@ -1061,7 +1061,6 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
           releaseDate: e.release_date ?? undefined,
           pageCount: e.pages ?? undefined,
           format: e.edition_format ?? undefined,
-          description: e.description ?? undefined,
           coverUrl: e.image?.url?.startsWith('http')
             ? e.image.url
             : undefined,
