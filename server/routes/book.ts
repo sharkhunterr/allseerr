@@ -1265,23 +1265,30 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       }
     }
 
-    // Series membership — start with OpenLibrary's canonical series data,
-    // then fill in from Bookshelf/Hardcover below if OL had nothing.
-    const seriesEntries: {
+    // Series membership. We collect candidates from each enabled source
+    // in parallel and pick ONE source at the end — Hardcover >
+    // Bookshelf > OpenLibrary — so series links land on the same
+    // provider the aggregated search surfaced. This avoids the
+    // situation where clicking "Harry Potter" from a search result
+    // opens the Hardcover series page while clicking it from a book
+    // detail opens the (often sparser) OL series page.
+    type SeriesEntry = {
       key: string;
       name: string;
       position?: string;
       seedCount: number;
-      /** Whether we can link to an in-app series page (requires OL key). */
       linkable: boolean;
-    }[] = [];
+    };
+    const seriesCandidates: {
+      openlibrary: SeriesEntry[];
+      bookshelf: SeriesEntry[];
+      hardcover: SeriesEntry[];
+    } = { openlibrary: [], bookshelf: [], hardcover: [] };
     if (work.series?.length) {
       const seriesLookups = work.series.slice(0, 3).map(async (ref) => {
         const info = await openLibrary.getSeries(ref.series.key);
         if (info) {
-          seriesEntries.push({
-            // Source-prefixed key so the /book/series/:key handler can
-            // dispatch to the right provider regardless of origin.
+          seriesCandidates.openlibrary.push({
             key: `openlibrary:${info.key}`,
             name: info.name,
             position: ref.position,
@@ -1348,11 +1355,11 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
               mergedGenres.add(g)
             );
 
-            // Series fallback from "seriesTitle". Bookshelf encodes
-            // multi-series memberships as "Wool #2; Silo #1B" — split
-            // and emit one linkable entry per series.
+            // Bookshelf encodes multi-series memberships as "Wool #2;
+            // Silo #1B" in the `seriesTitle` field. Always collect —
+            // the source-priority pick at the end decides whether to
+            // use them.
             if (
-              seriesEntries.length === 0 &&
               typeof match.seriesTitle === 'string' &&
               match.seriesTitle.trim()
             ) {
@@ -1361,9 +1368,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
                 .map((s) => s.trim())) {
                 const m = part.match(/^(.+?)\s*(?:#(\S+))?\s*$/);
                 if (m?.[1]) {
-                  seriesEntries.push({
-                    // URL-safe: encode the series name (can contain
-                    // spaces / apostrophes). The handler decodes it back.
+                  seriesCandidates.bookshelf.push({
                     key: `bookshelf:${encodeURIComponent(m[1])}`,
                     name: m[1],
                     position: m[2],
@@ -1431,10 +1436,10 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
             .forEach((c) => {
               if (c.character?.name) characters.push(c.character.name);
             });
-          if (seriesEntries.length === 0 && hit.book_series?.length) {
+          if (hit.book_series?.length) {
             for (const bs of hit.book_series) {
               if (bs.series?.name) {
-                seriesEntries.push({
+                seriesCandidates.hardcover.push({
                   key: `hardcover:${bs.series.id}`,
                   name: bs.series.name,
                   position: bs.position?.toString(),
@@ -1451,6 +1456,19 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
     }
 
     await Promise.all(enrichmentCalls);
+
+    // Pick a single source for series so all in-app series links are
+    // consistent with the aggregated search: Hardcover > Bookshelf >
+    // OpenLibrary. Everything else collected during enrichment is
+    // discarded to avoid the detail page showing OL's series while
+    // search surfaced Hardcover's (different page, different member
+    // list, confusing UX).
+    const seriesEntries =
+      seriesCandidates.hardcover.length > 0
+        ? seriesCandidates.hardcover
+        : seriesCandidates.bookshelf.length > 0
+          ? seriesCandidates.bookshelf
+          : seriesCandidates.openlibrary;
 
     // Merge genres into subjects for display
     mergedGenres.forEach((g) => mergedSubjects.add(g));
