@@ -402,38 +402,16 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
         const mediaStatus = bm?.status ?? am?.status ?? gm?.status ?? undefined;
         return <StatusBadge status={mediaStatus} title={infoTitle} />;
       }
-      switch (reqStatus) {
-        case MediaRequestStatus.PENDING:
-          return (
-            <Badge badgeType="warning">
-              {intl.formatMessage(globalMessages.pending)}
-            </Badge>
-          );
-        case MediaRequestStatus.APPROVED:
-          return (
-            <Badge badgeType="success">
-              {intl.formatMessage(globalMessages.approved)}
-            </Badge>
-          );
-        case MediaRequestStatus.DECLINED:
-          return (
-            <Badge badgeType="danger">
-              {intl.formatMessage(globalMessages.declined)}
-            </Badge>
-          );
-        case MediaRequestStatus.FAILED:
-          return (
-            <Badge badgeType="danger">
-              {intl.formatMessage(globalMessages.failed)}
-            </Badge>
-          );
-        default:
-          return (
-            <Badge badgeType="default">
-              {intl.formatMessage(globalMessages.pending)}
-            </Badge>
-          );
-      }
+      // reqStatus is narrowed to DECLINED | FAILED here.
+      return reqStatus === MediaRequestStatus.DECLINED ? (
+        <Badge badgeType="danger">
+          {intl.formatMessage(globalMessages.declined)}
+        </Badge>
+      ) : (
+        <Badge badgeType="danger">
+          {intl.formatMessage(globalMessages.failed)}
+        </Badge>
+      );
     })();
 
     return (
