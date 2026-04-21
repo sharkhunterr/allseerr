@@ -1,8 +1,8 @@
-import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tag from '@app/components/Common/Tag';
+import BookRequestModal from '@app/components/RequestModal/BookRequestModal';
 import StatusBadge from '@app/components/StatusBadge';
 import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
@@ -13,19 +13,15 @@ import {
   PlayIcon,
 } from '@heroicons/react/24/solid';
 import { MediaStatus, MediaType } from '@server/constants/media';
-import axios from 'axios';
 import type { NextPage } from 'next';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
-import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 
 const messages = defineMessages('pages.BookDetail', {
   requestBook: 'Request Book',
   requestAudiobook: 'Request Audiobook',
-  requestSuccess: 'Request submitted successfully!',
-  requestFailed: 'Failed to submit request.',
   notFound: 'Not found.',
   overview: 'Overview',
   overviewunavailable: 'Overview unavailable.',
@@ -266,13 +262,12 @@ const EditionSelect = ({
 const BookDetailPage: NextPage = () => {
   const router = useRouter();
   const intl = useIntl();
-  const { addToast } = useToasts();
   const { currentSettings } = useSettings();
   const { bookId } = router.query;
-  const [isRequesting, setIsRequesting] = useState(false);
   const [selectedEditionId, setSelectedEditionId] = useState<number | null>(
     null
   );
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
   const {
     data,
@@ -348,39 +343,6 @@ const BookDetailPage: NextPage = () => {
     !data.mediaStatus ||
     data.mediaStatus === MediaStatus.UNKNOWN ||
     data.mediaStatus === MediaStatus.DELETED;
-
-  const handleRequest = async () => {
-    setIsRequesting(true);
-    try {
-      await axios.post('/api/v1/book/request', {
-        mediaType: isAudiobook ? MediaType.AUDIOBOOK : MediaType.BOOK,
-        openLibraryId: data.key,
-        title: data.title,
-        authorName: data.authorName ?? 'Unknown',
-        foreignBookId: data.key,
-        foreignAuthorId: data.authorKey,
-        isbn13: data.isbn13,
-        isbn10: data.isbn10,
-        narratorName: data.narratorName,
-        asin: isAudiobook ? data.key : undefined,
-        coverUrl,
-        year: data.year,
-        publisher: data.publisher,
-      });
-      addToast(intl.formatMessage(messages.requestSuccess), {
-        appearance: 'success',
-        autoDismiss: true,
-      });
-      revalidate();
-    } catch {
-      addToast(intl.formatMessage(messages.requestFailed), {
-        appearance: 'error',
-        autoDismiss: true,
-      });
-    } finally {
-      setIsRequesting(false);
-    }
-  };
 
   const attributes: React.ReactNode[] = [];
   if (displayedYear) attributes.push(<span>{displayedYear}</span>);
@@ -482,20 +444,35 @@ const BookDetailPage: NextPage = () => {
           {showRequestButton && canRequest && (
             <Button
               buttonType="primary"
-              disabled={isRequesting}
-              onClick={handleRequest}
+              onClick={() => setShowRequestModal(true)}
             >
-              {isRequesting ? (
-                <Spinner />
-              ) : (
-                intl.formatMessage(
-                  isAudiobook ? messages.requestAudiobook : messages.requestBook
-                )
+              {intl.formatMessage(
+                isAudiobook ? messages.requestAudiobook : messages.requestBook
               )}
             </Button>
           )}
         </div>
       </div>
+      <BookRequestModal
+        show={showRequestModal}
+        bookKey={data.key}
+        title={data.title}
+        authorName={data.authorName ?? 'Unknown'}
+        authorKey={data.authorKey}
+        isAudiobook={isAudiobook}
+        fallbackCoverUrl={coverUrl}
+        fallbackYear={data.year}
+        fallbackPublisher={data.publisher}
+        fallbackIsbn13={data.isbn13}
+        fallbackIsbn10={data.isbn10}
+        editions={editions}
+        initialEditionId={selectedEdition?.id ?? null}
+        onCancel={() => setShowRequestModal(false)}
+        onComplete={() => {
+          setShowRequestModal(false);
+          revalidate();
+        }}
+      />
       <div className="media-overview">
         <div className="media-overview-left">
           {editions.length > 1 && (
