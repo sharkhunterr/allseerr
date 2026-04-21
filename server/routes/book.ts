@@ -1298,9 +1298,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
     // this book, fall back to Bookshelf (which can still hold a series
     // ref). Never mix sources.
     const seriesPrimary =
-      providerCfg.primarySource === 'hardcover' &&
-      providerCfg.hardcover &&
-      providerCfg.hardcoverApiKey
+      cfg.primarySource === 'hardcover' && cfg.hardcover && cfg.hardcoverApiKey
         ? 'hardcover'
         : 'openlibrary';
     const seriesEntries =
