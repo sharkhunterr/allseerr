@@ -680,6 +680,8 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
       let seriesAuthorKey: string | undefined;
       let seriesAuthorPhotoUrl: string | undefined;
       let seriesAuthorBio: string | undefined;
+      let seriesAuthorBirthDate: string | undefined;
+      let seriesAuthorDeathDate: string | undefined;
       const mostReadMember = [...(detail.book_series ?? [])]
         .sort(
           (a, b) =>
@@ -699,6 +701,8 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
             seriesAuthorName = seriesAuthorName ?? author.name;
             seriesAuthorPhotoUrl = author.cached_image_url;
             seriesAuthorBio = author.bio;
+            seriesAuthorBirthDate = author.birth_date;
+            seriesAuthorDeathDate = author.death_date;
           }
         } catch {
           /* best-effort */
@@ -715,6 +719,8 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
         authorKey: seriesAuthorKey,
         authorPhotoUrl: seriesAuthorPhotoUrl,
         authorBio: seriesAuthorBio,
+        authorBirthDate: seriesAuthorBirthDate,
+        authorDeathDate: seriesAuthorDeathDate,
       });
     }
 
@@ -825,6 +831,8 @@ bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
         name: author.name,
         photoUrl: author.cached_image_url,
         bio: author.bio,
+        birthDate: author.birth_date,
+        deathDate: author.death_date,
         totalWorks: author.books_count ?? works.length,
         uniqueWorks: works.length,
         works,
@@ -975,31 +983,49 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
           (t): t is string => !!t
         ) ?? [];
       // Hardcover tracks ISBNs + publisher + country + language on
-      // the edition, not the book. We order by release_date asc so
-      // edition[0] is the original / earliest one — the country
-      // there is the book's country of origin (Dune → US, Harry
-      // Potter → GB) rather than whichever translation happens to be
-      // most popular on Hardcover (which biases heavily toward US
-      // editions and wrongly marked UK books as American).
-      const originalEdition = hit.editions?.[0];
-      const hcIsbn13 = originalEdition?.isbn_13 ?? undefined;
-      const hcIsbn10 = originalEdition?.isbn_10 ?? undefined;
-      const hcPublisher = originalEdition?.publisher?.name ?? undefined;
+      // the edition, not the book. Editions come back ordered by
+      // release_date asc, so edition[0] is the original / earliest
+      // edition — we take `country` from there because the country
+      // of origin shouldn't flip when translations come out later.
+      // For the edition the user actually cares about (title /
+      // publisher / language / ISBN on the detail page), we pick the
+      // first edition matching the preferred language, falling back
+      // to the original when no match exists. Publisher in
+      // particular is only shown when a preferred-language edition
+      // exists — a US publisher on a French user's page would be
+      // misleading.
+      const prefLang = cfg.preferredLanguage?.toLowerCase().trim() || '';
+      const editions = hit.editions ?? [];
+      const originalEdition = editions[0];
+      const preferredEdition = prefLang
+        ? editions.find(
+            (e) => e.language?.code2?.toLowerCase() === prefLang
+          )
+        : undefined;
+      const displayEdition = preferredEdition ?? originalEdition;
+      const hcIsbn13 = displayEdition?.isbn_13 ?? undefined;
+      const hcIsbn10 = displayEdition?.isbn_10 ?? undefined;
+      const hcPublisher = preferredEdition?.publisher?.name ?? undefined;
       const hcCountry = hardcoverCountryIso2(originalEdition?.country);
-      const hcLang = originalEdition?.language?.code2 ?? undefined;
+      const hcLang = displayEdition?.language?.code2 ?? undefined;
       const primaryAuthorId = hardcoverPrimaryAuthorId(hit.contributions);
-      // Photo + bio come from the authors table, not the book row.
-      // Best-effort: if we can resolve a primary author id, fetch the
-      // author detail so the "About the author" card on the book page
-      // renders with photo / bio just like the OpenLibrary path.
+      // Photo + bio + dates come from the authors table, not the book
+      // row. Best-effort: if we can resolve a primary author id, fetch
+      // the author detail so the "About the author" card renders the
+      // full shape (photo, bio, lifespan) the OpenLibrary path
+      // produces.
       let authorPhotoUrl: string | undefined;
       let authorBio: string | undefined;
+      let authorBirthDate: string | undefined;
+      let authorDeathDate: string | undefined;
       if (primaryAuthorId !== undefined) {
         try {
           const authorDetail = await hc.getAuthor(primaryAuthorId);
           if (authorDetail) {
             authorPhotoUrl = authorDetail.cached_image_url;
             authorBio = authorDetail.bio;
+            authorBirthDate = authorDetail.birth_date;
+            authorDeathDate = authorDetail.death_date;
           }
         } catch {
           /* best-effort */
@@ -1021,6 +1047,8 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
             : undefined,
         authorPhotoUrl,
         authorBio,
+        authorBirthDate,
+        authorDeathDate,
         year: hit.release_date
           ? parseInt(hit.release_date.slice(0, 4), 10) || undefined
           : undefined,

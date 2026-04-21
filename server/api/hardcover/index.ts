@@ -190,6 +190,8 @@ export interface HardcoverAuthorDetail {
   bio?: string;
   cached_image_url?: string;
   books_count?: number;
+  birth_date?: string;
+  death_date?: string;
   works: Array<{
     id: number;
     title: string;
@@ -357,7 +359,7 @@ class HardcoverAPI {
       platform { name }
     }
     editions(
-      limit: 5
+      limit: 20
       order_by: { release_date: asc_nulls_last }
       where: { isbn_13: { _is_null: false } }
     ) {
@@ -756,6 +758,8 @@ class HardcoverAPI {
             bio
             cached_image
             books_count
+            born_date
+            death_date
             contributions(
               limit: 100
               order_by: { book: { users_count: desc_nulls_last } }
@@ -781,6 +785,8 @@ class HardcoverAPI {
           bio?: string | null;
           cached_image?: string | { url?: string } | null;
           books_count?: number | null;
+          born_date?: string | null;
+          death_date?: string | null;
           contributions?: Array<{
             contribution?: string | null;
             book?: {
@@ -851,6 +857,8 @@ class HardcoverAPI {
         bio: a.bio ?? undefined,
         cached_image_url: photo,
         books_count: a.books_count ?? undefined,
+        birth_date: a.born_date ?? undefined,
+        death_date: a.death_date ?? undefined,
         works: uniqueWorks,
         series: [...seriesById.values()],
       };

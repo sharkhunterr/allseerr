@@ -17,6 +17,7 @@ const messages = defineMessages('pages.BookSeries', {
   overview: 'Overview',
   books: 'Books',
   aboutAuthor: 'About the author',
+  authorLivedFmt: '{birth}{dash}{death}',
 });
 
 interface SeriesMember {
@@ -38,6 +39,8 @@ interface SeriesDetail {
   authorKey?: string;
   authorPhotoUrl?: string;
   authorBio?: string;
+  authorBirthDate?: string;
+  authorDeathDate?: string;
 }
 
 const BookSeriesPage: NextPage = () => {
@@ -137,6 +140,15 @@ const BookSeriesPage: NextPage = () => {
                   <div className="text-base font-semibold text-white group-hover:text-indigo-300">
                     {data.authorName}
                   </div>
+                  {(data.authorBirthDate || data.authorDeathDate) && (
+                    <div className="text-xs text-gray-400">
+                      {intl.formatMessage(messages.authorLivedFmt, {
+                        birth: data.authorBirthDate ?? '?',
+                        dash: data.authorDeathDate ? ' – ' : '',
+                        death: data.authorDeathDate ?? '',
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
               {data.authorBio && (
