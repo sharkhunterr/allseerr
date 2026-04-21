@@ -38,41 +38,44 @@ type MediaTab = 'all' | 'books' | 'audiobooks' | 'games';
 const SeriesSearchCard = ({ result }: { result: SeriesResult }) => {
   const intl = useIntl();
   return (
-    <Link
-      href={`/book/series/${encodeURIComponent(result.key)}`}
-      className="group relative flex w-full items-center gap-4 overflow-hidden rounded-lg bg-gray-800 p-3 shadow-md ring-1 ring-gray-700 transition hover:ring-indigo-400"
-    >
-      <div className="relative h-20 w-14 flex-shrink-0 overflow-hidden rounded-md bg-gray-700">
-        {result.coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={result.coverUrl}
-            alt={result.name}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <BookOpenIcon className="h-8 w-8 text-gray-500" />
+    <Link href={`/book/series/${encodeURIComponent(result.key)}`}>
+      <div className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg bg-gray-800 shadow-md ring-1 ring-gray-700 transition duration-200 hover:ring-indigo-500">
+        <div className="relative aspect-[2/3] w-full overflow-hidden bg-gray-700">
+          {result.coverUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={result.coverUrl}
+              alt={result.name}
+              className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <BookOpenIcon className="h-12 w-12 text-gray-500" />
+            </div>
+          )}
+          <div className="absolute left-0 right-0 top-0 flex items-center justify-between p-2">
+            <div className="pointer-events-none z-40 self-start rounded-full border border-indigo-500 bg-indigo-600/80 shadow-md">
+              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                {intl.formatMessage(messages.seriesBadge)}
+              </div>
+            </div>
           </div>
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="mb-1">
-          <span className="rounded-full border border-indigo-500 bg-indigo-600/80 px-2 py-0.5 text-xs font-semibold uppercase leading-5 text-white shadow">
-            {intl.formatMessage(messages.seriesBadge)}
-          </span>
         </div>
-        <div className="truncate text-base font-bold text-white group-hover:text-indigo-300 xl:text-lg">
-          {result.name}
-        </div>
-        <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-400">
-          {result.authorName && <span>{result.authorName}</span>}
+        <div className="flex flex-1 flex-col p-3">
+          <h3 className="truncate text-sm font-semibold text-white">
+            {result.name}
+          </h3>
+          {result.authorName && (
+            <p className="truncate text-xs text-gray-400">
+              {result.authorName}
+            </p>
+          )}
           {result.memberCount !== undefined && (
-            <span>
+            <div className="mt-1 text-xs text-gray-500">
               {intl.formatMessage(messages.seriesCountFmt, {
                 count: result.memberCount,
               })}
-            </span>
+            </div>
           )}
         </div>
       </div>

@@ -68,11 +68,36 @@ export interface HardcoverSearchHit {
   release_date?: string | null;
   image?: { url?: string } | null;
   cached_tags?: HardcoverCachedTags | null;
-  contributions?: { author?: { name?: string } | null }[];
+  contributions?: {
+    contribution?: string | null;
+    author?: { name?: string } | null;
+  }[];
   book_series?: { series?: { id: number; name: string } | null; position?: number }[];
   book_characters?: HardcoverCharacter[];
   book_mappings?: HardcoverBookMapping[];
 }
+
+/**
+ * Extract the primary author name from a Hardcover contributions list.
+ * Some books (translations, anthologies) have multiple contribution
+ * roles; we prefer "Author" / "Co-Author" and fall back to the first
+ * contributor with a name.
+ */
+export const hardcoverPrimaryAuthor = (
+  contribs?: HardcoverSearchHit['contributions']
+): string | undefined => {
+  if (!contribs?.length) return undefined;
+  const byRole = (roles: string[]) =>
+    contribs.find((c) => {
+      const r = c.contribution?.toLowerCase() ?? '';
+      return roles.some((want) => r === want || r.includes(want));
+    })?.author?.name;
+  return (
+    byRole(['author']) ??
+    byRole(['co-author', 'coauthor']) ??
+    contribs.find((c) => c.author?.name)?.author?.name
+  );
+};
 
 export interface HardcoverSeriesMember {
   position?: number | null;
@@ -206,7 +231,8 @@ class HardcoverAPI {
     release_date
     image { url }
     cached_tags
-    contributions(where: { contribution: { _eq: "Author" } }, limit: 1) {
+    contributions(limit: 5) {
+      contribution
       author { name }
     }
     book_series(limit: 3) {

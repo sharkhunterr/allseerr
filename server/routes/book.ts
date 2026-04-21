@@ -1,6 +1,8 @@
 import AudibleAPI, { type AudibleRegion } from '@server/api/audible';
 import GoogleBooksAPI from '@server/api/googlebooks';
-import HardcoverAPI from '@server/api/hardcover';
+import HardcoverAPI, {
+  hardcoverPrimaryAuthor,
+} from '@server/api/hardcover';
 import OpenLibraryAPI, { cleanOpenLibraryText } from '@server/api/openlibrary';
 import BinderyAPI from '@server/api/servarr/bindery';
 import BookshelfAPI from '@server/api/servarr/bookshelf';
@@ -345,7 +347,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
                 openLibraryId: olKey,
                 title: h.title,
                 authorName:
-                  h.contributions?.[0]?.author?.name ?? 'Unknown Author',
+                  hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
                 coverUrl: h.image?.url?.startsWith('http')
                   ? h.image.url
                   : undefined,
@@ -788,7 +790,8 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           return {
             openLibraryId,
             title: m.book?.title ?? '',
-            authorName: m.book?.contributions?.[0]?.author?.name ?? '',
+            authorName:
+              hardcoverPrimaryAuthor(m.book?.contributions) ?? '',
             coverUrl: imageUrl?.startsWith('http') ? imageUrl : undefined,
             mediaStatus: existing?.status ?? null,
             bookMediaId: existing?.id ?? null,
@@ -1233,6 +1236,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
     // moods, content warnings (free GraphQL API).
     let readersCount: number | undefined;
     let readCount: number | undefined;
+    let fallbackCoverUrl: string | undefined;
     const moods: string[] = [];
     const contentWarnings: string[] = [];
     const characters: string[] = [];
@@ -1248,6 +1252,11 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
             hit = await hc.searchBook(work.title);
           }
           if (!hit) return;
+          // Use Hardcover's cover when the OL work has no `covers` (happens
+          // for newer / less-indexed works).
+          if (!fallbackCoverUrl && hit.image?.url?.startsWith('http')) {
+            fallbackCoverUrl = hit.image.url;
+          }
           if (hit.rating && !rating) {
             rating = hit.rating;
             ratingsCount = hit.ratings_count ?? undefined;
@@ -1298,6 +1307,11 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
 
     return res.status(200).json({
       ...work,
+      // Fallback cover when OL's `covers` array is empty — frontend
+      // prefers `coverUrl` over the OL-derived URL.
+      ...(fallbackCoverUrl && (!work.covers || work.covers.length === 0)
+        ? { coverUrl: fallbackCoverUrl }
+        : {}),
       authorKey,
       authorName,
       authorPhotoUrl,
