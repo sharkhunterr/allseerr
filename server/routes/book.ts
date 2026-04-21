@@ -1,6 +1,7 @@
 import AudibleAPI, { type AudibleRegion } from '@server/api/audible';
 import GoogleBooksAPI from '@server/api/googlebooks';
 import HardcoverAPI, {
+  hardcoverCountryIso2,
   hardcoverPrimaryAuthor,
   hardcoverPrimaryAuthorId,
 } from '@server/api/hardcover';
@@ -194,11 +195,38 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       aggregateStatus?: MediaStatus;
     };
 
-    // Series are a Hardcover feature in this codebase — OL doesn't have
-    // a usable series search API. Only surface series cards when
-    // Hardcover is the effective primary (avoids mixing sources in the
-    // search grid again).
+    type AuthorHit = {
+      type: 'author';
+      key: string;
+      name: string;
+      photoUrl?: string;
+      bio?: string;
+      booksCount?: number;
+    };
+
+    // Series + author cards are Hardcover-only features in this codebase
+    // (OL has no usable free-text search for those). Only surface them
+    // when Hardcover is the effective primary.
     let seriesPromise: Promise<SeriesHit[]> = Promise.resolve([]);
+    let authorsPromise: Promise<AuthorHit[]> = Promise.resolve([]);
+    if (effectivePrimary === 'hardcover') {
+      const hcForAuthors = new HardcoverAPI(providerCfg.hardcoverApiKey);
+      authorsPromise = hcForAuthors
+        .searchAuthors(query, 3)
+        .then((hits) =>
+          hits.map(
+            (a): AuthorHit => ({
+              type: 'author',
+              key: `hardcover:${a.id}`,
+              name: a.name,
+              photoUrl: a.photoUrl,
+              bio: a.bio,
+              booksCount: a.booksCount,
+            })
+          )
+        )
+        .catch(() => [] as AuthorHit[]);
+    }
     if (effectivePrimary === 'hardcover') {
       const hcForSeries = new HardcoverAPI(providerCfg.hardcoverApiKey);
       seriesPromise = hcForSeries
@@ -365,7 +393,10 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
     // Overlay BookMedia availability — single-key lookup (the primary
     // source's key) is enough now that identity no longer flips
     // between sources.
-    const seriesHits = await seriesPromise;
+    const [seriesHits, authorHits] = await Promise.all([
+      seriesPromise,
+      authorsPromise,
+    ]);
     const bookMediaRepo = getRepository(BookMedia);
     const enrichedBooks = await Promise.all(
       merged.map(async (result) => {
@@ -397,10 +428,26 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         weakSeriesMatches.push(s);
       }
     }
+    // Author cards take precedence over everything when the query
+    // looks like an author name: if any hit's full name contains the
+    // query, float it to the very top. Otherwise they trail at the
+    // bottom like weak series matches.
+    const strongAuthorMatches: AuthorHit[] = [];
+    const weakAuthorMatches: AuthorHit[] = [];
+    for (const a of authorHits) {
+      const nameLc = a.name.toLowerCase();
+      if (nameLc === queryLc || nameLc.includes(queryLc)) {
+        strongAuthorMatches.push(a);
+      } else {
+        weakAuthorMatches.push(a);
+      }
+    }
     const finalResults = [
+      ...strongAuthorMatches,
       ...strongSeriesMatches,
       ...enrichedBooks,
       ...weakSeriesMatches,
+      ...weakAuthorMatches,
     ];
 
     return res.status(200).json({
@@ -781,6 +828,11 @@ bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
         totalWorks: author.books_count ?? works.length,
         uniqueWorks: works.length,
         works,
+        series: author.series.map((s) => ({
+          key: `hardcover:${s.id}`,
+          name: s.name,
+          coverUrl: s.coverUrl,
+        })),
       });
     }
 
@@ -850,6 +902,10 @@ bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
       totalWorks: worksResp.size,
       uniqueWorks: works.length,
       works,
+      // OpenLibrary doesn't expose a clean author→series listing, so
+      // the Series tab is empty for OL-keyed authors. We still emit
+      // the field so the frontend doesn't have to guard.
+      series: [],
     });
   } catch (e) {
     logger.error('Author fetch failed', {
@@ -919,14 +975,18 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
           (t): t is string => !!t
         ) ?? [];
       // Hardcover tracks ISBNs + publisher + country + language on
-      // the edition, not the book. Take the most-read edition (the
-      // default order_by in BOOK_FIELDS) as the representative one.
-      const topEdition = hit.editions?.[0];
-      const hcIsbn13 = topEdition?.isbn_13 ?? undefined;
-      const hcIsbn10 = topEdition?.isbn_10 ?? undefined;
-      const hcPublisher = topEdition?.publisher?.name ?? undefined;
-      const hcCountryName = topEdition?.country?.name ?? undefined;
-      const hcLang = topEdition?.language?.code2 ?? undefined;
+      // the edition, not the book. We order by release_date asc so
+      // edition[0] is the original / earliest one — the country
+      // there is the book's country of origin (Dune → US, Harry
+      // Potter → GB) rather than whichever translation happens to be
+      // most popular on Hardcover (which biases heavily toward US
+      // editions and wrongly marked UK books as American).
+      const originalEdition = hit.editions?.[0];
+      const hcIsbn13 = originalEdition?.isbn_13 ?? undefined;
+      const hcIsbn10 = originalEdition?.isbn_10 ?? undefined;
+      const hcPublisher = originalEdition?.publisher?.name ?? undefined;
+      const hcCountry = hardcoverCountryIso2(originalEdition?.country);
+      const hcLang = originalEdition?.language?.code2 ?? undefined;
       const primaryAuthorId = hardcoverPrimaryAuthorId(hit.contributions);
       // Photo + bio come from the authors table, not the book row.
       // Best-effort: if we can resolve a primary author id, fetch the
@@ -968,11 +1028,10 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         publisher: hcPublisher,
         isbn13: hcIsbn13,
         isbn10: hcIsbn10,
-        // Detail page renders `country` as a flag. Hardcover gives a
-        // human-readable name, not an ISO code — the detail-page
-        // component falls back to rendering it as text when the
-        // 2-letter regex fails, so it still shows up.
-        country: hcCountryName,
+        // ISO-2 code so the book detail page renders the flag emoji;
+        // hardcoverCountryIso2 falls back to a name → code lookup
+        // when Hardcover's edition doesn't carry code2.
+        country: hcCountry,
         language: hcLang,
         rating: hit.rating ?? undefined,
         ratingsCount: hit.ratings_count ?? undefined,

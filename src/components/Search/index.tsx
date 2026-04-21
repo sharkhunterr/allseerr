@@ -33,10 +33,59 @@ const messages = defineMessages('components.Search', {
   noResults: 'No results found.',
   bookBadge: 'Book',
   seriesBadge: 'Series',
+  authorBadge: 'Author',
   seriesCountFmt: '{count, plural, one {# book} other {# books}}',
+  authorBooksFmt: '{count, plural, one {# book} other {# books}}',
 });
 
 type MediaTab = 'all' | 'books' | 'audiobooks' | 'games';
+
+const AuthorSearchCard = ({
+  result,
+}: {
+  result: AuthorSearchResult;
+}) => {
+  const intl = useIntl();
+  return (
+    <Link href={`/book/author/${encodeURIComponent(result.key)}`}>
+      <div className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg bg-gray-800 shadow-md ring-1 ring-gray-700 transition duration-200 hover:ring-indigo-500">
+        <div className="relative aspect-[2/3] w-full overflow-hidden bg-gray-700">
+          {result.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={result.photoUrl}
+              alt={result.name}
+              className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-5xl text-gray-500">
+              {result.name[0]?.toUpperCase() ?? '?'}
+            </div>
+          )}
+          <div className="absolute left-0 right-0 top-0 flex items-center gap-1 p-2">
+            <div className="pointer-events-none z-40 rounded-full border border-purple-500 bg-purple-600/80 shadow-md">
+              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                {intl.formatMessage(messages.authorBadge)}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-1 flex-col p-3">
+          <h3 className="truncate text-sm font-semibold text-white">
+            {result.name}
+          </h3>
+          {result.booksCount !== undefined && (
+            <div className="mt-1 text-xs text-gray-500">
+              {intl.formatMessage(messages.authorBooksFmt, {
+                count: result.booksCount,
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+};
 
 const SeriesSearchCard = ({ result }: { result: SeriesResult }) => {
   const intl = useIntl();
@@ -130,7 +179,16 @@ interface SeriesResult {
   aggregateStatus?: number;
 }
 
-type BookOrSeriesResult = BookResult | SeriesResult;
+interface AuthorSearchResult {
+  type: 'author';
+  key: string;
+  name: string;
+  photoUrl?: string;
+  bio?: string;
+  booksCount?: number;
+}
+
+type BookOrSeriesResult = BookResult | SeriesResult | AuthorSearchResult;
 
 interface BookSearchResponse {
   page: number;
@@ -366,12 +424,22 @@ const Search = () => {
             </p>
           ) : (
             <ul className="cards-vertical">
-              {bookResults.map((item) =>
-                item.type === 'series' ? (
-                  <li key={`series:${item.key}`}>
-                    <SeriesSearchCard result={item} />
-                  </li>
-                ) : (
+              {bookResults.map((item) => {
+                if (item.type === 'series') {
+                  return (
+                    <li key={`series:${item.key}`}>
+                      <SeriesSearchCard result={item} />
+                    </li>
+                  );
+                }
+                if (item.type === 'author') {
+                  return (
+                    <li key={`author:${item.key}`}>
+                      <AuthorSearchCard result={item} />
+                    </li>
+                  );
+                }
+                return (
                   <li key={item.openLibraryId}>
                     <BookCard
                       openLibraryId={item.openLibraryId}
@@ -385,8 +453,8 @@ const Search = () => {
                       mediaStatus={item.mediaStatus ?? undefined}
                     />
                   </li>
-                )
-              )}
+                );
+              })}
             </ul>
           )}
         </div>

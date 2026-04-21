@@ -59,10 +59,74 @@ export interface HardcoverBookMapping {
 export interface HardcoverEdition {
   isbn_13?: string | null;
   isbn_10?: string | null;
+  release_date?: string | null;
   publisher?: { name?: string | null } | null;
-  country?: { name?: string | null } | null;
+  country?: { name?: string | null; code2?: string | null } | null;
   language?: { code2?: string | null } | null;
 }
+
+/**
+ * Fallback mapping when Hardcover's `country.code2` is null — common
+ * enough to be worth keeping server-side so the detail page can render
+ * a flag without a second round-trip.
+ */
+const COUNTRY_NAME_TO_ISO2: Record<string, string> = {
+  'united states': 'US',
+  'united states of america': 'US',
+  usa: 'US',
+  'united kingdom': 'GB',
+  england: 'GB',
+  'great britain': 'GB',
+  uk: 'GB',
+  france: 'FR',
+  germany: 'DE',
+  spain: 'ES',
+  italy: 'IT',
+  portugal: 'PT',
+  netherlands: 'NL',
+  belgium: 'BE',
+  switzerland: 'CH',
+  austria: 'AT',
+  ireland: 'IE',
+  scotland: 'GB',
+  wales: 'GB',
+  canada: 'CA',
+  australia: 'AU',
+  'new zealand': 'NZ',
+  japan: 'JP',
+  china: 'CN',
+  'south korea': 'KR',
+  india: 'IN',
+  brazil: 'BR',
+  mexico: 'MX',
+  argentina: 'AR',
+  russia: 'RU',
+  poland: 'PL',
+  sweden: 'SE',
+  norway: 'NO',
+  denmark: 'DK',
+  finland: 'FI',
+  greece: 'GR',
+  hungary: 'HU',
+  'czech republic': 'CZ',
+  czechia: 'CZ',
+  turkey: 'TR',
+  israel: 'IL',
+  ukraine: 'UA',
+  romania: 'RO',
+};
+
+export const hardcoverCountryIso2 = (
+  country?: HardcoverEdition['country']
+): string | undefined => {
+  if (!country) return undefined;
+  if (country.code2) return country.code2.toUpperCase();
+  if (country.name) {
+    const lookup = COUNTRY_NAME_TO_ISO2[country.name.toLowerCase().trim()];
+    if (lookup) return lookup;
+  }
+  return undefined;
+};
 
 export interface HardcoverSearchHit {
   id: number;
@@ -130,6 +194,11 @@ export interface HardcoverAuthorDetail {
     id: number;
     title: string;
     image_url?: string;
+  }>;
+  series: Array<{
+    id: number;
+    name: string;
+    coverUrl?: string;
   }>;
 }
 
@@ -289,13 +358,14 @@ class HardcoverAPI {
     }
     editions(
       limit: 5
-      order_by: { users_count: desc_nulls_last }
+      order_by: { release_date: asc_nulls_last }
       where: { isbn_13: { _is_null: false } }
     ) {
       isbn_13
       isbn_10
+      release_date
       publisher { name }
-      country { name }
+      country { name code2 }
       language { code2 }
     }
   `;
@@ -408,6 +478,86 @@ class HardcoverAPI {
         return ids
           .map((id) => byId.get(id))
           .filter((b): b is HardcoverSearchHit => !!b);
+      },
+      3600
+    );
+  }
+
+  /**
+   * Free-text author search via Typesense → batched authors(where:_in)
+   * follow-up. Used to surface author cards at the top of the book
+   * search grid.
+   */
+  async searchAuthors(
+    query: string,
+    limit = 3
+  ): Promise<
+    Array<{ id: number; name: string; bio?: string; photoUrl?: string; booksCount?: number }>
+  > {
+    return cached(
+      `search-authors:${query.toLowerCase()}:${limit}`,
+      async () => {
+        const searchGql = `
+          query SearchAuthors($q: String!, $per: Int!) {
+            search(
+              query: $q,
+              query_type: "authors",
+              per_page: $per,
+              page: 1
+            ) {
+              results
+            }
+          }
+        `;
+        const { data: searchData } = await this.gql<{
+          search: TypesenseSearchResponse;
+        }>(searchGql, { q: query, per: limit });
+        const ids = (searchData?.search?.results?.hits ?? [])
+          .map((h) => h.document?.id)
+          .filter((v): v is number | string => v != null)
+          .map((v) => Number(v))
+          .filter((v) => Number.isFinite(v));
+        if (ids.length === 0) return [];
+        const batchGql = `
+          query AuthorsByIds($ids: [Int!]!) {
+            authors(where: { id: { _in: $ids } }, limit: ${ids.length}) {
+              id
+              name
+              bio
+              cached_image
+              books_count
+            }
+          }
+        `;
+        const { data: batch } = await this.gql<{
+          authors: Array<{
+            id: number;
+            name: string;
+            bio?: string | null;
+            cached_image?: string | { url?: string } | null;
+            books_count?: number | null;
+          }>;
+        }>(batchGql, { ids });
+        const byId = new Map(
+          (batch?.authors ?? []).map((a) => [a.id, a])
+        );
+        return ids
+          .map((id) => byId.get(id))
+          .filter((a): a is NonNullable<typeof a> => !!a)
+          .map((a) => {
+            const photoRaw = a.cached_image;
+            const photo =
+              typeof photoRaw === 'string'
+                ? photoRaw
+                : photoRaw?.url ?? undefined;
+            return {
+              id: a.id,
+              name: a.name,
+              bio: a.bio ?? undefined,
+              photoUrl: photo,
+              booksCount: a.books_count ?? undefined,
+            };
+          });
       },
       3600
     );
@@ -614,7 +764,11 @@ class HardcoverAPI {
               book {
                 id
                 title
+                users_count
                 image { url }
+                book_series(limit: 3) {
+                  series { id name }
+                }
               }
             }
           }
@@ -632,7 +786,11 @@ class HardcoverAPI {
             book?: {
               id: number;
               title: string;
+              users_count?: number | null;
               image?: { url?: string } | null;
+              book_series?: Array<{
+                series?: { id: number; name: string } | null;
+              }>;
             } | null;
           }>;
         }>;
@@ -646,28 +804,47 @@ class HardcoverAPI {
         typeof photoRaw === 'string'
           ? photoRaw
           : photoRaw?.url ?? undefined;
-      const works = (a.contributions ?? [])
-        .filter(
-          (c) =>
-            c.book &&
-            // Drop translator / editor contributions — we only want
-            // original works authored by this person.
-            (!c.contribution ||
-              c.contribution.toLowerCase() === 'author' ||
-              c.contribution.toLowerCase().includes('author'))
-        )
-        .map((c) => ({
-          id: c.book!.id,
-          title: c.book!.title,
-          image_url: c.book!.image?.url,
-        }));
-      // Dedupe by book id
-      const seen = new Set<number>();
+      const authoredContribs = (a.contributions ?? []).filter(
+        (c) =>
+          c.book &&
+          (!c.contribution ||
+            c.contribution.toLowerCase() === 'author' ||
+            c.contribution.toLowerCase().includes('author'))
+      );
+      const works = authoredContribs.map((c) => ({
+        id: c.book!.id,
+        title: c.book!.title,
+        image_url: c.book!.image?.url,
+      }));
+      const seenWork = new Set<number>();
       const uniqueWorks = works.filter((w) => {
-        if (seen.has(w.id)) return false;
-        seen.add(w.id);
+        if (seenWork.has(w.id)) return false;
+        seenWork.add(w.id);
         return true;
       });
+      // Dedupe series across the author's books. Each series may appear
+      // under many books (all volumes of a trilogy point at the same
+      // series id). Keep one entry per series; cover = first authored
+      // book we see for that series, ordered by popularity (the
+      // contributions query is already users_count DESC).
+      const seriesById = new Map<
+        number,
+        { id: number; name: string; coverUrl?: string }
+      >();
+      for (const c of authoredContribs) {
+        const cover = c.book?.image?.url;
+        for (const bs of c.book?.book_series ?? []) {
+          const s = bs.series;
+          if (!s || !s.id || !s.name) continue;
+          if (!seriesById.has(s.id)) {
+            seriesById.set(s.id, {
+              id: s.id,
+              name: s.name,
+              coverUrl: cover ?? undefined,
+            });
+          }
+        }
+      }
       return {
         id: a.id,
         name: a.name,
@@ -675,6 +852,7 @@ class HardcoverAPI {
         cached_image_url: photo,
         books_count: a.books_count ?? undefined,
         works: uniqueWorks,
+        series: [...seriesById.values()],
       };
     });
   }
