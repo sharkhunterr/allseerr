@@ -583,12 +583,14 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       );
       if (folded) byKey.set(gid, folded);
     }
-    // Drop results without an OL key — GET /book/:id expects OL or Audible
-    // ASIN. Hardcover / Bookshelf hits without an OL mapping (rare) and
-    // pure Google Books results fall in that bucket. Their metadata is
-    // still used to enrich OL/Bindery winners through the merge pass.
-    let merged = Array.from(byKey.values()).filter((r) =>
-      isOLKey(r.openLibraryId)
+    // Drop pure Google Books hits — their `gbooks:…` key has no detail
+    // handler. Hardcover/Bookshelf hits without an OL mapping stay:
+    // GET /book/:id now knows how to resolve `hardcover:<id>` keys.
+    let merged = Array.from(byKey.values()).filter(
+      (r) =>
+        isOLKey(r.openLibraryId) ||
+        r.openLibraryId.startsWith('hardcover:') ||
+        r.openLibraryId.startsWith('bookshelf:')
     );
 
     // Apply the language preference:
@@ -1019,11 +1021,12 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
   // Audible ASINs are 10 chars starting with 'B'; OpenLibrary IDs look like "OL...W"
   const isAudibleAsin = /^B[0-9A-Z]{9}$/.test(id);
   const isOpenLibraryId = /^OL\d+W$/.test(id);
+  const isHardcoverId = /^hardcover:\d+$/i.test(id);
 
-  // Reject non-OL, non-Audible keys early — e.g. "gbooks:..." synthetic
-  // IDs from Google Books search results that would otherwise trigger a
-  // noisy 404 fetch against OpenLibrary.
-  if (!isAudibleAsin && !isOpenLibraryId) {
+  // Reject non-OL, non-Audible, non-Hardcover keys early — e.g.
+  // "gbooks:..." synthetic IDs from Google Books search results that
+  // would otherwise trigger a noisy 404 fetch against OpenLibrary.
+  if (!isAudibleAsin && !isOpenLibraryId && !isHardcoverId) {
     return res.status(404).json({
       status: 404,
       message: 'Book not found.',
@@ -1031,6 +1034,87 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
   }
 
   try {
+    // Hardcover-only books (no OL mapping). Common in series detail
+    // pages when Hardcover hasn't yet pushed an OL mapping for every
+    // member — serve a detail response directly from Hardcover data so
+    // the user can at least view + request the book instead of hitting
+    // a 404.
+    if (isHardcoverId) {
+      const settings = getSettings();
+      const cfg = settings.book.metadataProviders;
+      if (!cfg.hardcover || !cfg.hardcoverApiKey) {
+        return res.status(400).json({
+          status: 400,
+          message:
+            'Hardcover is not enabled. Turn it on in Settings → Metadata Providers → Books.',
+        });
+      }
+      const hcId = Number(id.slice('hardcover:'.length));
+      const hc = new HardcoverAPI(cfg.hardcoverApiKey);
+      const hit = await hc.getBookById(hcId);
+      if (!hit) {
+        return res.status(404).json({
+          status: 404,
+          message: 'Book not found.',
+        });
+      }
+      const bookMediaRepo = getRepository(BookMedia);
+      const existing = await bookMediaRepo.findOne({
+        where: { openLibraryId: `hardcover:${hcId}` },
+      });
+      const genres =
+        hit.cached_tags?.Genre?.map((t) => t.tag).filter(
+          (t): t is string => !!t
+        ) ?? [];
+      return res.status(200).json({
+        key: `hardcover:${hcId}`,
+        title: hit.title,
+        subtitle: hit.subtitle ?? undefined,
+        description: hit.description ?? undefined,
+        coverUrl: hit.image?.url?.startsWith('http')
+          ? hit.image.url
+          : undefined,
+        authorName:
+          hardcoverPrimaryAuthor(hit.contributions) ?? 'Unknown Author',
+        year: hit.release_date
+          ? parseInt(hit.release_date.slice(0, 4), 10) || undefined
+          : undefined,
+        pageCount: hit.pages ?? undefined,
+        rating: hit.rating ?? undefined,
+        ratingsCount: hit.ratings_count ?? undefined,
+        readersCount: hit.users_count ?? undefined,
+        readCount: hit.users_read_count ?? undefined,
+        subjects: genres.slice(0, 15),
+        moods:
+          hit.cached_tags?.Mood?.map((t) => t.tag)
+            .filter((t): t is string => !!t)
+            .slice(0, 15) ?? [],
+        contentWarnings:
+          hit.cached_tags?.ContentWarning?.filter((t) => !t.spoiler)
+            .map((t) => t.tag)
+            .filter((t): t is string => !!t)
+            .slice(0, 15) ?? [],
+        characters:
+          hit.book_characters
+            ?.filter((c) => !c.spoiler && c.character?.name)
+            .map((c) => c.character!.name!)
+            .slice(0, 12) ?? [],
+        series: (hit.book_series ?? [])
+          .filter((s) => !!s.series?.name)
+          .map((s) => ({
+            key: `hardcover:${s.series!.id}`,
+            name: s.series!.name,
+            position: s.position?.toString(),
+            seedCount: 0,
+            linkable: true,
+          })),
+        mediaType: MediaType.BOOK,
+        mediaStatus: existing?.status ?? null,
+        bookMediaId: existing?.id ?? null,
+        libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),
+      });
+    }
+
     if (isAudibleAsin) {
       const product = await getAudibleClient().getProduct(id);
       if (!product) {
@@ -1299,6 +1383,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
     let readersCount: number | undefined;
     let readCount: number | undefined;
     let fallbackCoverUrl: string | undefined;
+    let hardcoverDescription: string | undefined;
     const moods: string[] = [];
     const contentWarnings: string[] = [];
     const characters: string[] = [];
@@ -1314,6 +1399,9 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
             hit = await hc.searchBook(work.title);
           }
           if (!hit) return;
+          if (hit.description && !hardcoverDescription) {
+            hardcoverDescription = hit.description;
+          }
           // Use Hardcover's cover when the OL work has no `covers` (happens
           // for newer / less-indexed works).
           if (!fallbackCoverUrl && hit.image?.url?.startsWith('http')) {
@@ -1398,17 +1486,24 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       subjects: Array.from(mergedSubjects).slice(0, 30),
       series: seriesEntries,
       description: (() => {
-        // Pick the longest available description, then clean OL cruft
-        // (source refs, link defs, "Also contained in" edition lists).
+        // Source priority: Hardcover → Bindery → OpenLibrary.
+        // OL descriptions are crowd-sourced and frequently land in the
+        // editor's native language (Chinese, Polish, …) which is
+        // jarring when the rest of the allseerr instance is in a
+        // different tongue. Hardcover is curated English-first so we
+        // prefer it whenever available. Bindery tends to be
+        // English-flavoured too; OL stays as the last-resort fallback.
+        // Clean OL cruft (source refs, link defs, "Also contained in"
+        // edition lists) regardless of origin.
         const olDescRaw =
           typeof work.description === 'string'
             ? work.description
             : work.description?.value;
         const best =
-          enrichedDescription &&
-          enrichedDescription.length > (olDescRaw?.length ?? 0)
-            ? enrichedDescription
-            : olDescRaw ?? enrichedDescription;
+          hardcoverDescription ??
+          enrichedDescription ??
+          olDescRaw ??
+          undefined;
         return best ? cleanOpenLibraryText(best) : undefined;
       })(),
       mediaStatus: existing?.status ?? null,

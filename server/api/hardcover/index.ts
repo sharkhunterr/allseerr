@@ -59,6 +59,8 @@ export interface HardcoverBookMapping {
 export interface HardcoverSearchHit {
   id: number;
   title: string;
+  subtitle?: string | null;
+  description?: string | null;
   slug?: string;
   rating?: number | null;
   ratings_count?: number | null;
@@ -225,6 +227,8 @@ class HardcoverAPI {
   private static BOOK_FIELDS = `
     id
     title
+    subtitle
+    description
     slug
     rating
     ratings_count
@@ -257,7 +261,7 @@ class HardcoverAPI {
    * Fetch a book's full record by Hardcover numeric id (equality, allowed
    * on Hardcover's Hasura instance unlike `_ilike`).
    */
-  private async getBookById(id: number): Promise<HardcoverSearchHit | null> {
+  public async getBookById(id: number): Promise<HardcoverSearchHit | null> {
     return cached(`book:${id}`, async () => {
       const gqlQuery = `
         query BookById($id: Int!) {
