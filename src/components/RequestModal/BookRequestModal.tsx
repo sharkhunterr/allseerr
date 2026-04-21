@@ -1,6 +1,7 @@
 import Modal from '@app/components/Common/Modal';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
+import { Transition } from '@headlessui/react';
 import { MediaType } from '@server/constants/media';
 import axios from 'axios';
 import { useState } from 'react';
@@ -81,8 +82,6 @@ const BookRequestModal = ({
       null
   );
 
-  if (!show) return null;
-
   const selected = editions.find((e) => e.id === selectedEditionId);
 
   const submit = async () => {
@@ -119,25 +118,35 @@ const BookRequestModal = ({
   };
 
   return (
-    <Modal
-      loading={false}
-      backgroundClickable
-      onCancel={onCancel}
-      onOk={submit}
-      title={intl.formatMessage(
-        isAudiobook ? messages.requestAudiobook : messages.requestBook
-      )}
-      subTitle={title}
-      okText={
-        isSubmitting
-          ? intl.formatMessage(globalMessages.loading)
-          : intl.formatMessage(globalMessages.request)
-      }
-      okDisabled={isSubmitting || editions.length === 0}
-      okButtonType="primary"
-      cancelText={intl.formatMessage(globalMessages.cancel)}
-      backdrop={fallbackCoverUrl}
+    <Transition
+      as="div"
+      enter="transition-opacity duration-300"
+      enterFrom="opacity-0"
+      enterTo="opacity-100"
+      leave="transition-opacity duration-300"
+      leaveFrom="opacity-100"
+      leaveTo="opacity-0"
+      show={show}
     >
+      <Modal
+        loading={false}
+        backgroundClickable
+        onCancel={onCancel}
+        onOk={submit}
+        title={intl.formatMessage(
+          isAudiobook ? messages.requestAudiobook : messages.requestBook
+        )}
+        subTitle={title}
+        okText={
+          isSubmitting
+            ? intl.formatMessage(globalMessages.loading)
+            : intl.formatMessage(globalMessages.request)
+        }
+        okDisabled={isSubmitting || editions.length === 0}
+        okButtonType="primary"
+        cancelText={intl.formatMessage(globalMessages.cancel)}
+        backdrop={fallbackCoverUrl}
+      >
       {editions.length === 0 ? (
         <p className="py-6 text-center text-gray-400">
           {intl.formatMessage(messages.noEditions)}
@@ -240,7 +249,8 @@ const BookRequestModal = ({
           </div>
         </div>
       )}
-    </Modal>
+      </Modal>
+    </Transition>
   );
 };
 
