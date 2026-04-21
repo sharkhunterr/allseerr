@@ -104,6 +104,7 @@ export interface HardcoverSeriesMember {
   book?: {
     id: number;
     title: string;
+    users_count?: number | null;
     image?: { url?: string } | null;
     contributions?: {
       contribution?: string | null;
@@ -490,6 +491,7 @@ class HardcoverAPI {
             book {
               id
               title
+              users_count
               image { url }
               contributions(limit: 5) {
                 contribution

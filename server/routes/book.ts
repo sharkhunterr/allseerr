@@ -715,30 +715,50 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
       }
       const rawMembers = detail.book_series ?? [];
 
-      // Hardcover series mix original + localised editions as separate
-      // book records ("Blood of Elves" + "Krew elfów" + …). Deduplicate
-      // by normalised title so we keep one entry per book — Hardcover
-      // doesn't expose a per-book language on the `books` type (it lives
-      // on editions we don't fetch), so we can't language-filter here;
-      // the title-normalised key collapses most translation duplicates.
+      // Hardcover returns every translation as a separate book record
+      // sharing the same series `position` (Harry Potter = position 1
+      // covers English + French + Spanish + German + … → 50+ rows for
+      // a 7-book series). Hardcover doesn't expose language at the
+      // book level (only per edition), so we can't filter by language
+      // directly. Heuristic: keep one book per position, picking the
+      // highest `users_count` — that's the canonical / most-read
+      // edition in the Hardcover community, typically the English
+      // original for international series.
+      //
+      // Books without a `position` (rare — usually companion works)
+      // fall back to a title-normalised dedupe so they don't get
+      // collapsed into the wrong group.
       const normalise = (t: string) =>
         t
           .toLowerCase()
           .replace(/^(the|a|an|le|la|les|un|une)\s+/, '')
           .replace(/[^a-z0-9]+/g, ' ')
           .trim();
-      const seen = new Set<string>();
-      const deduped = rawMembers.filter((m) => {
+      const byPosition = new Map<number, typeof rawMembers[number]>();
+      const looseByTitle = new Map<string, typeof rawMembers[number]>();
+      const pickBetter = (
+        current: typeof rawMembers[number] | undefined,
+        next: typeof rawMembers[number]
+      ): typeof rawMembers[number] => {
+        if (!current) return next;
+        const cu = current.book?.users_count ?? 0;
+        const nu = next.book?.users_count ?? 0;
+        return nu > cu ? next : current;
+      };
+      for (const m of rawMembers) {
         const title = m.book?.title ?? '';
-        if (!title.trim()) return false;
-        const key = normalise(title);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      // Preserve the original (chronological) order by re-sorting on
-      // Hardcover's `position`.
-      deduped.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+        if (!title.trim()) continue;
+        if (typeof m.position === 'number') {
+          byPosition.set(m.position, pickBetter(byPosition.get(m.position), m));
+        } else {
+          const key = normalise(title);
+          looseByTitle.set(key, pickBetter(looseByTitle.get(key), m));
+        }
+      }
+      const deduped = [
+        ...byPosition.values(),
+        ...looseByTitle.values(),
+      ].sort((a, b) => (a.position ?? 1e9) - (b.position ?? 1e9));
 
       const bookMediaRepo = getRepository(BookMedia);
       const enriched = await Promise.all(
