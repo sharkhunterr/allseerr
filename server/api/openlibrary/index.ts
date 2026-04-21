@@ -116,9 +116,27 @@ export interface OpenLibrarySearchResult {
   cover_i?: number;
   number_of_pages_median?: number;
   subject?: string[];
+  // OpenLibrary returns MARC language codes ("eng", "fre", "ger")
   language?: string[];
   edition_count?: number;
 }
+
+// MARC 639-2 → ISO 639-1 for the codes OL surfaces most often.
+const MARC_LANG_TO_ISO2: Record<string, string> = {
+  eng: 'en', fre: 'fr', fra: 'fr', ger: 'de', deu: 'de', spa: 'es',
+  ita: 'it', por: 'pt', jpn: 'ja', chi: 'zh', zho: 'zh', rus: 'ru',
+  dut: 'nl', nld: 'nl', swe: 'sv', pol: 'pl', nor: 'no', dan: 'da',
+  fin: 'fi', gre: 'el', ell: 'el', hun: 'hu', cze: 'cs', ces: 'cs',
+  tur: 'tr', ara: 'ar', heb: 'he', kor: 'ko', ind: 'id', vie: 'vi',
+  tha: 'th', ukr: 'uk', rum: 'ro', ron: 'ro',
+};
+
+const normaliseLang = (code?: string): string | undefined => {
+  if (!code) return undefined;
+  const lower = code.toLowerCase().trim();
+  if (lower.length === 2) return lower;
+  return MARC_LANG_TO_ISO2[lower] ?? lower.slice(0, 2);
+};
 
 export interface OpenLibrarySearchResponse {
   numFound: number;
@@ -164,6 +182,9 @@ export interface BookResult {
   publisher?: string;
   pageCount?: number;
   subjects?: string[];
+  // ISO-639-1 ("fr", "en"…) when we could derive it. OpenLibrary
+  // returns MARC codes ("fre", "eng") — we normalise to 2-letter.
+  language?: string;
 }
 
 /**
@@ -177,27 +198,36 @@ class OpenLibraryAPI {
   async search(
     query: string,
     page = 1,
-    limit = 20
+    limit = 20,
+    lang?: string
   ): Promise<{ results: BookResult[]; totalResults: number }> {
-    const cacheKey = `search:${query.toLowerCase()}:${page}:${limit}`;
+    const langKey = lang ?? '';
+    const cacheKey = `search:${query.toLowerCase()}:${page}:${limit}:${langKey}`;
     try {
       // Free-text searches: 1h so user can retype / paginate without
       // re-hitting OL, but short enough to pick up newly indexed books.
       return await cached(
         cacheKey,
         async () => {
+          const params: Record<string, string | number> = {
+            q: query,
+            page,
+            limit,
+            fields:
+              'key,title,author_name,author_key,isbn,first_publish_year,publisher,cover_i,number_of_pages_median,subject,language',
+          };
+          // OpenLibrary accepts &language=<MARC> (3-letter code). Convert
+          // ISO-639-1 back to its dominant MARC equivalent.
+          if (lang) {
+            const iso2 = lang.toLowerCase();
+            const marc =
+              Object.entries(MARC_LANG_TO_ISO2).find(([, v]) => v === iso2)?.[0] ??
+              iso2;
+            params.language = marc;
+          }
           const response = await axios.get<OpenLibrarySearchResponse>(
             `${OPENLIBRARY_BASE}/search.json`,
-            {
-              params: {
-                q: query,
-                page,
-                limit,
-                fields:
-                  'key,title,author_name,author_key,isbn,first_publish_year,publisher,cover_i,number_of_pages_median,subject',
-              },
-              timeout: 10000,
-            }
+            { params, timeout: 10000 }
           );
           return {
             results: response.data.docs.map((doc) =>
@@ -541,6 +571,7 @@ class OpenLibraryAPI {
       title: doc.title,
       authorName: doc.author_name?.[0] ?? 'Unknown Author',
       authorKey: doc.author_key?.[0],
+      language: normaliseLang(doc.language?.[0]),
       isbn13,
       isbn10,
       coverUrl: doc.cover_i

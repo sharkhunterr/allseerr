@@ -428,6 +428,17 @@ export interface BookSettings {
     googleBooksApiKey?: string;
     hardcover: boolean;
     hardcoverApiKey?: string;
+    // Preferred ISO-639-1 code ("en", "fr", "de"…) passed to every
+    // provider's search. Empty string = no preference.
+    preferredLanguage: string;
+    // "prefer": matching-language results are pushed to the top but
+    // everything else is still returned (safer default — no book
+    // disappears from the list if it isn't available in the preferred
+    // language).
+    // "strict": drop any result that doesn't match the preferred
+    // language outright. Use when the library is mono-lingual and
+    // foreign editions would be noise.
+    languagePolicy: 'prefer' | 'strict';
   };
 }
 
@@ -778,6 +789,8 @@ class Settings {
           googleBooksApiKey: '',
           hardcover: false,
           hardcoverApiKey: '',
+          preferredLanguage: '',
+          languagePolicy: 'prefer',
         },
       },
       oidc: {

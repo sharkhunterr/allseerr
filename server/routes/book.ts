@@ -149,6 +149,9 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
     // We dedupe by normalized title+author.
     const settings = getSettings();
     const providerCfg = settings.book.metadataProviders;
+    const preferredLanguage =
+      providerCfg.preferredLanguage?.toLowerCase().trim() ?? '';
+    const languagePolicy = providerCfg.languagePolicy ?? 'prefer';
 
     type AggregatedBook = {
       openLibraryId: string;
@@ -178,7 +181,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
 
     sources.push(
       openLibrary
-        .search(query, page, limit)
+        .search(query, page, limit, preferredLanguage || undefined)
         .then(({ results, totalResults }) => {
           olTotal = totalResults;
           return results.map((r) => ({ ...r, source: 'openlibrary' as const }));
@@ -227,7 +230,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       const gb = new GoogleBooksAPI(providerCfg.googleBooksApiKey);
       sources.push(
         gb
-          .search(query, page, limit)
+          .search(query, page, limit, preferredLanguage || undefined)
           .then(({ results }) =>
             results.map(
               (r): AggregatedBook => ({
@@ -303,9 +306,30 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
     // key, and we can't dispatch reliably without one either. Google Books
     // data is still used to enrich OL/Bindery matches via the dedupe pass
     // above.
-    const merged = Array.from(byKey.values()).filter(
+    let merged = Array.from(byKey.values()).filter(
       (r) => r.source !== 'googlebooks'
     );
+
+    // Apply the language preference:
+    //   - "strict": drop every result that isn't in the preferred language.
+    //     Books with unknown language are kept (OL's `language` field is
+    //     patchy; dropping unknowns would be too aggressive).
+    //   - "prefer" (default): keep everything, but float matching-language
+    //     results to the top. Unknown-language entries sort between matches
+    //     and mismatches.
+    if (preferredLanguage) {
+      if (languagePolicy === 'strict') {
+        merged = merged.filter(
+          (r) => !r.language || r.language.toLowerCase() === preferredLanguage
+        );
+      } else {
+        const rank = (lang?: string): number => {
+          if (!lang) return 1;
+          return lang.toLowerCase() === preferredLanguage ? 0 : 2;
+        };
+        merged.sort((a, b) => rank(a.language) - rank(b.language));
+      }
+    }
 
     // Overlay availability from local database
     const bookMediaRepo = getRepository(BookMedia);

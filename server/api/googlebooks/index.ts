@@ -61,12 +61,14 @@ class GoogleBooksAPI {
   async search(
     query: string,
     page = 1,
-    limit = 20
+    limit = 20,
+    lang?: string
   ): Promise<{ results: GoogleBookResult[]; totalResults: number }> {
     // Cache key includes page/limit so paginated requests don't collide.
     // Short TTL (1h) absorbs repeated reloads of the same page without
     // hitting Google's daily quota (the source of the 429s).
-    const cacheKey = `search:${query.toLowerCase()}:${page}:${limit}`;
+    const langKey = lang ?? '';
+    const cacheKey = `search:${query.toLowerCase()}:${page}:${limit}:${langKey}`;
     const hit = cache.get<{
       results: GoogleBookResult[];
       totalResults: number;
@@ -82,6 +84,7 @@ class GoogleBooksAPI {
             maxResults: Math.min(limit, 40),
             startIndex,
             printType: 'books',
+            ...(lang ? { langRestrict: lang } : {}),
             ...(this.apiKey ? { key: this.apiKey } : {}),
           },
           timeout: 10000,

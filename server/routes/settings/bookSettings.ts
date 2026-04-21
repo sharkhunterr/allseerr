@@ -46,6 +46,13 @@ bookSettingsRoutes.put('/metadata-providers', async (req, res) => {
       ...(typeof body.hardcoverApiKey === 'string'
         ? { hardcoverApiKey: body.hardcoverApiKey }
         : {}),
+      ...(typeof body.preferredLanguage === 'string'
+        ? { preferredLanguage: body.preferredLanguage.trim().toLowerCase() }
+        : {}),
+      ...(body.languagePolicy === 'prefer' ||
+      body.languagePolicy === 'strict'
+        ? { languagePolicy: body.languagePolicy }
+        : {}),
     },
   };
   await settings.save();

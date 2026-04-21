@@ -42,8 +42,35 @@ const messages = defineMessages(
     testFailure: 'Test failed: {message}',
     saved: 'Book metadata provider settings saved.',
     saveFailed: 'Failed to save book metadata provider settings.',
+    preferredLanguage: 'Preferred language',
+    preferredLanguageHelp:
+      'Passed to every provider. Leave empty for no preference. Applied to OpenLibrary and Google Books search queries; aggregated results are then reordered / filtered by the policy below.',
+    languagePolicy: 'Language policy',
+    languagePolicyHelp:
+      '"Prefer": matching-language results float to the top, others are still returned. "Strict": drop results that aren\'t in the preferred language (books with unknown language are kept either way).',
+    langAny: 'No preference',
+    langPrefer: 'Prefer',
+    langStrict: 'Strict',
   }
 );
+
+// Common book languages. List kept short on purpose — users can still
+// type any ISO-639-1 code in the `custom` option.
+const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'langAny' },
+  { value: 'en', label: 'English (en)' },
+  { value: 'fr', label: 'Français (fr)' },
+  { value: 'de', label: 'Deutsch (de)' },
+  { value: 'es', label: 'Español (es)' },
+  { value: 'it', label: 'Italiano (it)' },
+  { value: 'pt', label: 'Português (pt)' },
+  { value: 'nl', label: 'Nederlands (nl)' },
+  { value: 'ja', label: '日本語 (ja)' },
+  { value: 'zh', label: '中文 (zh)' },
+  { value: 'ru', label: 'Русский (ru)' },
+  { value: 'pl', label: 'Polski (pl)' },
+  { value: 'sv', label: 'Svenska (sv)' },
+];
 
 interface MetadataProvidersConfig {
   bindery: boolean;
@@ -52,6 +79,8 @@ interface MetadataProvidersConfig {
   googleBooksApiKey?: string;
   hardcover: boolean;
   hardcoverApiKey?: string;
+  preferredLanguage: string;
+  languagePolicy: 'prefer' | 'strict';
 }
 
 const SettingsBookMetadata = () => {
@@ -116,6 +145,8 @@ const SettingsBookMetadata = () => {
     googleBooksApiKey: '',
     hardcover: false,
     hardcoverApiKey: '',
+    preferredLanguage: '',
+    languagePolicy: 'prefer',
   };
 
   return (
@@ -309,6 +340,56 @@ const SettingsBookMetadata = () => {
                   </div>
                 </div>
               )}
+              <div className="form-row">
+                <label htmlFor="preferredLanguage" className="text-label">
+                  <span>{intl.formatMessage(messages.preferredLanguage)}</span>
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.preferredLanguageHelp)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <div className="form-input-field">
+                    <Field
+                      as="select"
+                      id="preferredLanguage"
+                      name="preferredLanguage"
+                    >
+                      {LANGUAGE_OPTIONS.map((opt) => (
+                        <option key={opt.value || 'any'} value={opt.value}>
+                          {opt.value === ''
+                            ? intl.formatMessage(messages.langAny)
+                            : opt.label}
+                        </option>
+                      ))}
+                    </Field>
+                  </div>
+                </div>
+              </div>
+              <div className="form-row">
+                <label htmlFor="languagePolicy" className="text-label">
+                  <span>{intl.formatMessage(messages.languagePolicy)}</span>
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.languagePolicyHelp)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <div className="form-input-field">
+                    <Field
+                      as="select"
+                      id="languagePolicy"
+                      name="languagePolicy"
+                      disabled={!values.preferredLanguage}
+                    >
+                      <option value="prefer">
+                        {intl.formatMessage(messages.langPrefer)}
+                      </option>
+                      <option value="strict">
+                        {intl.formatMessage(messages.langStrict)}
+                      </option>
+                    </Field>
+                  </div>
+                </div>
+              </div>
               <div className="actions">
                 <div className="flex justify-end">
                   <span className="ml-3 inline-flex rounded-md shadow-sm">
