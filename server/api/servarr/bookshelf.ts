@@ -260,10 +260,24 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         ? loose.find((b) => b.foreignBookId === foreignBookId)
         : undefined;
       if (byBook) return byBook as unknown as BookshelfBook;
-      const byEdition = foreignEditionId
-        ? loose.find((b) => b.foreignEditionId === foreignEditionId)
-        : undefined;
-      return (byEdition as unknown as BookshelfBook) ?? null;
+      // Edition IDs live in the nested `editions[]` array on each book
+      // row — look there, not on the book object itself, otherwise we'd
+      // always miss and trigger a duplicate-POST / UNIQUE constraint 409.
+      if (foreignEditionId) {
+        const byEdition = loose.find((b) => {
+          const editions = (b as { editions?: unknown[] }).editions;
+          return (
+            Array.isArray(editions) &&
+            editions.some(
+              (e) =>
+                (e as { foreignEditionId?: string }).foreignEditionId ===
+                foreignEditionId
+            )
+          );
+        });
+        if (byEdition) return byEdition as unknown as BookshelfBook;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -309,7 +323,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     qualityProfileId: number;
     metadataProfileId: number;
     rootFolderPath: string;
-  }): Promise<Record<string, unknown>> {
+  }): Promise<{ author: Record<string, unknown>; wasExisting: boolean }> {
     const existingList = await this.axios
       .get<Record<string, unknown>[]>('/author', { timeout: 25000 })
       .then((r) => r.data ?? [])
@@ -319,7 +333,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       const byId = existingList.find(
         (a) => a.foreignAuthorId === options.foreignAuthorId
       );
-      if (byId) return byId;
+      if (byId) return { author: byId, wasExisting: true };
     }
 
     const nameLc = options.authorName.toLowerCase();
@@ -328,7 +342,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         typeof a.authorName === 'string' &&
         a.authorName.toLowerCase() === nameLc
     );
-    if (byName) return byName;
+    if (byName) return { author: byName, wasExisting: true };
 
     // Not persisted — lookup metadata and POST /author
     const candidates = await this.lookupAuthor(options.authorName);
@@ -363,11 +377,23 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         authorPayload,
         { timeout: 30000 }
       );
-      return response.data;
+      return { author: response.data, wasExisting: false };
     } catch (e) {
-      // If POST fails with a conflict, fall back to re-reading the author
-      // list (something created it concurrently).
-      if (e?.response?.status === 409) {
+      // Bookshelf returns 400 with errorCode "AuthorExistsValidator" (or
+      // 409) when the author was added concurrently — typically by its own
+      // metadata sync after a sibling book was imported. Re-read /author
+      // and return the now-existing record instead of bubbling the error.
+      const status = e?.response?.status;
+      const body = e?.response?.data;
+      const isAuthorExists =
+        status === 409 ||
+        (status === 400 &&
+          Array.isArray(body) &&
+          body.some(
+            (v: { errorCode?: string }) =>
+              v?.errorCode === 'AuthorExistsValidator'
+          ));
+      if (isAuthorExists) {
         const again = await this.axios
           .get<Record<string, unknown>[]>('/author', { timeout: 25000 })
           .then((r) => r.data ?? [])
@@ -382,7 +408,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
               typeof a.authorName === 'string' &&
               a.authorName.toLowerCase() === nameLc
           );
-        if (match) return match;
+        if (match) return { author: match, wasExisting: true };
       }
       throw e;
     }
@@ -443,15 +469,16 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       // mirrors Libreseerr's `_ensure_author`: prefer an existing
       // persisted author (matched by foreignAuthorId then by name),
       // otherwise /author/lookup + POST /author with rootFolderPath.
-      const persistedAuthor = await this.ensureAuthor({
-        authorName: options.authorName,
-        foreignAuthorId:
-          (bookMatch.author as { foreignAuthorId?: string } | undefined)
-            ?.foreignAuthorId ?? undefined,
-        qualityProfileId: options.qualityProfileId,
-        metadataProfileId: options.metadataProfileId,
-        rootFolderPath: options.rootFolderPath,
-      });
+      const { author: persistedAuthor, wasExisting: authorWasExisting } =
+        await this.ensureAuthor({
+          authorName: options.authorName,
+          foreignAuthorId:
+            (bookMatch.author as { foreignAuthorId?: string } | undefined)
+              ?.foreignAuthorId ?? undefined,
+          qualityProfileId: options.qualityProfileId,
+          metadataProfileId: options.metadataProfileId,
+          rootFolderPath: options.rootFolderPath,
+        });
 
       // Step 3 — Short-circuit: if the book already exists in Bookshelf
       // (auto-imported as unmonitored metadata during a sibling book's
@@ -504,6 +531,17 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         if (key in looseBook) edition[key] = looseBook[key];
       }
 
+      // When the author ALREADY existed in Bookshelf's DB, re-posting its
+      // foreignAuthorId re-triggers AuthorExistsValidator and 400s. Strip
+      // the field in that case — authorId still references the existing
+      // record. When the author was freshly created via POST /author,
+      // Bookshelf's NotEmptyValidator requires foreignAuthorId, so we
+      // keep the embed intact.
+      const authorEmbed = { ...persistedAuthor };
+      if (authorWasExisting) {
+        delete (authorEmbed as Record<string, unknown>).foreignAuthorId;
+      }
+
       const payload = {
         foreignBookId: bookMatch.foreignBookId,
         foreignEditionId: bookMatch.foreignEditionId,
@@ -514,7 +552,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         monitored: options.monitored ?? true,
         anyEditionOk: true,
         editions: bookMatch.foreignEditionId ? [edition] : [],
-        author: persistedAuthor,
+        author: authorEmbed,
         addOptions: {
           addType: 'manual',
           searchForMissingBooks: false,
@@ -529,10 +567,36 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       } catch (e) {
         // Libreseerr pattern: on POST error, re-check the catalogue —
         // the book may have materialised anyway (race or duplicate edit).
-        const existingAfter = await this.findExistingBook(
+        // Force-refresh the book cache first: Bookshelf's own metadata
+        // sync may have added this title as a sibling of an already-known
+        // author's bibliography, so the 2-min TTL snapshot is out of date.
+        bookshelfCache.del('all-books');
+        let existingAfter = await this.findExistingBook(
           bookMatch.foreignBookId as string,
           bookMatch.foreignEditionId as string
         );
+        // UNIQUE constraint on Editions.ForeignEditionId means the edition
+        // is already attached to SOME book (often with a different
+        // foreignBookId than our lookup returned, because Bookshelf's
+        // metadata sync can use a different provider). Fall back to a
+        // title+author match on the fresh /book list.
+        if (!existingAfter) {
+          const all = await this.getAllBooksCached();
+          const loose = all as unknown as Record<string, unknown>[];
+          const targetLc = options.title.toLowerCase().trim();
+          const authorLc = options.authorName.toLowerCase().trim();
+          const hit = loose.find((b) => {
+            const t = (b.title as string | undefined)?.toLowerCase().trim();
+            const a = (
+              (b.author as { authorName?: string })?.authorName ??
+              (b.authorName as string | undefined)
+            )
+              ?.toLowerCase()
+              .trim();
+            return t === targetLc && (!a || a === authorLc);
+          });
+          if (hit) existingAfter = hit as unknown as BookshelfBook;
+        }
         if (existingAfter && typeof existingAfter.id === 'number') {
           logger.info(
             `Book materialised after POST error; monitoring existing record ${existingAfter.id}`,
