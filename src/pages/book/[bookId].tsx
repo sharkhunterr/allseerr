@@ -4,6 +4,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tag from '@app/components/Common/Tag';
 import useSettings from '@app/hooks/useSettings';
+import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import {
   BookOpenIcon,
@@ -13,7 +14,6 @@ import {
 import { MediaStatus, MediaType } from '@server/constants/media';
 import axios from 'axios';
 import type { NextPage } from 'next';
-import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
@@ -323,41 +323,6 @@ const BookDetailPage: NextPage = () => {
           ) : null}
         </div>
       </div>
-      {data.series && data.series.length > 0 && (
-        <div className="mb-6 rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-4">
-          {data.series.map((s) => (
-            <div
-              key={s.key}
-              className="flex items-center justify-between gap-4"
-            >
-              <div>
-                <span className="mr-2 text-sm text-gray-400">
-                  {intl.formatMessage(messages.partOfSeries)}
-                </span>
-                <span className="font-semibold text-indigo-300">{s.name}</span>
-                {s.position && (
-                  <span className="ml-2 text-sm text-gray-400">
-                    {s.seedCount > 0
-                      ? intl.formatMessage(messages.seriesBook, {
-                          position: s.position,
-                          total: s.seedCount,
-                        })
-                      : `#${s.position}`}
-                  </span>
-                )}
-              </div>
-              {s.linkable !== false && (
-                <Link
-                  href={`/book/series/${s.key}`}
-                  className="text-sm text-indigo-400 underline hover:text-indigo-300"
-                >
-                  {intl.formatMessage(messages.viewSeries)}
-                </Link>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
       <div className="media-overview">
         <div className="media-overview-left">
           <h2>{intl.formatMessage(messages.overview)}</h2>
@@ -375,6 +340,70 @@ const BookDetailPage: NextPage = () => {
           )}
         </div>
         <div className="media-overview-right">
+          {data.series && data.series.length > 0 && (
+            <>
+              {data.series.map((s) => {
+                const isLinkable = s.linkable !== false;
+                const card = (
+                  <div className="group relative z-0 mb-6 scale-100 transform-gpu cursor-pointer overflow-hidden rounded-lg bg-gray-800 bg-cover bg-center shadow-md ring-1 ring-gray-700 transition duration-300 hover:scale-105 hover:ring-gray-500">
+                    {coverUrl && (
+                      <div className="absolute inset-0 z-0">
+                        <img
+                          // eslint-disable-next-line @next/next/no-img-element
+                          src={coverUrl}
+                          alt=""
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                          }}
+                        />
+                        <div
+                          className="absolute inset-0"
+                          style={{
+                            backgroundImage:
+                              'linear-gradient(180deg, rgba(31, 41, 55, 0.47) 0%, rgba(31, 41, 55, 0.80) 100%)',
+                          }}
+                        />
+                      </div>
+                    )}
+                    <div className="relative z-10 flex h-full items-center justify-between p-4 text-gray-200 transition duration-300 group-hover:text-white">
+                      <div>
+                        <div>{s.name}</div>
+                        {s.position && (
+                          <div className="text-xs text-gray-400">
+                            {s.seedCount > 0
+                              ? intl.formatMessage(messages.seriesBook, {
+                                  position: s.position,
+                                  total: s.seedCount,
+                                })
+                              : `#${s.position}`}
+                          </div>
+                        )}
+                      </div>
+                      {isLinkable && (
+                        <Button buttonSize="sm">
+                          {intl.formatMessage(globalMessages.view)}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+                return isLinkable ? (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className="block w-full text-left"
+                    onClick={() => router.push(`/book/series/${s.key}`)}
+                  >
+                    {card}
+                  </button>
+                ) : (
+                  <div key={s.key}>{card}</div>
+                );
+              })}
+            </>
+          )}
           <div className="media-facts">
             {data.authorName && (
               <div className="media-fact">
