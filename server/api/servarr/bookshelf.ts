@@ -142,6 +142,78 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
    * end up in the DB as unmonitored metadata records. Posting them again
    * via POST /book triggers a 409 UNIQUE constraint on Editions.
    */
+  /**
+   * List all books whose `seriesTitle` matches the given series name.
+   * Bookshelf's /series endpoint is rarely populated, but every /book
+   * row carries `seriesTitle` strings like "Silo #3" or multi-series
+   * "Wool #2; Silo #1B". We iterate /book once, split on `;`, and
+   * extract matching entries with their position.
+   *
+   * Only matches books already in Bookshelf's DB — which is every book
+   * Bookshelf has imported for an author we've touched before.
+   */
+  public async findSeriesMembers(
+    seriesName: string
+  ): Promise<
+    {
+      id: number;
+      title: string;
+      authorId?: number;
+      position?: string;
+      monitored: boolean;
+      foreignBookId?: string;
+    }[]
+  > {
+    try {
+      const response = await this.axios.get<
+        (BookshelfBook & {
+          seriesTitle?: string;
+          foreignBookId?: string;
+          authorId?: number;
+        })[]
+      >('/book', { timeout: 25000 });
+      const all = response.data ?? [];
+      const needle = seriesName.toLowerCase().trim();
+      const matches: {
+        id: number;
+        title: string;
+        authorId?: number;
+        position?: string;
+        monitored: boolean;
+        foreignBookId?: string;
+      }[] = [];
+      for (const b of all) {
+        const st = (b.seriesTitle ?? '').trim();
+        if (!st) continue;
+        // Split multi-series strings like "Wool #2; Silo #1B"
+        for (const part of st.split(';').map((s) => s.trim())) {
+          const m = part.match(/^(.+?)\s*(?:#(\S+))?\s*$/);
+          if (!m?.[1]) continue;
+          if (m[1].toLowerCase() === needle) {
+            matches.push({
+              id: b.id,
+              title: b.title,
+              authorId: b.authorId,
+              position: m[2],
+              monitored: b.monitored,
+              foreignBookId: b.foreignBookId,
+            });
+            break;
+          }
+        }
+      }
+      // Sort by numeric prefix of position (handles "1", "1A", "2B")
+      matches.sort((a, b) => {
+        const pa = parseFloat(a.position ?? '999');
+        const pb = parseFloat(b.position ?? '999');
+        return pa - pb;
+      });
+      return matches;
+    } catch {
+      return [];
+    }
+  }
+
   public async findExistingBook(
     foreignBookId?: string,
     foreignEditionId?: string

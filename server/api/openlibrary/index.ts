@@ -329,15 +329,50 @@ class OpenLibraryAPI {
    * "/authors/OL12345A").
    */
   async getAuthorName(authorKey: string): Promise<string | null> {
+    const info = await this.getAuthor(authorKey);
+    return info?.name ?? null;
+  }
+
+  /**
+   * Get full author details by OpenLibrary author key. Returns name,
+   * photo URL (if available), bio, birth/death dates.
+   */
+  async getAuthor(authorKey: string): Promise<{
+    name?: string;
+    photoUrl?: string;
+    bio?: string;
+    birthDate?: string;
+    deathDate?: string;
+  } | null> {
     const path = authorKey.startsWith('/')
       ? authorKey
       : `/authors/${authorKey}`;
     try {
-      const response = await axios.get<{ name?: string }>(
-        `${OPENLIBRARY_BASE}${path}.json`,
-        { timeout: 10000 }
+      const response = await axios.get<{
+        name?: string;
+        bio?: string | { value?: string };
+        photos?: number[];
+        birth_date?: string;
+        death_date?: string;
+      }>(`${OPENLIBRARY_BASE}${path}.json`, { timeout: 10000 });
+      const photoId = response.data.photos?.find(
+        (id) => typeof id === 'number' && id > 0
       );
-      return response.data.name ?? null;
+      const photoUrl = photoId
+        ? `https://covers.openlibrary.org/a/id/${photoId}-L.jpg`
+        : undefined;
+      const bioRaw = response.data.bio;
+      const bio =
+        typeof bioRaw === 'string'
+          ? bioRaw
+          : bioRaw?.value ?? undefined;
+      return {
+        name: response.data.name,
+        photoUrl,
+        bio,
+        birthDate: response.data.birth_date,
+        deathDate: response.data.death_date,
+      };
     } catch (e) {
       logger.error('OpenLibrary author fetch failed', {
         label: 'openlibrary',

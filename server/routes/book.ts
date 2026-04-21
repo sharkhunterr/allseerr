@@ -386,6 +386,67 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
   const id = (hasPrefix ? rest.join(':') : raw).replace(/^\/(series\/)?/, '');
 
   try {
+    if (source === 'bookshelf') {
+      const settings = getSettings();
+      const cfg = settings.book.metadataProviders;
+      if (!cfg.bookshelf) {
+        return res.status(400).json({
+          status: 400,
+          message:
+            'Bookshelf metadata provider is not enabled. Turn it on in Settings → Metadata Providers → Books.',
+        });
+      }
+      const bookshelfInstance = settings.bookshelf?.find(
+        (b) => b.mediaType === 'book' && b.isDefault
+      );
+      if (!bookshelfInstance) {
+        return res.status(400).json({
+          status: 400,
+          message:
+            'Bookshelf is not configured. Set up an instance in Services → Books first.',
+        });
+      }
+      const api = new BookshelfAPI({
+        apiKey: bookshelfInstance.apiKey,
+        url: BookshelfAPI.buildUrl(bookshelfInstance, '/api/v1'),
+      });
+      const name = decodeURIComponent(id);
+      const members = await api.findSeriesMembers(name);
+      if (members.length === 0) {
+        return res.status(404).json({
+          status: 404,
+          message: `No Bookshelf books found in series "${name}".`,
+        });
+      }
+      const bookMediaRepo = getRepository(BookMedia);
+      const enriched = await Promise.all(
+        members.map(async (m) => {
+          // Bookshelf books are keyed by Goodreads numeric id; they
+          // aren't directly navigable via /book/{olKey}. We still
+          // render them with a synthetic openLibraryId so the BookCard
+          // component renders — navigation stays non-OL-keyed for now.
+          return {
+            openLibraryId: `bookshelf:${m.id}`,
+            title: `${m.title}${m.position ? ` (#${m.position})` : ''}`,
+            authorName: '',
+            coverUrl: undefined,
+            mediaStatus: m.monitored ? 3 : null,
+            bookMediaId: null,
+            mediaType: MediaType.BOOK,
+          };
+        })
+      );
+      // Avoid "unused" warning until we wire per-book cover lookup
+      void bookMediaRepo;
+      return res.status(200).json({
+        key: `bookshelf:${encodeURIComponent(name)}`,
+        name,
+        description: undefined,
+        seedCount: members.length,
+        members: enriched,
+      });
+    }
+
     if (source === 'hardcover') {
       const settings = getSettings();
       const cfg = settings.book.metadataProviders;
@@ -552,11 +613,15 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
     });
 
     // Extract first author's OpenLibrary key (e.g. "OL12345A") from the Work
-    // and fetch the author's display name (Work itself doesn't carry it).
+    // and fetch the author's display name, photo, and bio (Work itself
+    // doesn't carry any of these).
     const authorKey = work.authors?.[0]?.author?.key?.split('/').pop();
-    const authorName = authorKey
-      ? await openLibrary.getAuthorName(authorKey)
-      : null;
+    const authorInfo = authorKey ? await openLibrary.getAuthor(authorKey) : null;
+    const authorName = authorInfo?.name ?? null;
+    const authorPhotoUrl = authorInfo?.photoUrl;
+    const authorBio = authorInfo?.bio;
+    const authorBirthDate = authorInfo?.birthDate;
+    const authorDeathDate = authorInfo?.deathDate;
 
     // Augment with enabled metadata providers (Bindery + Google Books) so the
     // detail page shows ISBN, page count, richer description/subjects, etc.
@@ -731,21 +796,29 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
               mergedGenres.add(g)
             );
 
-            // Series fallback from "seriesTitle" like "Silo #3"
+            // Series fallback from "seriesTitle". Bookshelf encodes
+            // multi-series memberships as "Wool #2; Silo #1B" — split
+            // and emit one linkable entry per series.
             if (
               seriesEntries.length === 0 &&
               typeof match.seriesTitle === 'string' &&
               match.seriesTitle.trim()
             ) {
-              const m = match.seriesTitle.match(/^(.+?)\s*(?:#(\d+))?\s*$/);
-              if (m?.[1]) {
-                seriesEntries.push({
-                  key: `bookshelf:${m[1]}`,
-                  name: m[1],
-                  position: m[2],
-                  seedCount: 0,
-                  linkable: false,
-                });
+              for (const part of match.seriesTitle
+                .split(';')
+                .map((s) => s.trim())) {
+                const m = part.match(/^(.+?)\s*(?:#(\S+))?\s*$/);
+                if (m?.[1]) {
+                  seriesEntries.push({
+                    // URL-safe: encode the series name (can contain
+                    // spaces / apostrophes). The handler decodes it back.
+                    key: `bookshelf:${encodeURIComponent(m[1])}`,
+                    name: m[1],
+                    position: m[2],
+                    seedCount: 0,
+                    linkable: true,
+                  });
+                }
               }
             }
           })().catch(() => {})
@@ -824,6 +897,10 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       ...work,
       authorKey,
       authorName,
+      authorPhotoUrl,
+      authorBio,
+      authorBirthDate,
+      authorDeathDate,
       isbn13,
       isbn10,
       pageCount,

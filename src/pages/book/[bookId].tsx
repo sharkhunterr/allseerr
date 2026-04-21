@@ -53,6 +53,8 @@ const messages = defineMessages('pages.BookDetail', {
   moods: 'Moods',
   contentWarnings: 'Content Warnings',
   characters: 'Characters',
+  aboutAuthor: 'About the author',
+  authorLivedFmt: '{birth}{dash}{death}',
 });
 
 // Convert an ISO-3166-1 alpha-2 country code to its flag emoji
@@ -76,6 +78,10 @@ interface BookDetailData {
   subjects?: string[];
   authorName?: string;
   authorKey?: string;
+  authorPhotoUrl?: string;
+  authorBio?: string;
+  authorBirthDate?: string;
+  authorDeathDate?: string;
   narratorName?: string;
   year?: number;
   publisher?: string;
@@ -340,6 +346,55 @@ const BookDetailPage: NextPage = () => {
           )}
         </div>
         <div className="media-overview-right">
+          {(data.authorName ||
+            data.authorPhotoUrl ||
+            data.authorBio) && (
+            <div className="mb-6 overflow-hidden rounded-lg bg-gray-800 shadow-md ring-1 ring-gray-700">
+              <div className="flex items-start gap-4 p-4">
+                <div className="flex-shrink-0">
+                  {data.authorPhotoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={data.authorPhotoUrl}
+                      alt={data.authorName ?? ''}
+                      className="h-20 w-20 rounded-full object-cover ring-2 ring-indigo-500/40"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-700 text-2xl font-semibold text-gray-300">
+                      {data.authorName?.[0]?.toUpperCase() ?? '?'}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs uppercase tracking-wide text-gray-400">
+                    {intl.formatMessage(messages.aboutAuthor)}
+                  </div>
+                  <div className="text-base font-semibold text-white">
+                    {data.authorName}
+                  </div>
+                  {(data.authorBirthDate || data.authorDeathDate) && (
+                    <div className="text-xs text-gray-400">
+                      {intl.formatMessage(messages.authorLivedFmt, {
+                        birth: data.authorBirthDate ?? '?',
+                        dash: data.authorDeathDate ? ' – ' : '',
+                        death: data.authorDeathDate ?? '',
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {data.authorBio && (
+                <p className="max-h-32 overflow-hidden px-4 pb-4 text-sm text-gray-300">
+                  {/* OpenLibrary bios often have Markdown-like refs — strip
+                      the common "*[From X][1]*" footer cruft and link refs. */}
+                  {data.authorBio
+                    .replace(/\s*\*\[From[^\]]*\]\[\d+\]\.?\*\s*$/s, '')
+                    .replace(/\[\d+\]:\s*https?:\/\/[^\s]+/g, '')
+                    .trim()}
+                </p>
+              )}
+            </div>
+          )}
           {data.series && data.series.length > 0 && (
             <>
               {data.series.map((s) => {
