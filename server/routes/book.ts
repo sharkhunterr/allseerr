@@ -208,20 +208,35 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       coverUrl?: string;
       memberCount?: number;
       description?: string;
+      // Aggregate availability across all books in the series, rendered
+      // as a StatusBadge on the card. Same semantics as movies/TV:
+      //   AVAILABLE            = every book available locally
+      //   PARTIALLY_AVAILABLE  = some books available
+      //   PROCESSING           = some books requested (none available yet)
+      //   undefined            = nothing to show
+      aggregateStatus?: MediaStatus;
     };
     let seriesPromise: Promise<SeriesHit[]> = Promise.resolve([]);
     if (providerCfg.hardcover && providerCfg.hardcoverApiKey) {
       const hcForSeries = new HardcoverAPI(providerCfg.hardcoverApiKey);
       seriesPromise = hcForSeries
         .searchSeries(query, 5)
-        .then((hits) =>
-          hits
+        .then(async (hits) => {
+          const topHits = hits
             // Hardcover sometimes returns stub series with 0 books —
             // no use linking to an empty page, so drop them.
             .filter((s) => (s.booksCount ?? 0) > 0)
-            .slice(0, 3)
-            .map(
-              (s): SeriesHit => ({
+            .slice(0, 3);
+          if (topHits.length === 0) return [] as SeriesHit[];
+
+          // Enrich each with an aggregate availability status so the
+          // series card can render the same StatusBadge semantics as
+          // movies/TV shows. One getSeries call per hit — cheap thanks
+          // to the 12 h Hardcover cache and capped at 3 hits.
+          const bookMediaRepo = getRepository(BookMedia);
+          return Promise.all(
+            topHits.map(async (s): Promise<SeriesHit> => {
+              const base: SeriesHit = {
                 type: 'series',
                 key: `hardcover:${s.id}`,
                 name: s.name,
@@ -229,9 +244,45 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
                 coverUrl: s.coverUrl,
                 memberCount: s.booksCount,
                 description: s.description,
-              })
-            )
-        )
+              };
+              try {
+                const detail = await hcForSeries.getSeries(s.id);
+                const olKeys = (detail?.book_series ?? [])
+                  .map((m) => {
+                    const olMap = m.book?.book_mappings?.find(
+                      (bm) =>
+                        bm.platform?.name?.toLowerCase() === 'openlibrary'
+                    );
+                    return toOLWorkKey(olMap?.external_id);
+                  })
+                  .filter((k): k is string => !!k);
+                if (olKeys.length === 0) return base;
+                const uniqueKeys = Array.from(new Set(olKeys));
+                const medias = await bookMediaRepo.find({
+                  where: uniqueKeys.map((k) => ({ openLibraryId: k })),
+                });
+                const available = medias.filter(
+                  (m) => m.status === MediaStatus.AVAILABLE
+                ).length;
+                const activeRequests = medias.filter(
+                  (m) =>
+                    m.status === MediaStatus.PENDING ||
+                    m.status === MediaStatus.PROCESSING
+                ).length;
+                if (available >= uniqueKeys.length && available > 0) {
+                  base.aggregateStatus = MediaStatus.AVAILABLE;
+                } else if (available > 0) {
+                  base.aggregateStatus = MediaStatus.PARTIALLY_AVAILABLE;
+                } else if (activeRequests > 0) {
+                  base.aggregateStatus = MediaStatus.PROCESSING;
+                }
+              } catch {
+                /* enrichment best-effort */
+              }
+              return base;
+            })
+          );
+        })
         .catch(() => [] as SeriesHit[]);
     }
 
@@ -1318,11 +1369,13 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
 
     return res.status(200).json({
       ...work,
-      // Fallback cover when OL's `covers` array is empty — frontend
-      // prefers `coverUrl` over the OL-derived URL.
-      ...(fallbackCoverUrl && (!work.covers || work.covers.length === 0)
-        ? { coverUrl: fallbackCoverUrl }
-        : {}),
+      // Prefer Hardcover's cover when available so the detail-page
+      // image matches what the search / series pages displayed — the
+      // search aggregator already picks Hardcover as the winning
+      // source when enabled, so the user's "poster" would otherwise
+      // flip between click-throughs. Falls back to OL's `covers`
+      // array (resolved client-side) when Hardcover has nothing.
+      ...(fallbackCoverUrl ? { coverUrl: fallbackCoverUrl } : {}),
       authorKey,
       authorName,
       authorPhotoUrl,

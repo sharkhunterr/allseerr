@@ -4,12 +4,14 @@ import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import GameCard from '@app/components/GameCard';
 import useDiscover from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
+import { MediaStatus } from '@server/constants/media';
 import Link from 'next/link';
 import type {
   MovieResult,
@@ -54,21 +56,30 @@ const SeriesSearchCard = ({ result }: { result: SeriesResult }) => {
               <BookOpenIcon className="h-12 w-12 text-gray-500" />
             </div>
           )}
-          <div className="absolute left-0 right-0 top-0 flex items-center gap-1 p-2">
-            {/* Book badge (orange) — kept for visual parity with book
-                cards; tells the user the series contains book items. */}
-            <div className="pointer-events-none z-40 rounded-full border border-orange-500 bg-orange-600/80 shadow-md">
-              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
-                {intl.formatMessage(messages.bookBadge)}
+          <div className="absolute left-0 right-0 top-0 flex items-center justify-between gap-1 p-2">
+            <div className="flex items-center gap-1">
+              {/* Book badge (orange) — visual parity with book cards. */}
+              <div className="pointer-events-none z-40 rounded-full border border-orange-500 bg-orange-600/80 shadow-md">
+                <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                  {intl.formatMessage(messages.bookBadge)}
+                </div>
+              </div>
+              {/* Series badge (indigo) — marks this card as a series
+                  entry rather than an individual book. */}
+              <div className="pointer-events-none z-40 rounded-full border border-indigo-500 bg-indigo-600/80 shadow-md">
+                <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                  {intl.formatMessage(messages.seriesBadge)}
+                </div>
               </div>
             </div>
-            {/* Series badge (indigo) — marks this card as a series
-                entry rather than an individual book. */}
-            <div className="pointer-events-none z-40 rounded-full border border-indigo-500 bg-indigo-600/80 shadow-md">
-              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
-                {intl.formatMessage(messages.seriesBadge)}
-              </div>
-            </div>
+            {/* Aggregate availability of the series' books — same badge
+                component as movies/TV so colours / icons match. */}
+            {result.aggregateStatus !== undefined &&
+              result.aggregateStatus !== MediaStatus.UNKNOWN && (
+                <div className="pointer-events-none z-40 flex">
+                  <StatusBadgeMini status={result.aggregateStatus} shrink />
+                </div>
+              )}
           </div>
         </div>
         <div className="flex flex-1 flex-col p-3">
@@ -116,6 +127,7 @@ interface SeriesResult {
   coverUrl?: string;
   memberCount?: number;
   description?: string;
+  aggregateStatus?: number;
 }
 
 type BookOrSeriesResult = BookResult | SeriesResult;
