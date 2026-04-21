@@ -22,6 +22,11 @@ export interface HardcoverCharacter {
   spoiler?: boolean;
 }
 
+export interface HardcoverBookMapping {
+  external_id?: string;
+  platform?: { name?: string };
+}
+
 export interface HardcoverSearchHit {
   id: number;
   title: string;
@@ -37,6 +42,25 @@ export interface HardcoverSearchHit {
   contributions?: { author?: { name?: string } | null }[];
   book_series?: { series?: { id: number; name: string } | null; position?: number }[];
   book_characters?: HardcoverCharacter[];
+  book_mappings?: HardcoverBookMapping[];
+}
+
+export interface HardcoverSeriesMember {
+  position?: number | null;
+  book?: {
+    id: number;
+    title: string;
+    image?: { url?: string } | null;
+    contributions?: { author?: { name?: string } | null }[];
+    book_mappings?: HardcoverBookMapping[];
+  } | null;
+}
+
+export interface HardcoverSeriesDetail {
+  id: number;
+  name: string;
+  description?: string | null;
+  book_series?: HardcoverSeriesMember[];
 }
 
 interface TypesenseSearchResponse {
@@ -231,6 +255,44 @@ class HardcoverAPI {
   /**
    * Look up a book by ISBN-13 / ISBN-10 through the editions table.
    */
+  /**
+   * Fetch a series and its members. Returns null on auth/network failure.
+   */
+  async getSeries(id: number): Promise<HardcoverSeriesDetail | null> {
+    const gqlQuery = `
+      query SeriesById($id: Int!) {
+        series(where: { id: { _eq: $id } }, limit: 1) {
+          id
+          name
+          description
+          book_series(order_by: { position: asc_nulls_last }) {
+            position
+            book {
+              id
+              title
+              image { url }
+              contributions(
+                where: { contribution: { _eq: "Author" } }
+                limit: 1
+              ) {
+                author { name }
+              }
+              book_mappings {
+                external_id
+                platform { name }
+              }
+            }
+          }
+        }
+      }
+    `;
+    const { data } = await this.gql<{ series: HardcoverSeriesDetail[] }>(
+      gqlQuery,
+      { id }
+    );
+    return data?.series?.[0] ?? null;
+  }
+
   async searchByIsbn(isbn: string): Promise<HardcoverSearchHit | null> {
     // editions(_eq) is allowed on Hardcover's public Hasura; _ilike is not.
     const gqlQuery = `

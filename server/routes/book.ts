@@ -377,11 +377,75 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
  * with local availability (mediaStatus) per work.
  */
 bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
-  const seriesId = req.params.seriesId;
+  // Key may be prefixed with its source (openlibrary:, hardcover:), or
+  // bare (legacy OL keys). Strip a legacy "/works/" prefix for safety.
+  const raw = decodeURIComponent(req.params.seriesId);
+  const [prefix, ...rest] = raw.split(':');
+  const hasPrefix = rest.length > 0 && /^[a-z]+$/.test(prefix);
+  const source = hasPrefix ? prefix : 'openlibrary';
+  const id = (hasPrefix ? rest.join(':') : raw).replace(/^\/(series\/)?/, '');
+
   try {
+    if (source === 'hardcover') {
+      const settings = getSettings();
+      const cfg = settings.book.metadataProviders;
+      if (!cfg.hardcover || !cfg.hardcoverApiKey) {
+        return res.status(400).json({
+          status: 400,
+          message:
+            'Hardcover is not enabled. Turn it on in Settings → Metadata Providers → Books.',
+        });
+      }
+      const hc = new HardcoverAPI(cfg.hardcoverApiKey);
+      const detail = await hc.getSeries(Number(id));
+      if (!detail) {
+        return res
+          .status(404)
+          .json({ status: 404, message: 'Series not found.' });
+      }
+      const bookMediaRepo = getRepository(BookMedia);
+      const enriched = await Promise.all(
+        (detail.book_series ?? []).map(async (m) => {
+          const olMapping = m.book?.book_mappings?.find(
+            (bm) => bm.platform?.name?.toLowerCase() === 'openlibrary'
+          );
+          const olKey = olMapping?.external_id;
+          const openLibraryId = olKey
+            ? olKey.startsWith('/works/')
+              ? olKey
+              : `/works/${olKey}`
+            : `hardcover:${m.book?.id ?? ''}`;
+          const existing = olKey
+            ? await bookMediaRepo.findOne({
+                where: { openLibraryId },
+              })
+            : null;
+          const imageUrl = m.book?.image?.url;
+          return {
+            openLibraryId,
+            title: m.book?.title ?? '',
+            authorName:
+              m.book?.contributions?.[0]?.author?.name ?? '',
+            coverUrl: imageUrl?.startsWith('http') ? imageUrl : undefined,
+            mediaStatus: existing?.status ?? null,
+            bookMediaId: existing?.id ?? null,
+            mediaType: MediaType.BOOK,
+          };
+        })
+      );
+      return res.status(200).json({
+        key: `hardcover:${detail.id}`,
+        name: detail.name,
+        description: detail.description ?? undefined,
+        seedCount: detail.book_series?.length ?? 0,
+        members: enriched,
+      });
+    }
+
+    // Default / openlibrary
     const [series, members] = await Promise.all([
-      openLibrary.getSeries(seriesId),
-      openLibrary.getSeriesMembers(seriesId),
+      openLibrary.getSeries(id),
+      openLibrary.getSeriesMembers(id),
     ]);
 
     if (!series) {
@@ -409,7 +473,7 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
     );
 
     return res.status(200).json({
-      key: series.key,
+      key: `openlibrary:${series.key}`,
       name: series.name,
       description: series.description,
       seedCount: series.seedCount,
@@ -418,7 +482,7 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
   } catch (e) {
     logger.error('Book series fetch failed', {
       label: 'book',
-      seriesId,
+      seriesId: raw,
       error: e instanceof Error ? e.message : String(e),
     });
     return res.status(500).json({
@@ -599,7 +663,9 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         const info = await openLibrary.getSeries(ref.series.key);
         if (info) {
           seriesEntries.push({
-            key: info.key,
+            // Source-prefixed key so the /book/series/:key handler can
+            // dispatch to the right provider regardless of origin.
+            key: `openlibrary:${info.key}`,
             name: info.name,
             position: ref.position,
             seedCount: info.seedCount,
@@ -738,7 +804,9 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
                   name: bs.series.name,
                   position: bs.position?.toString(),
                   seedCount: 0,
-                  linkable: false,
+                  // Linkable — the /book/series/:key handler knows how
+                  // to fetch Hardcover series members.
+                  linkable: true,
                 });
               }
             }
