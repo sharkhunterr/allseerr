@@ -701,15 +701,25 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
   }
 
   /**
-   * Set a book's monitored flag and keep verifying it stuck. Bookshelf's
-   * post-add async metadata sync can overwrite an immediate PUT with the
-   * pre-sync state, so we retry with backoff and re-read the record.
+   * Set a book's monitored flag and keep re-applying it. Bookshelf's
+   * post-add async metadata sync can overwrite an immediate PUT
+   * several seconds AFTER the initial call settled — a simple
+   * "PUT + GET → success" loop exits after the first pass with
+   * monitored=true (because our PUT won the race against the
+   * sync), then the sync resets the flag and we're left with an
+   * unmonitored book in the catalogue.
+   *
+   * Fix: always run the full PUT + GET cycle at every step (no
+   * early return). The last step runs ~5–8 s after the initial PUT,
+   * which covers Bookshelf's async sync window, so the final PUT
+   * wins over the reset.
    */
   public async ensureBookMonitored(
     bookId: number,
     monitored: boolean
   ): Promise<boolean> {
-    const backoffMs = [0, 2000, 3000, 5000];
+    const backoffMs = [0, 3000, 5000];
+    let lastChecked = false;
     for (let attempt = 0; attempt < backoffMs.length; attempt++) {
       if (backoffMs[attempt] > 0) {
         await new Promise((resolve) =>
@@ -719,25 +729,25 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       await this.setBookMonitored([bookId], monitored);
       try {
         const check = await this.getBook({ id: bookId });
-        if (check.monitored === monitored) {
-          if (attempt > 0) {
-            logger.info('Bookshelf monitored flag settled', {
-              label: 'Bookshelf API',
-              bookId,
-              attempt: attempt + 1,
-            });
-          }
-          return true;
-        }
+        lastChecked = check.monitored === monitored;
       } catch {
-        // read failed — retry
+        lastChecked = false;
       }
     }
-    logger.warn(
-      `Bookshelf book ${bookId} monitored=${monitored} did not stick after ${backoffMs.length} attempts`,
-      { label: 'Bookshelf API' }
-    );
-    return false;
+    if (lastChecked) {
+      logger.info('Bookshelf monitored flag settled', {
+        label: 'Bookshelf API',
+        bookId,
+        monitored,
+        passes: backoffMs.length,
+      });
+    } else {
+      logger.warn(
+        `Bookshelf book ${bookId} monitored=${monitored} did not stick after ${backoffMs.length} passes`,
+        { label: 'Bookshelf API' }
+      );
+    }
+    return lastChecked;
   }
 
   public removeBook = async (bookId: number): Promise<void> => {
