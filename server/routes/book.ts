@@ -1155,18 +1155,6 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
         assign(m, 'asin', body.asin);
         assign(m, 'narratorName', body.narratorName);
       }
-      // A brand-new BookMedia gets status=PROCESSING at construction; an
-      // existing row that has been requested again should match — otherwise
-      // the UI keeps showing the Request button because mediaStatus is
-      // still UNKNOWN from a prior state. Don't touch AVAILABLE /
-      // PARTIALLY_AVAILABLE: those come from the library scanner.
-      if (
-        media.status === MediaStatus.UNKNOWN ||
-        media.status === MediaStatus.PENDING
-      ) {
-        media.status = MediaStatus.PROCESSING;
-        changed = true;
-      }
       if (changed) {
         if (isBook) {
           await bookMediaRepo.save(media as BookMedia);
@@ -1379,7 +1367,7 @@ bookRoutes.delete('/request/:id', isAuthenticated(), async (req, res) => {
   const requestRepo = getRepository(MediaRequest);
   const request = await requestRepo.findOne({
     where: { id: parseInt(req.params.id, 10) },
-    relations: ['requestedBy'],
+    relations: ['requestedBy', 'bookMedia', 'audiobookMedia'],
   });
 
   if (!request) {
@@ -1403,7 +1391,40 @@ bookRoutes.delete('/request/:id', isAuthenticated(), async (req, res) => {
     });
   }
 
+  const bookMediaId = request.bookMedia?.id;
+  const audiobookMediaId = request.audiobookMedia?.id;
+
   await requestRepo.remove(request);
+
+  // If no request still points at this media, drop the media row too —
+  // otherwise a later POST /book/request would reuse the stale record
+  // with its old status / downloadManagerExternalId and the UI would
+  // keep showing an out-of-date "requested" state.
+  if (bookMediaId) {
+    const remaining = await requestRepo.count({
+      where: { bookMedia: { id: bookMediaId } },
+    });
+    if (remaining === 0) {
+      await getRepository(BookMedia).delete({ id: bookMediaId });
+      logger.info(
+        `Removed orphaned BookMedia ${bookMediaId} after deleting last request`,
+        { label: 'book' }
+      );
+    }
+  }
+  if (audiobookMediaId) {
+    const remaining = await requestRepo.count({
+      where: { audiobookMedia: { id: audiobookMediaId } },
+    });
+    if (remaining === 0) {
+      await getRepository(AudiobookMedia).delete({ id: audiobookMediaId });
+      logger.info(
+        `Removed orphaned AudiobookMedia ${audiobookMediaId} after deleting last request`,
+        { label: 'book' }
+      );
+    }
+  }
+
   return res.status(204).send();
 });
 
