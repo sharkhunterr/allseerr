@@ -57,9 +57,16 @@ export interface HardcoverBookMapping {
 }
 
 export interface HardcoverEdition {
+  id?: number;
+  title?: string | null;
+  subtitle?: string | null;
   isbn_13?: string | null;
   isbn_10?: string | null;
   release_date?: string | null;
+  pages?: number | null;
+  edition_format?: string | null;
+  description?: string | null;
+  image?: { url?: string | null } | null;
   publisher?: { name?: string | null } | null;
   country?: { name?: string | null; code2?: string | null } | null;
   language?: { code2?: string | null } | null;
@@ -362,9 +369,16 @@ class HardcoverAPI {
       limit: 30
       order_by: { release_date: asc_nulls_last }
     ) {
+      id
+      title
+      subtitle
       isbn_13
       isbn_10
       release_date
+      pages
+      edition_format
+      description
+      image { url }
       publisher { name }
       country { name code2 }
       language { code2 }

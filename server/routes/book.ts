@@ -1044,6 +1044,31 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
           /* best-effort */
         }
       }
+      // Full edition list for the detail page's edition selector.
+      // Each entry drops any null fields on the frontend side, so we
+      // keep them all here and let the UI hide whatever's empty.
+      const exposedEditions = editions
+        .filter((e) => e.id !== undefined)
+        .map((e) => ({
+          id: e.id,
+          title: e.title ?? undefined,
+          subtitle: e.subtitle ?? undefined,
+          isbn13: e.isbn_13 ?? undefined,
+          isbn10: e.isbn_10 ?? undefined,
+          year: e.release_date
+            ? parseInt(e.release_date.slice(0, 4), 10) || undefined
+            : undefined,
+          releaseDate: e.release_date ?? undefined,
+          pageCount: e.pages ?? undefined,
+          format: e.edition_format ?? undefined,
+          description: e.description ?? undefined,
+          coverUrl: e.image?.url?.startsWith('http')
+            ? e.image.url
+            : undefined,
+          publisher: e.publisher?.name ?? undefined,
+          country: hardcoverCountryIso2(e.country),
+          language: e.language?.code2 ?? undefined,
+        }));
       return res.status(200).json({
         key: `hardcover:${hcId}`,
         title: hit.title,
@@ -1106,6 +1131,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         mediaStatus: existing?.status ?? null,
         bookMediaId: existing?.id ?? null,
         libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),
+        editions: exposedEditions,
       });
     }
 

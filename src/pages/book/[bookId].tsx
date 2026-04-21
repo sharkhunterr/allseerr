@@ -54,6 +54,11 @@ const messages = defineMessages('pages.BookDetail', {
   characters: 'Characters',
   aboutAuthor: 'About the author',
   authorLivedFmt: '{birth}{dash}{death}',
+  edition: 'Edition',
+  editionLabelFmt: '{year} · {lang} · {format}',
+  editionLabelYearLang: '{year} · {lang}',
+  editionLabelYearFormat: '{year} · {format}',
+  editionOriginal: 'Original edition',
 });
 
 // Convert an ISO-3166-1 alpha-2 country code to its flag emoji
@@ -66,6 +71,23 @@ const countryFlag = (code: string): string => {
     .map((c) => String.fromCodePoint(127397 + c.charCodeAt(0)))
     .join('');
 };
+
+interface Edition {
+  id: number;
+  title?: string;
+  subtitle?: string;
+  isbn13?: string;
+  isbn10?: string;
+  year?: number;
+  releaseDate?: string;
+  pageCount?: number;
+  format?: string;
+  description?: string;
+  coverUrl?: string;
+  publisher?: string;
+  country?: string;
+  language?: string;
+}
 
 interface BookDetailData {
   key: string;
@@ -109,6 +131,7 @@ interface BookDetailData {
   mediaStatus?: MediaStatus | null;
   bookMediaId?: number | null;
   libraryServerUrl?: string | null;
+  editions?: Edition[];
 }
 
 const formatDuration = (seconds: number): string => {
@@ -125,6 +148,9 @@ const BookDetailPage: NextPage = () => {
   const { currentSettings } = useSettings();
   const { bookId } = router.query;
   const [isRequesting, setIsRequesting] = useState(false);
+  const [selectedEditionId, setSelectedEditionId] = useState<number | null>(
+    null
+  );
 
   const {
     data,
@@ -149,16 +175,37 @@ const BookDetailPage: NextPage = () => {
     ? currentSettings.audiobookEnabled
     : currentSettings.bookEnabled;
 
-  const description =
+  const editions = data.editions ?? [];
+  const selectedEdition =
+    editions.find((e) => e.id === selectedEditionId) ??
+    editions[0] ??
+    undefined;
+
+  // Edition-aware overrides. Book-level fields are the default, but
+  // any field the selected edition supplies wins — lets the user flip
+  // between hardcover / paperback / translations and see the cover,
+  // ISBN, publisher, page count, release year update live.
+  const baseDescription =
     typeof data.description === 'string'
       ? data.description
       : data.description?.value;
+  const description = selectedEdition?.description ?? baseDescription;
 
   const coverUrl =
+    selectedEdition?.coverUrl ||
     data.coverUrl ||
     (data.covers?.[0]
       ? `https://covers.openlibrary.org/b/id/${data.covers[0]}-L.jpg`
       : undefined);
+
+  const displayedIsbn13 = selectedEdition?.isbn13 ?? data.isbn13;
+  const displayedIsbn10 = selectedEdition?.isbn10 ?? data.isbn10;
+  const displayedPageCount = selectedEdition?.pageCount ?? data.pageCount;
+  const displayedPublisher = selectedEdition?.publisher ?? data.publisher;
+  const displayedYear = selectedEdition?.year ?? data.year;
+  const displayedReleaseDate =
+    selectedEdition?.releaseDate ?? data.releaseDate;
+  const displayedLanguage = selectedEdition?.language ?? data.language;
 
   const isAvailable = data.mediaStatus === MediaStatus.AVAILABLE;
   const showRequestButton =
@@ -200,12 +247,12 @@ const BookDetailPage: NextPage = () => {
   };
 
   const attributes: React.ReactNode[] = [];
-  if (data.year) attributes.push(<span>{data.year}</span>);
+  if (displayedYear) attributes.push(<span>{displayedYear}</span>);
   if (data.durationSeconds) {
     attributes.push(<span>{formatDuration(data.durationSeconds)}</span>);
   }
-  if (data.language) {
-    attributes.push(<span className="uppercase">{data.language}</span>);
+  if (displayedLanguage) {
+    attributes.push(<span className="uppercase">{displayedLanguage}</span>);
   }
 
   return (
@@ -246,7 +293,9 @@ const BookDetailPage: NextPage = () => {
           </div>
           <h1 data-testid="media-title">
             {data.title}{' '}
-            {data.year && <span className="media-year">({data.year})</span>}
+            {displayedYear && (
+              <span className="media-year">({displayedYear})</span>
+            )}
           </h1>
           {data.subtitle && (
             <p className="text-lg text-gray-400">{data.subtitle}</p>
@@ -313,6 +362,54 @@ const BookDetailPage: NextPage = () => {
       </div>
       <div className="media-overview">
         <div className="media-overview-left">
+          {editions.length > 1 && (
+            <div className="mb-4 flex flex-col gap-1">
+              <label
+                htmlFor="edition-select"
+                className="text-xs uppercase tracking-wide text-gray-400"
+              >
+                {intl.formatMessage(messages.edition)}
+              </label>
+              <select
+                id="edition-select"
+                value={selectedEdition?.id ?? ''}
+                onChange={(e) =>
+                  setSelectedEditionId(Number(e.target.value) || null)
+                }
+                className="rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none"
+              >
+                {editions.map((ed) => {
+                  const year = ed.year;
+                  const lang = ed.language?.toUpperCase();
+                  const format = ed.format;
+                  const label =
+                    year && lang && format
+                      ? intl.formatMessage(messages.editionLabelFmt, {
+                          year,
+                          lang,
+                          format,
+                        })
+                      : year && lang
+                        ? intl.formatMessage(messages.editionLabelYearLang, {
+                            year,
+                            lang,
+                          })
+                        : year && format
+                          ? intl.formatMessage(
+                              messages.editionLabelYearFormat,
+                              { year, format }
+                            )
+                          : ed.title ||
+                            intl.formatMessage(messages.editionOriginal);
+                  return (
+                    <option key={ed.id} value={ed.id}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
           <h2>{intl.formatMessage(messages.overview)}</h2>
           <p>
             {description || intl.formatMessage(messages.overviewunavailable)}
@@ -366,6 +463,14 @@ const BookDetailPage: NextPage = () => {
                         dash: data.authorDeathDate ? ' – ' : '',
                         death: data.authorDeathDate ?? '',
                       })}
+                    </div>
+                  )}
+                  {data.country && (
+                    <div className="mt-1 inline-flex items-center gap-1 text-xs text-gray-400">
+                      <span className="text-base leading-none">
+                        {countryFlag(data.country)}
+                      </span>
+                      <span className="uppercase">{data.country}</span>
                     </div>
                   )}
                 </div>
@@ -462,17 +567,17 @@ const BookDetailPage: NextPage = () => {
                 </span>
               </div>
             )}
-            {data.publisher && (
+            {displayedPublisher && (
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.publisher)}</span>
-                <span className="media-fact-value">{data.publisher}</span>
+                <span className="media-fact-value">{displayedPublisher}</span>
               </div>
             )}
-            {data.releaseDate && (
+            {displayedReleaseDate && (
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.releaseDate)}</span>
                 <span className="media-fact-value">
-                  {intl.formatDate(data.releaseDate, {
+                  {intl.formatDate(displayedReleaseDate, {
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric',
@@ -480,11 +585,11 @@ const BookDetailPage: NextPage = () => {
                 </span>
               </div>
             )}
-            {data.language && (
+            {displayedLanguage && (
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.language)}</span>
                 <span className="media-fact-value uppercase">
-                  {data.language}
+                  {displayedLanguage}
                 </span>
               </div>
             )}
@@ -494,26 +599,26 @@ const BookDetailPage: NextPage = () => {
                 <span className="media-fact-value">{data.key}</span>
               </div>
             )}
-            {data.isbn13 && (
+            {displayedIsbn13 && (
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.isbn13)}</span>
                 <span className="media-fact-value font-mono">
-                  {data.isbn13}
+                  {displayedIsbn13}
                 </span>
               </div>
             )}
-            {data.isbn10 && !data.isbn13 && (
+            {displayedIsbn10 && !displayedIsbn13 && (
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.isbn10)}</span>
                 <span className="media-fact-value font-mono">
-                  {data.isbn10}
+                  {displayedIsbn10}
                 </span>
               </div>
             )}
-            {data.pageCount && (
+            {displayedPageCount && (
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.pages)}</span>
-                <span className="media-fact-value">{data.pageCount}</span>
+                <span className="media-fact-value">{displayedPageCount}</span>
               </div>
             )}
             {data.rating && (
@@ -541,15 +646,9 @@ const BookDetailPage: NextPage = () => {
                 </span>
               </div>
             )}
-            {data.country && (
-              <div className="media-fact">
-                <span>{intl.formatMessage(messages.country)}</span>
-                <span className="media-fact-value">
-                  {countryFlag(data.country)}{' '}
-                  <span className="uppercase">{data.country}</span>
-                </span>
-              </div>
-            )}
+            {/* Country moved to the author card (right column) as a
+                flag + code chip — it's a property of the original work
+                / author, not of the edition the user picks. */}
             {data.moods && data.moods.length > 0 && (
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.moods)}</span>
