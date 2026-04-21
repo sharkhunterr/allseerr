@@ -1,7 +1,7 @@
 import AudibleAPI, { type AudibleRegion } from '@server/api/audible';
 import GoogleBooksAPI from '@server/api/googlebooks';
 import HardcoverAPI from '@server/api/hardcover';
-import OpenLibraryAPI from '@server/api/openlibrary';
+import OpenLibraryAPI, { cleanOpenLibraryText } from '@server/api/openlibrary';
 import BinderyAPI from '@server/api/servarr/bindery';
 import BookshelfAPI from '@server/api/servarr/bookshelf';
 import { getSettings } from '@server/lib/settings';
@@ -573,9 +573,36 @@ bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
         .json({ status: 404, message: 'Author not found.' });
     }
 
+    // Dedup by normalized title. OpenLibrary's works list for a popular
+    // author (e.g. Stephen King returns 608) is padded with translations,
+    // short-story reissues, omnibus editions, etc. Collapsing them keeps
+    // the UI readable without hiding anything the user requested.
+    const seen = new Set<string>();
+    const normalizeTitle = (t: string) =>
+      t
+        .toLowerCase()
+        .replace(/^(the|a|an|le|la|les|un|une)\s+/, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+    const dedupedWorks = worksResp.works.filter((w) => {
+      if (!w.title || w.title.trim().length < 2) return false;
+      // Filter obvious noise: empty, single-word "untitled", or just the
+      // author name (OL has a known bug where untitled entries fall back).
+      if (
+        info.name &&
+        w.title.trim().toLowerCase() === info.name.toLowerCase()
+      ) {
+        return false;
+      }
+      const k = normalizeTitle(w.title);
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+
     const bookMediaRepo = getRepository(BookMedia);
     const works = await Promise.all(
-      worksResp.works.map(async (w) => {
+      dedupedWorks.map(async (w) => {
         const existing = await bookMediaRepo.findOne({
           where: { openLibraryId: `/works/${w.workKey}` },
         });
@@ -598,7 +625,9 @@ bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
       bio: info.bio,
       birthDate: info.birthDate,
       deathDate: info.deathDate,
+      // Raw OL count (what the catalog claims) + deduped count we show.
       totalWorks: worksResp.size,
+      uniqueWorks: works.length,
       works,
     });
   } catch (e) {
@@ -977,14 +1006,20 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       characters: Array.from(new Set(characters)).slice(0, 12),
       subjects: Array.from(mergedSubjects).slice(0, 30),
       series: seriesEntries,
-      description:
-        (enrichedDescription &&
-        enrichedDescription.length >
-          (typeof work.description === 'string'
-            ? work.description.length
-            : (work.description?.value?.length ?? 0))
-          ? enrichedDescription
-          : work.description) ?? enrichedDescription,
+      description: (() => {
+        // Pick the longest available description, then clean OL cruft
+        // (source refs, link defs, "Also contained in" edition lists).
+        const olDescRaw =
+          typeof work.description === 'string'
+            ? work.description
+            : work.description?.value;
+        const best =
+          enrichedDescription &&
+          enrichedDescription.length > (olDescRaw?.length ?? 0)
+            ? enrichedDescription
+            : olDescRaw ?? enrichedDescription;
+        return best ? cleanOpenLibraryText(best) : undefined;
+      })(),
       mediaStatus: existing?.status ?? null,
       bookMediaId: existing?.id ?? null,
       libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),

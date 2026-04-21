@@ -6,6 +6,39 @@ const OPENLIBRARY_BASE = 'https://openlibrary.org';
 const cache = cacheManager.getCache('openlibrary').data;
 
 /**
+ * OpenLibrary description / bio fields are plain text mixed with
+ * Markdown-reference-style sources ("([source][1])"), link definitions
+ * ("[1]: https://..."), horizontal rules ("----------"), and
+ * "Also contained in:" sections that list sibling editions as URLs.
+ * These are useful for a librarian editor but ugly in our UI.
+ * Returns clean reading prose.
+ */
+export function cleanOpenLibraryText(text: string): string {
+  return (
+    text
+      // Drop the "Also contained in: [...]"  block (OL uses "----------"
+      // as the boundary). Everything after is typically edition lists.
+      .replace(/\s*-{3,}\s*\n+\s*Also contained in:[\s\S]*$/s, '')
+      // Drop the "(From X)" / "*[From X][N]*" author-bio footers
+      .replace(/\s*\*\[From[^\]]*\]\[\d+\]\.?\*\s*$/s, '')
+      // Strip inline Markdown reference links: "[label][N]" or "([N])"
+      // whether parenthesised, surrounded by parens, or standalone.
+      .replace(/\(\[[^\]]+\]\[\d+\]\)/g, '')
+      .replace(/\[([^\]]+)\]\[\d+\]/g, '$1')
+      // Strip reference definitions on their own lines ("  [1]: http://...")
+      .replace(/^[ \t]*\[\d+\]:\s*\S+.*$/gm, '')
+      // Strip stray horizontal rules
+      .replace(/^\s*-{3,}\s*$/gm, '')
+      // Drop standalone reference numbers "[1]" that might remain
+      .replace(/\[\d+\]/g, '')
+      // Collapse 3+ newlines to max 2
+      .replace(/\r/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  );
+}
+
+/**
  * Small helper to wrap an async fetch with node-cache. Returns cached
  * value when fresh, otherwise executes `fetcher` and stores its result.
  * Negative / null results are cached too to avoid retrying known-empty
@@ -475,10 +508,11 @@ class OpenLibraryAPI {
           ? `https://covers.openlibrary.org/a/id/${photoId}-L.jpg`
           : undefined;
         const bioRaw = response.data.bio;
-        const bio =
+        const bioSource =
           typeof bioRaw === 'string'
             ? bioRaw
             : bioRaw?.value ?? undefined;
+        const bio = bioSource ? cleanOpenLibraryText(bioSource) : undefined;
         return {
           name: response.data.name,
           photoUrl,

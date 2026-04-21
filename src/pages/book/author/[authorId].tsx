@@ -2,7 +2,11 @@ import BookCard from '@app/components/BookCard';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import defineMessages from '@app/utils/defineMessages';
-import { UserIcon } from '@heroicons/react/24/solid';
+import {
+  BookOpenIcon,
+  CakeIcon,
+  UserIcon,
+} from '@heroicons/react/24/solid';
 import type { MediaStatus } from '@server/constants/media';
 import type { NextPage } from 'next';
 import { useRouter } from 'next/router';
@@ -15,8 +19,12 @@ const messages = defineMessages('pages.BookAuthor', {
   emptyWorks: 'No works listed yet.',
   works: 'Works',
   totalWorksFmt: '{count, plural, one {# book} other {# books}}',
+  worksListedFmt: '{count, plural, one {# work} other {# works}} on OpenLibrary',
+  uniqueTitlesFmt:
+    '{count, plural, one {# unique title} other {# unique titles}}',
   overview: 'Biography',
-  livedFmt: '{birth}{dash}{death}',
+  born: 'Born',
+  died: 'Died',
 });
 
 interface Work {
@@ -36,6 +44,7 @@ interface AuthorDetail {
   birthDate?: string;
   deathDate?: string;
   totalWorks: number;
+  uniqueWorks?: number;
   works: Work[];
 }
 
@@ -57,10 +66,8 @@ const AuthorPage: NextPage = () => {
     );
   }
 
-  const cleanBio = data.bio
-    ?.replace(/\s*\*\[From[^\]]*\]\[\d+\]\.?\*\s*$/s, '')
-    .replace(/\[\d+\]:\s*https?:\/\/[^\s]+/g, '')
-    .trim();
+  // Bio already cleaned server-side (cleanOpenLibraryText)
+  const cleanBio = data.bio;
 
   return (
     <div className="media-page" style={{ height: 493 }}>
@@ -89,22 +96,42 @@ const AuthorPage: NextPage = () => {
             </span>
           </div>
           <h1>{data.name}</h1>
-          <span className="media-attributes">
-            {(data.birthDate || data.deathDate) && (
-              <span>
-                {intl.formatMessage(messages.livedFmt, {
-                  birth: data.birthDate ?? '?',
-                  dash: data.deathDate ? ' – ' : '',
-                  death: data.deathDate ?? '',
-                })}
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-300 xl:justify-start">
+            {data.birthDate && (
+              <span className="inline-flex items-center gap-1.5">
+                <CakeIcon className="h-4 w-4 text-gray-400" />
+                <span>
+                  {intl.formatMessage(messages.born)}: {data.birthDate}
+                </span>
               </span>
             )}
-            <span>
-              {intl.formatMessage(messages.totalWorksFmt, {
-                count: data.totalWorks,
-              })}
+            {data.deathDate && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-gray-400">✝</span>
+                <span>
+                  {intl.formatMessage(messages.died)}: {data.deathDate}
+                </span>
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5">
+              <BookOpenIcon className="h-4 w-4 text-gray-400" />
+              <span>
+                {intl.formatMessage(messages.worksListedFmt, {
+                  count: data.totalWorks,
+                })}
+                {data.uniqueWorks !== undefined &&
+                  data.uniqueWorks !== data.totalWorks && (
+                    <span className="ml-2 text-gray-500">
+                      (
+                      {intl.formatMessage(messages.uniqueTitlesFmt, {
+                        count: data.uniqueWorks,
+                      })}
+                      )
+                    </span>
+                  )}
+              </span>
             </span>
-          </span>
+          </div>
         </div>
       </div>
       {cleanBio && (

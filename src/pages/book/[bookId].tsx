@@ -392,10 +392,7 @@ const BookDetailPage: NextPage = () => {
               </div>
               {data.authorBio && (
                 <p className="max-h-32 overflow-hidden px-4 pb-4 text-sm text-gray-300">
-                  {data.authorBio
-                    .replace(/\s*\*\[From[^\]]*\]\[\d+\]\.?\*\s*$/s, '')
-                    .replace(/\[\d+\]:\s*https?:\/\/[^\s]+/g, '')
-                    .trim()}
+                  {data.authorBio}
                 </p>
               )}
             </button>
