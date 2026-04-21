@@ -17,7 +17,14 @@ const messages = defineMessages(
   {
     heading: 'Book Metadata Providers',
     description:
-      'OpenLibrary is always used as the base source. Enable additional providers to enrich and widen search results (different languages, canonical editions, etc.).',
+      'Choose which provider owns book identity (titles, covers, series, authors). Other enabled providers are used only to enrich missing fields — they never overwrite the primary source\'s data. URLs, covers and series links stay consistent with the primary source.',
+    primarySource: 'Primary source',
+    primarySourceHelp:
+      'Drives what the UI shows — search results, detail pages, series and author pages all use this provider\'s data and IDs. Pick "Hardcover" for cleaner English-first titles and curated series (requires Hardcover enabled + API key below); keep "OpenLibrary" for the broadest catalogue including obscure / non-English books.',
+    primaryOpenLibrary: 'OpenLibrary',
+    primaryHardcover: 'Hardcover',
+    primaryHardcoverUnavailable:
+      'Hardcover primary requires Hardcover enabled below with a valid API key.',
     bindery: 'Bindery',
     binderyHelp:
       'Use your configured Bindery instance as a metadata source. Bindery already aggregates OpenLibrary, Google Books, Hardcover and DNB; results use foreignBookIds that Bindery recognizes (fewer request failures).',
@@ -73,6 +80,7 @@ const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
 ];
 
 interface MetadataProvidersConfig {
+  primarySource: 'openlibrary' | 'hardcover';
   bindery: boolean;
   bookshelf: boolean;
   googleBooks: boolean;
@@ -139,6 +147,7 @@ const SettingsBookMetadata = () => {
   if (!data && !error) return <LoadingSpinner />;
 
   const initial: MetadataProvidersConfig = data ?? {
+    primarySource: 'openlibrary',
     bindery: false,
     bookshelf: false,
     googleBooks: false,
@@ -180,6 +189,44 @@ const SettingsBookMetadata = () => {
         >
           {({ isSubmitting, values, setFieldValue }) => (
             <Form>
+              <div className="form-row">
+                <label htmlFor="primarySource" className="text-label">
+                  <span>{intl.formatMessage(messages.primarySource)}</span>
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.primarySourceHelp)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <div className="form-input-field">
+                    <Field
+                      as="select"
+                      id="primarySource"
+                      name="primarySource"
+                    >
+                      <option value="openlibrary">
+                        {intl.formatMessage(messages.primaryOpenLibrary)}
+                      </option>
+                      <option
+                        value="hardcover"
+                        disabled={
+                          !values.hardcover || !values.hardcoverApiKey
+                        }
+                      >
+                        {intl.formatMessage(messages.primaryHardcover)}
+                      </option>
+                    </Field>
+                  </div>
+                  {values.primarySource === 'hardcover' &&
+                    (!values.hardcover || !values.hardcoverApiKey) && (
+                      <Alert
+                        title={intl.formatMessage(
+                          messages.primaryHardcoverUnavailable
+                        )}
+                        type="warning"
+                      />
+                    )}
+                </div>
+              </div>
               {!binderyConfigured && values.bindery && (
                 <Alert
                   title={intl.formatMessage(messages.binderyNotConfigured)}

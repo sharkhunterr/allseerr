@@ -80,7 +80,7 @@ export interface HardcoverSearchHit {
   cached_tags?: HardcoverCachedTags | null;
   contributions?: {
     contribution?: string | null;
-    author?: { name?: string } | null;
+    author?: { id?: number; name?: string } | null;
   }[];
   book_series?: { series?: { id: number; name: string } | null; position?: number }[];
   book_characters?: HardcoverCharacter[];
@@ -89,26 +89,49 @@ export interface HardcoverSearchHit {
 }
 
 /**
- * Extract the primary author name from a Hardcover contributions list.
+ * Extract the primary author from a Hardcover contributions list.
  * Some books (translations, anthologies) have multiple contribution
  * roles; we prefer "Author" / "Co-Author" and fall back to the first
  * contributor with a name.
  */
-export const hardcoverPrimaryAuthor = (
+const pickPrimaryContribution = (
   contribs?: HardcoverSearchHit['contributions']
-): string | undefined => {
+) => {
   if (!contribs?.length) return undefined;
   const byRole = (roles: string[]) =>
     contribs.find((c) => {
       const r = c.contribution?.toLowerCase() ?? '';
       return roles.some((want) => r === want || r.includes(want));
-    })?.author?.name;
+    });
   return (
     byRole(['author']) ??
     byRole(['co-author', 'coauthor']) ??
-    contribs.find((c) => c.author?.name)?.author?.name
+    contribs.find((c) => c.author?.name)
   );
 };
+
+export const hardcoverPrimaryAuthor = (
+  contribs?: HardcoverSearchHit['contributions']
+): string | undefined =>
+  pickPrimaryContribution(contribs)?.author?.name ?? undefined;
+
+export const hardcoverPrimaryAuthorId = (
+  contribs?: HardcoverSearchHit['contributions']
+): number | undefined =>
+  pickPrimaryContribution(contribs)?.author?.id ?? undefined;
+
+export interface HardcoverAuthorDetail {
+  id: number;
+  name: string;
+  bio?: string;
+  cached_image_url?: string;
+  books_count?: number;
+  works: Array<{
+    id: number;
+    title: string;
+    image_url?: string;
+  }>;
+}
 
 export interface HardcoverSeriesMember {
   position?: number | null;
@@ -249,7 +272,7 @@ class HardcoverAPI {
     cached_tags
     contributions(limit: 5) {
       contribution
-      author { name }
+      author { id name }
     }
     book_series(limit: 3) {
       position
@@ -566,6 +589,94 @@ class HardcoverAPI {
       editions: { book: HardcoverSearchHit }[];
     }>(gqlQuery, { isbn });
     return data?.editions?.[0]?.book ?? null;
+  }
+
+  /**
+   * Fetch an author by Hardcover numeric id — name, bio, photo, and
+   * their books (via `contributions` where they're credited as Author).
+   * Used by /api/v1/book/author/hardcover:<id>.
+   */
+  async getAuthor(id: number): Promise<HardcoverAuthorDetail | null> {
+    return cached(`author:${id}`, async () => {
+      const gqlQuery = `
+        query AuthorById($id: Int!) {
+          authors(where: { id: { _eq: $id } }, limit: 1) {
+            id
+            name
+            bio
+            cached_image
+            books_count
+            contributions(
+              limit: 100
+              order_by: { book: { users_count: desc_nulls_last } }
+            ) {
+              contribution
+              book {
+                id
+                title
+                image { url }
+              }
+            }
+          }
+        }
+      `;
+      const { data } = await this.gql<{
+        authors: Array<{
+          id: number;
+          name: string;
+          bio?: string | null;
+          cached_image?: string | { url?: string } | null;
+          books_count?: number | null;
+          contributions?: Array<{
+            contribution?: string | null;
+            book?: {
+              id: number;
+              title: string;
+              image?: { url?: string } | null;
+            } | null;
+          }>;
+        }>;
+      }>(gqlQuery, { id });
+      const a = data?.authors?.[0];
+      if (!a) return null;
+      // cached_image may be a JSON blob {url, color_name, ...} or a plain
+      // URL string depending on Hardcover's internal state.
+      const photoRaw = a.cached_image;
+      const photo =
+        typeof photoRaw === 'string'
+          ? photoRaw
+          : photoRaw?.url ?? undefined;
+      const works = (a.contributions ?? [])
+        .filter(
+          (c) =>
+            c.book &&
+            // Drop translator / editor contributions — we only want
+            // original works authored by this person.
+            (!c.contribution ||
+              c.contribution.toLowerCase() === 'author' ||
+              c.contribution.toLowerCase().includes('author'))
+        )
+        .map((c) => ({
+          id: c.book!.id,
+          title: c.book!.title,
+          image_url: c.book!.image?.url,
+        }));
+      // Dedupe by book id
+      const seen = new Set<number>();
+      const uniqueWorks = works.filter((w) => {
+        if (seen.has(w.id)) return false;
+        seen.add(w.id);
+        return true;
+      });
+      return {
+        id: a.id,
+        name: a.name,
+        bio: a.bio ?? undefined,
+        cached_image_url: photo,
+        books_count: a.books_count ?? undefined,
+        works: uniqueWorks,
+      };
+    });
   }
 }
 

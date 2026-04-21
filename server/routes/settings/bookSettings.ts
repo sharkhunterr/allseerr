@@ -53,6 +53,10 @@ bookSettingsRoutes.put('/metadata-providers', async (req, res) => {
       body.languagePolicy === 'strict'
         ? { languagePolicy: body.languagePolicy }
         : {}),
+      ...(body.primarySource === 'openlibrary' ||
+      body.primarySource === 'hardcover'
+        ? { primarySource: body.primarySource }
+        : {}),
     },
   };
   await settings.save();

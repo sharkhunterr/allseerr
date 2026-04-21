@@ -416,13 +416,17 @@ export interface BookSettings {
     enabled: boolean;
   };
   metadataProviders: {
-    // Optional secondary sources merged with OpenLibrary (always on).
-    // Bindery proxies to its own aggregator (OL+Google+Hardcover+DNB), so
-    // enabling it gives foreignBookIds that Bindery already knows about.
+    // The one source that owns book / series / author IDENTITY across
+    // the whole app — search results, detail pages, series pages and
+    // author pages all come from here. The other enabled providers
+    // below are used for ENRICHMENT only: they fill fields the primary
+    // source didn't provide (ISBN, rating, series fallback, …) but can
+    // never overwrite anything the primary set. Keeps URLs / covers /
+    // titles consistent no matter where the user clicked from.
+    primarySource: 'openlibrary' | 'hardcover';
+    // Enrichment-only providers below. Enable to fill missing fields
+    // in the primary source's response. They never win identity.
     bindery: boolean;
-    // Bookshelf (Readarr fork) — when enabled, allseerr augments book
-    // detail with rating, genres, language, pageCount and series info
-    // pulled from Bookshelf's lookup (Goodreads/Hardcover aggregator).
     bookshelf: boolean;
     googleBooks: boolean;
     googleBooksApiKey?: string;
@@ -783,6 +787,7 @@ class Settings {
           enabled: false,
         },
         metadataProviders: {
+          primarySource: 'openlibrary',
           bindery: false,
           bookshelf: false,
           googleBooks: false,
