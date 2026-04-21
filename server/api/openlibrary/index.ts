@@ -1,7 +1,27 @@
+import cacheManager from '@server/lib/cache';
 import logger from '@server/logger';
 import axios from 'axios';
 
 const OPENLIBRARY_BASE = 'https://openlibrary.org';
+const cache = cacheManager.getCache('openlibrary').data;
+
+/**
+ * Small helper to wrap an async fetch with node-cache. Returns cached
+ * value when fresh, otherwise executes `fetcher` and stores its result.
+ * Negative / null results are cached too to avoid retrying known-empty
+ * calls repeatedly.
+ */
+async function cached<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttlSeconds?: number
+): Promise<T> {
+  const hit = cache.get<T>(key);
+  if (hit !== undefined) return hit;
+  const value = await fetcher();
+  cache.set(key, value, ttlSeconds ?? 0);
+  return value;
+}
 
 // MARC country-of-publication codes (publish_country) → ISO-2, most common
 // ones. Full list: https://www.loc.gov/marc/countries/cou_home.html
@@ -105,29 +125,35 @@ class OpenLibraryAPI {
     page = 1,
     limit = 20
   ): Promise<{ results: BookResult[]; totalResults: number }> {
+    const cacheKey = `search:${query.toLowerCase()}:${page}:${limit}`;
     try {
-      const response = await axios.get<OpenLibrarySearchResponse>(
-        `${OPENLIBRARY_BASE}/search.json`,
-        {
-          params: {
-            q: query,
-            page,
-            limit,
-            fields:
-              'key,title,author_name,author_key,isbn,first_publish_year,publisher,cover_i,number_of_pages_median,subject',
-          },
-          timeout: 10000,
-        }
+      // Free-text searches: 1h so user can retype / paginate without
+      // re-hitting OL, but short enough to pick up newly indexed books.
+      return await cached(
+        cacheKey,
+        async () => {
+          const response = await axios.get<OpenLibrarySearchResponse>(
+            `${OPENLIBRARY_BASE}/search.json`,
+            {
+              params: {
+                q: query,
+                page,
+                limit,
+                fields:
+                  'key,title,author_name,author_key,isbn,first_publish_year,publisher,cover_i,number_of_pages_median,subject',
+              },
+              timeout: 10000,
+            }
+          );
+          return {
+            results: response.data.docs.map((doc) =>
+              this.mapSearchResult(doc)
+            ),
+            totalResults: response.data.numFound,
+          };
+        },
+        3600
       );
-
-      const results = response.data.docs.map((doc) =>
-        this.mapSearchResult(doc)
-      );
-
-      return {
-        results,
-        totalResults: response.data.numFound,
-      };
     } catch (e) {
       logger.error('OpenLibrary search failed', {
         label: 'openlibrary',
@@ -179,20 +205,25 @@ class OpenLibraryAPI {
    * Get work details by OpenLibrary work key (e.g., /works/OL12345W).
    */
   async getWork(workKey: string): Promise<OpenLibraryWork | null> {
-    try {
-      const response = await axios.get<OpenLibraryWork>(
-        `${OPENLIBRARY_BASE}${workKey}.json`,
-        { timeout: 10000 }
-      );
-      return response.data;
-    } catch (e) {
-      logger.error('OpenLibrary work fetch failed', {
-        label: 'openlibrary',
-        workKey,
-        error: e instanceof Error ? e.message : String(e),
-      });
-      return null;
-    }
+    return cached(
+      `work:${workKey}`,
+      async () => {
+        try {
+          const response = await axios.get<OpenLibraryWork>(
+            `${OPENLIBRARY_BASE}${workKey}.json`,
+            { timeout: 10000 }
+          );
+          return response.data;
+        } catch (e) {
+          logger.error('OpenLibrary work fetch failed', {
+            label: 'openlibrary',
+            workKey,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          return null;
+        }
+      }
+    );
   }
 
   /**
@@ -201,29 +232,31 @@ class OpenLibraryAPI {
    */
   async getSeries(seriesKey: string): Promise<OpenLibrarySeries | null> {
     const key = seriesKey.replace(/^\/series\//, '').replace(/^\//, '');
-    try {
-      const response = await axios.get<{
-        name?: string;
-        description?: string | { value: string };
-        seed_count?: number;
-      }>(`${OPENLIBRARY_BASE}/series/${key}.json`, { timeout: 10000 });
-      return {
-        key,
-        name: response.data.name ?? key,
-        description:
-          typeof response.data.description === 'string'
-            ? response.data.description
-            : response.data.description?.value,
-        seedCount: response.data.seed_count ?? 0,
-      };
-    } catch (e) {
-      logger.error('OpenLibrary series fetch failed', {
-        label: 'openlibrary',
-        seriesKey,
-        error: e instanceof Error ? e.message : String(e),
-      });
-      return null;
-    }
+    return cached(`series:${key}`, async () => {
+      try {
+        const response = await axios.get<{
+          name?: string;
+          description?: string | { value: string };
+          seed_count?: number;
+        }>(`${OPENLIBRARY_BASE}/series/${key}.json`, { timeout: 10000 });
+        return {
+          key,
+          name: response.data.name ?? key,
+          description:
+            typeof response.data.description === 'string'
+              ? response.data.description
+              : response.data.description?.value,
+          seedCount: response.data.seed_count ?? 0,
+        };
+      } catch (e) {
+        logger.error('OpenLibrary series fetch failed', {
+          label: 'openlibrary',
+          seriesKey,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        return null;
+      }
+    });
   }
 
   /**
@@ -233,34 +266,36 @@ class OpenLibraryAPI {
     seriesKey: string
   ): Promise<OpenLibrarySeriesMember[]> {
     const key = seriesKey.replace(/^\/series\//, '').replace(/^\//, '');
-    try {
-      const response = await axios.get<{
-        entries?: {
-          url: string;
-          type: string;
-          title: string;
-          picture?: { url?: string };
-        }[];
-      }>(`${OPENLIBRARY_BASE}/series/${key}/seeds.json`, { timeout: 10000 });
-      return (response.data.entries ?? [])
-        .filter((e) => e.type === 'work' && e.url.startsWith('/works/'))
-        .map((e) => ({
-          workKey: e.url.replace('/works/', ''),
-          title: e.title,
-          coverUrl: e.picture?.url
-            ? e.picture.url.startsWith('//')
-              ? `https:${e.picture.url.replace('-S.jpg', '-L.jpg')}`
-              : e.picture.url
-            : undefined,
-        }));
-    } catch (e) {
-      logger.error('OpenLibrary series seeds fetch failed', {
-        label: 'openlibrary',
-        seriesKey,
-        error: e instanceof Error ? e.message : String(e),
-      });
-      return [];
-    }
+    return cached(`series-members:${key}`, async () => {
+      try {
+        const response = await axios.get<{
+          entries?: {
+            url: string;
+            type: string;
+            title: string;
+            picture?: { url?: string };
+          }[];
+        }>(`${OPENLIBRARY_BASE}/series/${key}/seeds.json`, { timeout: 10000 });
+        return (response.data.entries ?? [])
+          .filter((e) => e.type === 'work' && e.url.startsWith('/works/'))
+          .map((e) => ({
+            workKey: e.url.replace('/works/', ''),
+            title: e.title,
+            coverUrl: e.picture?.url
+              ? e.picture.url.startsWith('//')
+                ? `https:${e.picture.url.replace('-S.jpg', '-L.jpg')}`
+                : e.picture.url
+              : undefined,
+          }));
+      } catch (e) {
+        logger.error('OpenLibrary series seeds fetch failed', {
+          label: 'openlibrary',
+          seriesKey,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        return [];
+      }
+    });
   }
 
   /**
@@ -278,42 +313,41 @@ class OpenLibraryAPI {
     country?: string;
   }> {
     const key = workKey.replace(/^\/works\//, '').replace(/^\//, '');
-    try {
-      const response = await axios.get<{
-        entries?: {
-          isbn_13?: string[];
-          isbn_10?: string[];
-          publish_country?: string;
-        }[];
-      }>(`${OPENLIBRARY_BASE}/works/${key}/editions.json`, {
-        params: { limit: 20 },
-        timeout: 10000,
-      });
-      const entries = response.data.entries ?? [];
-      const isbn13 = entries
-        .flatMap((e) => e.isbn_13 ?? [])
-        .find((v) => /^[0-9]{13}$/.test(v));
-      const isbn10 = entries
-        .flatMap((e) => e.isbn_10 ?? [])
-        .find((v) => /^[0-9Xx]{10}$/.test(v));
-      // MARC publish_country codes are 2-3 chars (e.g. "enk"=England,
-      // "nyu"=NY USA). Map the most common ones to ISO-2 codes, fall
-      // back to the raw value so the UI can still show something.
-      const rawCountry = entries
-        .map((e) => e.publish_country?.trim().toLowerCase())
-        .find((v): v is string => !!v && v.length > 0);
-      const country = rawCountry
-        ? MARC_TO_ISO2[rawCountry] ?? rawCountry.slice(0, 2).toUpperCase()
-        : undefined;
-      return { isbn13, isbn10, country };
-    } catch (e) {
-      logger.error('OpenLibrary editions fetch failed', {
-        label: 'openlibrary',
-        workKey,
-        error: e instanceof Error ? e.message : String(e),
-      });
-      return {};
-    }
+    return cached(`edition-facts:${key}`, async () => {
+      try {
+        const response = await axios.get<{
+          entries?: {
+            isbn_13?: string[];
+            isbn_10?: string[];
+            publish_country?: string;
+          }[];
+        }>(`${OPENLIBRARY_BASE}/works/${key}/editions.json`, {
+          params: { limit: 20 },
+          timeout: 10000,
+        });
+        const entries = response.data.entries ?? [];
+        const isbn13 = entries
+          .flatMap((e) => e.isbn_13 ?? [])
+          .find((v) => /^[0-9]{13}$/.test(v));
+        const isbn10 = entries
+          .flatMap((e) => e.isbn_10 ?? [])
+          .find((v) => /^[0-9Xx]{10}$/.test(v));
+        const rawCountry = entries
+          .map((e) => e.publish_country?.trim().toLowerCase())
+          .find((v): v is string => !!v && v.length > 0);
+        const country = rawCountry
+          ? MARC_TO_ISO2[rawCountry] ?? rawCountry.slice(0, 2).toUpperCase()
+          : undefined;
+        return { isbn13, isbn10, country };
+      } catch (e) {
+        logger.error('OpenLibrary editions fetch failed', {
+          label: 'openlibrary',
+          workKey,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        return {};
+      }
+    });
   }
 
   /** @deprecated kept for back-compat, use getWorkEditionFacts */
@@ -347,40 +381,42 @@ class OpenLibraryAPI {
     const path = authorKey.startsWith('/')
       ? authorKey
       : `/authors/${authorKey}`;
-    try {
-      const response = await axios.get<{
-        name?: string;
-        bio?: string | { value?: string };
-        photos?: number[];
-        birth_date?: string;
-        death_date?: string;
-      }>(`${OPENLIBRARY_BASE}${path}.json`, { timeout: 10000 });
-      const photoId = response.data.photos?.find(
-        (id) => typeof id === 'number' && id > 0
-      );
-      const photoUrl = photoId
-        ? `https://covers.openlibrary.org/a/id/${photoId}-L.jpg`
-        : undefined;
-      const bioRaw = response.data.bio;
-      const bio =
-        typeof bioRaw === 'string'
-          ? bioRaw
-          : bioRaw?.value ?? undefined;
-      return {
-        name: response.data.name,
-        photoUrl,
-        bio,
-        birthDate: response.data.birth_date,
-        deathDate: response.data.death_date,
-      };
-    } catch (e) {
-      logger.error('OpenLibrary author fetch failed', {
-        label: 'openlibrary',
-        authorKey,
-        error: e instanceof Error ? e.message : String(e),
-      });
-      return null;
-    }
+    return cached(`author:${path}`, async () => {
+      try {
+        const response = await axios.get<{
+          name?: string;
+          bio?: string | { value?: string };
+          photos?: number[];
+          birth_date?: string;
+          death_date?: string;
+        }>(`${OPENLIBRARY_BASE}${path}.json`, { timeout: 10000 });
+        const photoId = response.data.photos?.find(
+          (id) => typeof id === 'number' && id > 0
+        );
+        const photoUrl = photoId
+          ? `https://covers.openlibrary.org/a/id/${photoId}-L.jpg`
+          : undefined;
+        const bioRaw = response.data.bio;
+        const bio =
+          typeof bioRaw === 'string'
+            ? bioRaw
+            : bioRaw?.value ?? undefined;
+        return {
+          name: response.data.name,
+          photoUrl,
+          bio,
+          birthDate: response.data.birth_date,
+          deathDate: response.data.death_date,
+        };
+      } catch (e) {
+        logger.error('OpenLibrary author fetch failed', {
+          label: 'openlibrary',
+          authorKey,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        return null;
+      }
+    });
   }
 
   private mapSearchResult(doc: OpenLibrarySearchResult): BookResult {

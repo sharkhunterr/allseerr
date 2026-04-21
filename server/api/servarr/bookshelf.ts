@@ -1,6 +1,9 @@
+import cacheManager from '@server/lib/cache';
 import logger from '@server/logger';
 import type { QualityProfile } from './base';
 import ServarrBase from './base';
+
+const bookshelfCache = cacheManager.getCache('bookshelf').data;
 
 export interface BookshelfBookAddOptions {
   /** Free-text title used to look up the book in Bookshelf's metadata. */
@@ -117,6 +120,9 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
   };
 
   public async lookupBook(term: string): Promise<BookshelfBook[]> {
+    const cacheKey = `lookup-book:${term.toLowerCase()}`;
+    const hit = bookshelfCache.get<BookshelfBook[]>(cacheKey);
+    if (hit !== undefined) return hit;
     try {
       // Bookshelf proxies to Goodreads/Hardcover — allow up to 25s for
       // these upstream calls; the default 10s axios timeout is too tight.
@@ -124,7 +130,11 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         params: { term },
         timeout: 25000,
       });
-      return response.data ?? [];
+      const value = response.data ?? [];
+      // Cache 1h — same lookup during a session is a common flow
+      // (book detail opens it twice: once for metadata, once for dispatch).
+      bookshelfCache.set(cacheKey, value, 3600);
+      return value;
     } catch (e) {
       logger.error('Bookshelf book lookup failed', {
         label: 'Bookshelf API',
@@ -142,6 +152,28 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
    * end up in the DB as unmonitored metadata records. Posting them again
    * via POST /book triggers a 409 UNIQUE constraint on Editions.
    */
+  /**
+   * Fetch the full Bookshelf catalogue once and cache for 2 minutes.
+   * Multiple callers (findExistingBook, findSeriesMembers) hit this —
+   * the 2-min TTL still gives fresh data after an add without flooding
+   * the Bookshelf process on every book detail page load.
+   */
+  private async getAllBooksCached(): Promise<BookshelfBook[]> {
+    const cacheKey = 'all-books';
+    const hit = bookshelfCache.get<BookshelfBook[]>(cacheKey);
+    if (hit !== undefined) return hit;
+    try {
+      const response = await this.axios.get<BookshelfBook[]>('/book', {
+        timeout: 25000,
+      });
+      const value = response.data ?? [];
+      bookshelfCache.set(cacheKey, value, 120);
+      return value;
+    } catch {
+      return [];
+    }
+  }
+
   /**
    * List all books whose `seriesTitle` matches the given series name.
    * Bookshelf's /series endpoint is rarely populated, but every /book
@@ -165,14 +197,11 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     }[]
   > {
     try {
-      const response = await this.axios.get<
-        (BookshelfBook & {
-          seriesTitle?: string;
-          foreignBookId?: string;
-          authorId?: number;
-        })[]
-      >('/book', { timeout: 25000 });
-      const all = response.data ?? [];
+      const all = (await this.getAllBooksCached()) as (BookshelfBook & {
+        seriesTitle?: string;
+        foreignBookId?: string;
+        authorId?: number;
+      })[];
       const needle = seriesName.toLowerCase().trim();
       const matches: {
         id: number;
@@ -219,10 +248,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     foreignEditionId?: string
   ): Promise<BookshelfBook | null> {
     try {
-      const response = await this.axios.get<BookshelfBook[]>('/book', {
-        timeout: 25000,
-      });
-      const all = response.data ?? [];
+      const all = await this.getAllBooksCached();
       const loose = all as unknown as Record<string, unknown>[];
       const byBook = foreignBookId
         ? loose.find((b) => b.foreignBookId === foreignBookId)
@@ -240,12 +266,17 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
   public async lookupAuthor(
     term: string
   ): Promise<Record<string, unknown>[]> {
+    const cacheKey = `lookup-author:${term.toLowerCase()}`;
+    const hit = bookshelfCache.get<Record<string, unknown>[]>(cacheKey);
+    if (hit !== undefined) return hit;
     try {
       const response = await this.axios.get<Record<string, unknown>[]>(
         '/author/lookup',
         { params: { term }, timeout: 25000 }
       );
-      return response.data ?? [];
+      const value = response.data ?? [];
+      bookshelfCache.set(cacheKey, value, 3600);
+      return value;
     } catch (e) {
       logger.error('Bookshelf author lookup failed', {
         label: 'Bookshelf API',

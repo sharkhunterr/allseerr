@@ -1,5 +1,8 @@
+import cacheManager from '@server/lib/cache';
 import logger from '@server/logger';
 import axios from 'axios';
+
+const audibleCache = cacheManager.getCache('audible').data;
 
 export type AudibleRegion =
   | 'us'
@@ -123,6 +126,12 @@ class AudibleAPI {
     numResults = 20,
     page = 0
   ): Promise<{ results: AudiobookResult[]; totalResults: number }> {
+    const cacheKey = `${this.region}:search:${query.toLowerCase()}:${numResults}:${page}`;
+    const hit = audibleCache.get<{
+      results: AudiobookResult[];
+      totalResults: number;
+    }>(cacheKey);
+    if (hit !== undefined) return hit;
     try {
       const response = await axios.get<AudibleSearchApiResponse>(
         `${this.baseUrl()}/catalog/products`,
@@ -140,17 +149,19 @@ class AudibleAPI {
       );
 
       const products = response.data.products ?? [];
-      // Filter out podcasts and other non-audiobook content
       const audiobooks = products.filter(
         (p) =>
           p.content_delivery_type !== 'PodcastEpisode' &&
           p.content_type !== 'Podcast'
       );
 
-      return {
+      const value = {
         results: audiobooks.map(toResult),
         totalResults: response.data.total_results ?? audiobooks.length,
       };
+      // Searches tolerate shorter TTL (1h) — catalog does evolve.
+      audibleCache.set(cacheKey, value, 3600);
+      return value;
     } catch (e) {
       logger.error('Audible search failed', {
         label: 'audible',
@@ -162,6 +173,9 @@ class AudibleAPI {
   }
 
   async getProduct(asin: string): Promise<AudiobookResult | null> {
+    const cacheKey = `${this.region}:product:${asin}`;
+    const hit = audibleCache.get<AudiobookResult | null>(cacheKey);
+    if (hit !== undefined) return hit;
     try {
       const response = await axios.get<AudibleSingleApiResponse>(
         `${this.baseUrl()}/catalog/products/${asin}`,
@@ -173,7 +187,11 @@ class AudibleAPI {
           timeout: 10000,
         }
       );
-      return response.data.product ? toResult(response.data.product) : null;
+      const value = response.data.product
+        ? toResult(response.data.product)
+        : null;
+      audibleCache.set(cacheKey, value); // default 24h TTL
+      return value;
     } catch (e) {
       logger.error('Audible getProduct failed', {
         label: 'audible',

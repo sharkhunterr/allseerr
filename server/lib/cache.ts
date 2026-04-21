@@ -16,7 +16,11 @@ export type AvailableCacheIds =
   | 'komga'
   | 'grimmory'
   | 'bindery'
-  | 'bookshelf';
+  | 'bookshelf'
+  | 'openlibrary'
+  | 'googlebooks'
+  | 'hardcover'
+  | 'audible';
 
 const DEFAULT_TTL = 300;
 const DEFAULT_CHECK_PERIOD = 120;
@@ -58,6 +62,28 @@ class CacheManager {
     sonarr: new Cache('sonarr', 'Sonarr API'),
     bindery: new Cache('bindery', 'Bindery API'),
     bookshelf: new Cache('bookshelf', 'Bookshelf API'),
+    openlibrary: new Cache('openlibrary', 'OpenLibrary API', {
+      // Work/author/editions records change rarely; 24h keeps things
+      // fresh without hammering OL on every book page refresh.
+      stdTtl: 86400,
+      checkPeriod: 60 * 60,
+    }),
+    googlebooks: new Cache('googlebooks', 'Google Books API', {
+      // Search results are less stable; 1h is enough to absorb
+      // repeated page loads without burning through the 429 quota.
+      stdTtl: 3600,
+      checkPeriod: 60 * 10,
+    }),
+    hardcover: new Cache('hardcover', 'Hardcover API', {
+      // Book/series by id is stable (12h); free-text search can shift
+      // so we cache it shorter — see class implementation.
+      stdTtl: 12 * 3600,
+      checkPeriod: 60 * 30,
+    }),
+    audible: new Cache('audible', 'Audible API', {
+      stdTtl: 86400,
+      checkPeriod: 60 * 60,
+    }),
     rt: new Cache('rt', 'Rotten Tomatoes API', {
       stdTtl: 43200,
       checkPeriod: 60 * 30,

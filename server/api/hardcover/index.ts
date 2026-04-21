@@ -1,7 +1,25 @@
+import cacheManager from '@server/lib/cache';
 import logger from '@server/logger';
 import axios from 'axios';
 
 const HARDCOVER_ENDPOINT = 'https://api.hardcover.app/v1/graphql';
+const cache = cacheManager.getCache('hardcover').data;
+
+async function cached<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttlSeconds?: number
+): Promise<T> {
+  const hit = cache.get<T>(key);
+  if (hit !== undefined) return hit;
+  const value = await fetcher();
+  // Don't cache obvious transient failures (null means "call failed");
+  // keep negative success caching only for definite misses.
+  if (value !== null || ttlSeconds === undefined) {
+    cache.set(key, value, ttlSeconds ?? 0);
+  }
+  return value;
+}
 
 export interface HardcoverCachedTag {
   tag: string;
@@ -186,18 +204,20 @@ class HardcoverAPI {
    * on Hardcover's Hasura instance unlike `_ilike`).
    */
   private async getBookById(id: number): Promise<HardcoverSearchHit | null> {
-    const gqlQuery = `
-      query BookById($id: Int!) {
-        books(where: { id: { _eq: $id } }, limit: 1) {
-          ${HardcoverAPI.BOOK_FIELDS}
+    return cached(`book:${id}`, async () => {
+      const gqlQuery = `
+        query BookById($id: Int!) {
+          books(where: { id: { _eq: $id } }, limit: 1) {
+            ${HardcoverAPI.BOOK_FIELDS}
+          }
         }
-      }
-    `;
-    const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
-      gqlQuery,
-      { id }
-    );
-    return data?.books?.[0] ?? null;
+      `;
+      const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
+        gqlQuery,
+        { id }
+      );
+      return data?.books?.[0] ?? null;
+    });
   }
 
   /**
@@ -208,25 +228,33 @@ class HardcoverAPI {
   async searchBook(
     query: string
   ): Promise<HardcoverSearchHit | null> {
-    const gqlQuery = `
-      query Search($q: String!) {
-        search(
-          query: $q,
-          query_type: "books",
-          per_page: 5,
-          page: 1
-        ) {
-          results
-        }
-      }
-    `;
-    const { data } = await this.gql<{ search: TypesenseSearchResponse }>(
-      gqlQuery,
-      { q: query }
+    // Typesense search cached shorter (1h) since results evolve; the
+    // subsequent getBookById is cached at the default 12h TTL.
+    return cached(
+      `search:${query.toLowerCase()}`,
+      async () => {
+        const gqlQuery = `
+          query Search($q: String!) {
+            search(
+              query: $q,
+              query_type: "books",
+              per_page: 5,
+              page: 1
+            ) {
+              results
+            }
+          }
+        `;
+        const { data } = await this.gql<{ search: TypesenseSearchResponse }>(
+          gqlQuery,
+          { q: query }
+        );
+        const firstId = data?.search?.results?.hits?.[0]?.document?.id;
+        if (firstId == null) return null;
+        return this.getBookById(Number(firstId));
+      },
+      3600
     );
-    const firstId = data?.search?.results?.hits?.[0]?.document?.id;
-    if (firstId == null) return null;
-    return this.getBookById(Number(firstId));
   }
 
   /**
@@ -259,6 +287,12 @@ class HardcoverAPI {
    * Fetch a series and its members. Returns null on auth/network failure.
    */
   async getSeries(id: number): Promise<HardcoverSeriesDetail | null> {
+    return cached(`series:${id}`, async () => this._getSeries(id));
+  }
+
+  private async _getSeries(
+    id: number
+  ): Promise<HardcoverSeriesDetail | null> {
     const gqlQuery = `
       query SeriesById($id: Int!) {
         series(where: { id: { _eq: $id } }, limit: 1) {
@@ -294,6 +328,12 @@ class HardcoverAPI {
   }
 
   async searchByIsbn(isbn: string): Promise<HardcoverSearchHit | null> {
+    return cached(`isbn:${isbn}`, async () => this._searchByIsbn(isbn));
+  }
+
+  private async _searchByIsbn(
+    isbn: string
+  ): Promise<HardcoverSearchHit | null> {
     // editions(_eq) is allowed on Hardcover's public Hasura; _ilike is not.
     const gqlQuery = `
       query ByIsbn($isbn: String!) {
