@@ -15,6 +15,7 @@ import {
 import { getRepository } from '@server/datasource';
 import { AudiobookMedia } from '@server/entity/AudiobookMedia';
 import { BookMedia } from '@server/entity/BookMedia';
+import type { GameMedia as GameMediaType } from '@server/entity/GameMedia';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import Season from '@server/entity/Season';
@@ -822,8 +823,47 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
   }
 
   public async updateParentStatus(entity: MediaRequest): Promise<void> {
-    // Skip for non-TMDB media types (games, books, audiobooks)
+    // Non-TMDB media (book/audiobook/game): when the request transitions
+    // to APPROVED, promote the related media to PROCESSING so the badge
+    // flips to "Requested" (blue) — matching the movie/TV behaviour.
+    // The PUT /book/request handler also does this when the route owns
+    // the approval, but the generic POST /request/:id/approve endpoint
+    // skips media-status updates for these types, so we centralise it
+    // here.
     if (!entity.media) {
+      if (
+        entity.status === MediaRequestStatus.APPROVED &&
+        (entity.type === MediaType.BOOK ||
+          entity.type === MediaType.AUDIOBOOK ||
+          entity.type === MediaType.GAME)
+      ) {
+        const requestRepository = getRepository(MediaRequest);
+        const fullRequest = await requestRepository.findOne({
+          where: { id: entity.id },
+          relations: ['bookMedia', 'audiobookMedia', 'gameMedia'],
+        });
+        if (fullRequest?.bookMedia) {
+          if (fullRequest.bookMedia.status !== MediaStatus.AVAILABLE) {
+            fullRequest.bookMedia.status = MediaStatus.PROCESSING;
+            await getRepository(BookMedia).save(fullRequest.bookMedia);
+          }
+        } else if (fullRequest?.audiobookMedia) {
+          if (fullRequest.audiobookMedia.status !== MediaStatus.AVAILABLE) {
+            fullRequest.audiobookMedia.status = MediaStatus.PROCESSING;
+            await getRepository(AudiobookMedia).save(
+              fullRequest.audiobookMedia
+            );
+          }
+        } else if (fullRequest?.gameMedia) {
+          if (fullRequest.gameMedia.status !== MediaStatus.AVAILABLE) {
+            const { GameMedia } = await import('@server/entity/GameMedia');
+            fullRequest.gameMedia.status = MediaStatus.PROCESSING;
+            await getRepository(GameMedia).save(
+              fullRequest.gameMedia as GameMediaType
+            );
+          }
+        }
+      }
       return;
     }
 

@@ -15,8 +15,6 @@ import { AudiobookMedia } from '@server/entity/AudiobookMedia';
 import { BookMedia } from '@server/entity/BookMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { Permission, hasPermission } from '@server/lib/permissions';
-import { BookDownloadService } from '@server/lib/services/BookDownloadService';
-import { submitToBindery } from '@server/lib/services/binderyDispatcher';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -32,39 +30,6 @@ async function saveBookMedia(
     await getRepository(BookMedia).save(media as BookMedia);
   } else {
     await getRepository(AudiobookMedia).save(media as AudiobookMedia);
-  }
-}
-
-/**
- * Dispatch a book/audiobook to a configured download service.
- * Priority: dedicated Bindery settings → generic DownloadManagerInstance.
- * If neither is configured, silently no-op (request stays APPROVED without
- * a download handler — users can still pick it up manually).
- */
-async function dispatchBookMedia(
-  media: BookMedia | AudiobookMedia,
-  mediaType: MediaType
-): Promise<void> {
-  const binderyResult = await submitToBindery(media, mediaType);
-
-  if (binderyResult.success) {
-    await saveBookMedia(media, mediaType);
-    return;
-  }
-
-  if (!binderyResult.noInstance) {
-    // Bindery was configured but failed — do not fall through to the
-    // generic cascade (that'd submit the same request twice if the user
-    // also has a generic DM configured).
-    return;
-  }
-
-  // No Bindery instance — try generic download managers
-  const downloadService = new BookDownloadService();
-  const genericResult = await downloadService.dispatch(media, mediaType);
-
-  if (genericResult.success) {
-    await saveBookMedia(media, mediaType);
   }
 }
 
@@ -333,7 +298,14 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         byKey.set(key, mergeInto(existing, item));
       }
     }
-    const merged = Array.from(byKey.values());
+    // Drop pure Google Books results (no OpenLibrary counterpart) — they
+    // can't open a detail page because GET /book/:id depends on an OL work
+    // key, and we can't dispatch reliably without one either. Google Books
+    // data is still used to enrich OL/Bindery matches via the dedupe pass
+    // above.
+    const merged = Array.from(byKey.values()).filter(
+      (r) => r.source !== 'googlebooks'
+    );
 
     // Overlay availability from local database
     const bookMediaRepo = getRepository(BookMedia);
@@ -651,6 +623,17 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
   const id = req.params.id;
   // Audible ASINs are 10 chars starting with 'B'; OpenLibrary IDs look like "OL...W"
   const isAudibleAsin = /^B[0-9A-Z]{9}$/.test(id);
+  const isOpenLibraryId = /^OL\d+W$/.test(id);
+
+  // Reject non-OL, non-Audible keys early — e.g. "gbooks:..." synthetic
+  // IDs from Google Books search results that would otherwise trigger a
+  // noisy 404 fetch against OpenLibrary.
+  if (!isAudibleAsin && !isOpenLibraryId) {
+    return res.status(404).json({
+      status: 404,
+      message: 'Book not found.',
+    });
+  }
 
   try {
     if (isAudibleAsin) {
@@ -1155,6 +1138,14 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
         assign(m, 'asin', body.asin);
         assign(m, 'narratorName', body.narratorName);
       }
+      // Reset to PENDING when re-requesting media that was previously
+      // declined / had its request removed (leaving status UNKNOWN or
+      // stale PROCESSING). Skip if it's actually AVAILABLE — no point
+      // demoting a downloaded book back to pending.
+      if (media.status !== MediaStatus.AVAILABLE) {
+        media.status = MediaStatus.PENDING;
+        changed = true;
+      }
       if (changed) {
         if (isBook) {
           await bookMediaRepo.save(media as BookMedia);
@@ -1180,9 +1171,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           coverUrl: body.coverUrl,
           year: body.year,
           publisher: body.publisher,
-          // PROCESSING so the card shows the blue clock badge like
-          // movies/TV requests awaiting download.
-          status: MediaStatus.PROCESSING,
+          status: MediaStatus.PENDING,
         });
       } else {
         // For audiobooks, foreignBookId is the Audible ASIN
@@ -1202,9 +1191,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           year: body.year,
           publisher: body.publisher,
           narratorName: body.narratorName,
-          // PROCESSING so the card shows the blue clock badge like
-          // movies/TV requests awaiting download.
-          status: MediaStatus.PROCESSING,
+          status: MediaStatus.PENDING,
         });
       }
       if (isBook && media) {
@@ -1236,15 +1223,14 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
       req.user &&
       hasPermission(req.user.permissions, autoApprovePermission)
     ) {
+      media.status = MediaStatus.PROCESSING;
+      await saveBookMedia(media, body.mediaType);
+
+      // Dispatch is handled by MediaRequestSubscriber.sendToBindery /
+      // sendToBookshelf when the request transitions to APPROVED — the
+      // save below triggers afterUpdate.
       request.status = MediaRequestStatus.APPROVED;
       await requestRepo.save(request);
-
-      // Dispatch to Bindery (dedicated settings) or fall back to generic
-      // DownloadManagerInstance cascade.
-      await dispatchBookMedia(
-        media as BookMedia & AudiobookMedia,
-        body.mediaType
-      );
     }
 
     logger.info(`Book request created: ${body.title}`, {
@@ -1337,18 +1323,22 @@ bookRoutes.put(
 
     const body = req.body as { status: MediaRequestStatus; reason?: string };
     const previousStatus = request.status;
-    request.status = body.status;
-    request.modifiedBy = req.user;
-    await requestRepo.save(request);
 
     const media = request.bookMedia || request.audiobookMedia;
     const mediaType = request.bookMedia ? MediaType.BOOK : MediaType.AUDIOBOOK;
-    // Handle status-specific actions
-    if (body.status === MediaRequestStatus.APPROVED) {
-      if (media) {
-        await dispatchBookMedia(media, mediaType);
-      }
+    // Promote the BookMedia/AudiobookMedia to PROCESSING BEFORE saving the
+    // request — that way the MediaRequestSubscriber.afterUpdate hook (which
+    // triggers Bookshelf/Bindery dispatch) sees the correct media status,
+    // and the dispatcher's own BookMedia.save inside the subscriber won't
+    // race with a later status update from the route.
+    if (body.status === MediaRequestStatus.APPROVED && media) {
+      media.status = MediaStatus.PROCESSING;
+      await saveBookMedia(media, mediaType);
     }
+
+    request.status = body.status;
+    request.modifiedBy = req.user;
+    await requestRepo.save(request);
 
     logger.info(
       `Book request ${request.id} status changed: ${previousStatus} → ${body.status}`,

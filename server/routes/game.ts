@@ -230,11 +230,13 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
         publisher: body.publisher,
         genre: body.genre,
         coverUrl: body.coverUrl,
-        // PROCESSING = awaiting the game/ROM to appear in ROMM.
-        // Matches how movies/TV show an indigo clock badge after a
-        // validated request is awaiting download.
-        status: MediaStatus.PROCESSING,
+        status: MediaStatus.PENDING,
       });
+      await gameMediaRepo.save(gameMedia);
+    } else if (gameMedia.status !== MediaStatus.AVAILABLE) {
+      // Re-requesting a previously declined / removed game — reset
+      // status so the badge + button reflect the new pending state.
+      gameMedia.status = MediaStatus.PENDING;
       await gameMediaRepo.save(gameMedia);
     }
 
@@ -280,7 +282,7 @@ gameRoutes.put(
     const requestRepo = getRepository(MediaRequest);
     const request = await requestRepo.findOne({
       where: { id: parseInt(req.params.id, 10) },
-      relations: ['requestedBy'],
+      relations: ['requestedBy', 'gameMedia'],
     });
 
     if (!request) {
@@ -295,11 +297,23 @@ gameRoutes.put(
       adminNote?: string;
     };
 
+    // Promote GameMedia to PROCESSING on approval (manual ROM addition
+    // workflow — no download manager dispatch). Done BEFORE saving the
+    // request so any downstream subscriber sees the updated status.
+    if (body.status === MediaRequestStatus.APPROVED && request.gameMedia) {
+      const gameMediaRepo = getRepository(GameMedia);
+      const gm = await gameMediaRepo.findOne({
+        where: { id: request.gameMedia.id },
+      });
+      if (gm) {
+        gm.status = MediaStatus.PROCESSING;
+        await gameMediaRepo.save(gm);
+      }
+    }
+
     request.status = body.status;
     request.modifiedBy = req.user;
     await requestRepo.save(request);
-
-    // No download dispatch — game ROM workflow is manual
 
     return res.status(200).json(request);
   }
