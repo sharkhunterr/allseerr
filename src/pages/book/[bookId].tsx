@@ -629,7 +629,15 @@ const BookDetailPage: NextPage = () => {
                     )}
                     <div className="relative z-10 flex h-full items-center justify-between p-4 text-gray-200 transition duration-300 group-hover:text-white">
                       <div>
-                        <div>{s.name}</div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="inline-flex items-center rounded-full border border-orange-500 bg-orange-600/80 px-2 text-[10px] font-medium uppercase tracking-wider text-white shadow-md"
+                            title="Book series"
+                          >
+                            Book
+                          </span>
+                          <span>{s.name}</span>
+                        </div>
                         {s.position && (
                           <div className="text-xs text-gray-400">
                             {s.seedCount > 0
