@@ -301,7 +301,10 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
     path: string,
     kind: 'user' | 'virtual',
     params?: Record<string, string>
-  ): Promise<RommCollectionSummary[]> {
+  ): Promise<{
+    summaries: RommCollectionSummary[];
+    details: RommCollectionDetail[];
+  }> {
     try {
       const response = await this.axios.get<unknown>(path, { params });
       const rows = this.rowsFromResponse(response.data);
@@ -315,7 +318,16 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
         count: rows.length,
         firstName: rows[0]?.name,
       });
-      return rows.map((c) => this.normaliseCollection(c, kind));
+      const summaries = rows.map((c) => this.normaliseCollection(c, kind));
+      // Each list row already carries the `roms` array on ROMM's
+      // virtual endpoint, so we build the detail shape right here.
+      // That avoids a second per-collection round-trip (1488 virtual
+      // collections × socket-hang-up floods ROMM otherwise).
+      const details: RommCollectionDetail[] = rows.map((c, idx) => ({
+        ...summaries[idx],
+        romIds: Array.isArray(c.roms) ? c.roms : [],
+      }));
+      return { summaries, details };
     } catch (e) {
       // 404 / 422 on some variants are expected (older ROMM builds
       // don't have the endpoint; certain virtual-collection types
@@ -333,7 +345,7 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
           error: e instanceof Error ? e.message : String(e),
         }
       );
-      return [];
+      return { summaries: [], details: [] };
     }
   }
 
@@ -369,7 +381,7 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
     // Virtual types are mandatory so we fan them out; untyped
     // requests just 422. Ids already carry their prefix/shape
     // difference so callers can tell them apart later.
-    const [userCollections, ...virtualBatches] = await Promise.all([
+    const [userBatch, ...virtualBatches] = await Promise.all([
       this.fetchCollectionList('/collections', 'user'),
       ...RommAdapter.VIRTUAL_COLLECTION_TYPES.map((type) =>
         this.fetchCollectionList('/collections/virtual', 'virtual', { type })
@@ -378,21 +390,37 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
     // Dedup across types: the same virtual id shouldn't appear
     // twice, but if it did we'd keep the first occurrence.
     const seen = new Set<string>();
-    const virtualCollections: RommCollectionSummary[] = [];
+    const summaries: RommCollectionSummary[] = [];
+    let virtualCount = 0;
+    for (const s of userBatch.summaries) {
+      if (seen.has(s.id)) continue;
+      seen.add(s.id);
+      summaries.push(s);
+    }
     for (const batch of virtualBatches) {
-      for (const c of batch) {
-        if (seen.has(c.id)) continue;
-        seen.add(c.id);
-        virtualCollections.push(c);
+      for (const s of batch.summaries) {
+        if (seen.has(s.id)) continue;
+        seen.add(s.id);
+        summaries.push(s);
+        virtualCount++;
       }
     }
-    const summaries = [...userCollections, ...virtualCollections];
+    // Populate the per-id detail cache from the list payload — each
+    // row already includes its `roms` array, so there's no reason to
+    // pay a second round-trip per collection. This is what lets the
+    // scan complete cheaply on instances with thousands of virtual
+    // collections (ROMM flood-kills concurrent connections otherwise).
+    for (const batch of [userBatch, ...virtualBatches]) {
+      for (const d of batch.details) {
+        rommCache.set(`collection:${d.id}`, d, 600);
+      }
+    }
     rommCache.set(key, summaries, 600);
     logger.debug('ROMM listCollections fetched', {
       label: 'romm',
       count: summaries.length,
-      userCount: userCollections.length,
-      virtualCount: virtualCollections.length,
+      userCount: userBatch.summaries.length,
+      virtualCount,
     });
     return summaries;
   }
@@ -410,48 +438,49 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
     const key = `collection:${idStr}`;
     const hit = rommCache.get<RommCollectionDetail>(key);
     if (hit) return hit;
-    // When the caller doesn't tell us which bucket the id belongs to,
-    // we try user first (numeric ids) then virtual. Saves a round-
-    // trip in the common case where the scanner already cached a
-    // summary and calls us with `hint`.
-    const candidates: Array<'user' | 'virtual'> = hint
-      ? [hint]
-      : [/^\d+$/.test(idStr) ? 'user' : 'virtual', 'user', 'virtual'].filter(
-          (v, i, arr) => arr.indexOf(v) === i
-        ) as Array<'user' | 'virtual'>;
-    for (const kind of candidates) {
-      const path =
-        kind === 'virtual'
-          ? `/collections/virtual/${encodeURIComponent(idStr)}`
-          : `/collections/${encodeURIComponent(idStr)}`;
-      try {
-        const response = await this.axios.get<RommCollectionRaw>(path);
-        const c = response.data;
-        if (!c) continue;
-        const summary = this.normaliseCollection(c, kind);
-        const detail: RommCollectionDetail = {
-          ...summary,
-          romIds: Array.isArray(c.roms) ? c.roms : [],
-        };
-        rommCache.set(key, detail, 600);
-        return detail;
-      } catch (e) {
-        const status = (e as { response?: { status?: number } }).response
-          ?.status;
-        // 404 on one path just means "try the other bucket", so we
-        // only surface at warn once all candidates fail.
-        if (status !== 404) {
-          logger.debug('ROMM getCollection attempt failed', {
-            label: 'romm',
-            id: idStr,
-            kind,
-            status,
-            error: e instanceof Error ? e.message : String(e),
-          });
-        }
-      }
+    // Virtual collections have no per-id endpoint on ROMM — the list
+    // call (/collections/virtual?type=X) is the only way to get
+    // their roms[]. If the cache is cold, trigger a listCollections
+    // which will populate every per-id entry under `collection:<id>`
+    // then retry this lookup.
+    const looksVirtual =
+      hint === 'virtual' || (!hint && !/^\d+$/.test(idStr));
+    if (looksVirtual) {
+      await this.listCollections();
+      const warmed = rommCache.get<RommCollectionDetail>(key);
+      if (warmed) return warmed;
+      // Still cold → the id probably doesn't belong to any of the
+      // virtual-collection types we probe. Fall through to the user
+      // endpoint attempt below as a last resort.
     }
-    return null;
+
+    // User-created path: numeric id, direct GET works.
+    try {
+      const response = await this.axios.get<RommCollectionRaw>(
+        `/collections/${encodeURIComponent(idStr)}`
+      );
+      const c = response.data;
+      if (!c) return null;
+      const summary = this.normaliseCollection(c, 'user');
+      const detail: RommCollectionDetail = {
+        ...summary,
+        romIds: Array.isArray(c.roms) ? c.roms : [],
+      };
+      rommCache.set(key, detail, 600);
+      return detail;
+    } catch (e) {
+      const status = (e as { response?: { status?: number } }).response
+        ?.status;
+      if (status !== 404) {
+        logger.debug('ROMM getCollection user endpoint failed', {
+          label: 'romm',
+          id: idStr,
+          status,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+      return null;
+    }
   }
 
   /**

@@ -74,25 +74,20 @@ class RommCollectionsScanner {
         label: 'ROMM Collections Scan',
       });
 
-      // Force a cache miss so we re-fetch the authoritative list.
-      // The adapter will then re-populate the `collections:list` key
-      // itself; we also prime the per-collection detail cache below.
+      // Nuke the entire ROMM cache bucket so we force a fresh
+      // listCollections call — the list call itself populates every
+      // per-collection detail key from the same response payload,
+      // so there's no per-id GET loop to run afterwards. This
+      // matters on instances with 1000+ virtual collections where
+      // the old loop drowned ROMM in parallel requests (socket
+      // hang ups, 502s in the logs).
       const cache = cacheManager.getCache('romm').data;
-      cache.del('collections:list');
+      cache.flushAll();
 
       const summaries = await adapter.listCollections();
       this.totalSize = summaries.length;
       this.totalCollections = summaries.length;
-
-      for (const s of summaries) {
-        if (!this.running) break;
-        // Force-refresh each per-collection detail too so a brand-new
-        // ROM that was just added to a collection surfaces in the
-        // next /game/:id hit without waiting for the 10-min TTL.
-        cache.del(`collection:${s.id}`);
-        await adapter.getCollection(s.id, s.kind);
-        this.progress++;
-      }
+      this.progress = summaries.length;
 
       this.lastScanAt = Date.now();
       this.lastDurationMs = this.lastScanAt - startedAt;
