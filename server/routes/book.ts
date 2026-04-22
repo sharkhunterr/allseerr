@@ -126,6 +126,99 @@ const remapToPublicUrl = (
   return storedUrl;
 };
 
+interface AuthorSearchHit {
+  type: 'author';
+  key: string;
+  name: string;
+  photoUrl?: string;
+  bio?: string;
+  booksCount?: number;
+}
+
+const normalizeAuthorName = (s: string): string =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * Look up top-result author cards for a free-text search query. Always
+ * tries a direct Hasura `_eq` on several spacing variants first because
+ * Hardcover's public Typesense mis-ranks short / punctuated queries so
+ * badly that the top hit is often a botanical gardens listing instead
+ * of the obvious author. Falls back to Typesense when the exact lookup
+ * finds nothing, and filters the Typesense candidates by surname-token
+ * overlap so the result list never contains nonsense matches.
+ */
+async function resolveTopAuthorMatches(
+  hc: HardcoverAPI,
+  query: string,
+  limit = 3
+): Promise<AuthorSearchHit[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const variants = Array.from(
+    new Set(
+      [
+        trimmed,
+        trimmed.replace(/\./g, '. ').replace(/\s+/g, ' ').trim(),
+        trimmed.replace(/\./g, ' ').replace(/\s+/g, ' ').trim(),
+        trimmed.replace(/\./g, '').replace(/\s+/g, ' ').trim(),
+      ].filter((v) => v.length > 0)
+    )
+  );
+
+  // Pass 1 — direct Hasura exact match on each spacing variant.
+  // Merged + deduped so homonyms from different variants collapse.
+  const seen = new Set<number>();
+  const exact: AuthorSearchHit[] = [];
+  for (const v of variants) {
+    const rows = await hc.findAuthorByExactName(v).catch(() => []);
+    for (const r of rows) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      exact.push({
+        type: 'author',
+        key: `hardcover:${r.id}`,
+        name: r.name,
+        photoUrl: r.photoUrl,
+        bio: r.bio,
+        booksCount: r.booksCount,
+      });
+      if (exact.length >= limit) break;
+    }
+    if (exact.length >= limit) break;
+  }
+  if (exact.length > 0) return exact;
+
+  // Pass 2 — Typesense with surname-overlap filter. The filter is the
+  // only thing stopping garbage matches from leaking through ("Rowling"
+  // otherwise returns "Kew Staff Royal Botanic Gardens").
+  const qTokens = normalizeAuthorName(trimmed)
+    .split(' ')
+    .filter((t) => t.length > 1);
+  const qSurname = qTokens[qTokens.length - 1];
+  const candidates = await hc.searchAuthors(trimmed, 10).catch(() => []);
+  const filtered = candidates.filter((c) => {
+    const cTokens = normalizeAuthorName(c.name).split(' ').filter(Boolean);
+    if (qSurname && cTokens.includes(qSurname)) return true;
+    const overlap = qTokens.filter((t) => cTokens.includes(t)).length;
+    return qTokens.length > 0 && overlap >= Math.ceil(qTokens.length / 2);
+  });
+  return filtered.slice(0, limit).map((a) => ({
+    type: 'author',
+    key: `hardcover:${a.id}`,
+    name: a.name,
+    photoUrl: a.photoUrl,
+    bio: a.bio,
+    booksCount: a.booksCount,
+  }));
+}
+
 /**
  * GET /api/v1/book/search
  * Search for books or audiobooks via OpenLibrary.
@@ -180,31 +273,12 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         const hc = new HardcoverAPI(bookHcKey);
         const prefLang =
           audioCfg?.preferredLanguage?.toLowerCase().trim() || undefined;
-        // Kick author search in parallel — matches the book path, so
-        // author cards surface at the top of the audiobook grid too.
-        const authorsPromise = hc
-          .searchAuthors(query, 3)
-          .then((hits) =>
-            hits.map((a) => ({
-              type: 'author' as const,
-              key: `hardcover:${a.id}`,
-              name: a.name,
-              photoUrl: a.photoUrl,
-              bio: a.bio,
-              booksCount: a.booksCount,
-            }))
-          )
-          .catch(
-            () =>
-              [] as Array<{
-                type: 'author';
-                key: string;
-                name: string;
-                photoUrl?: string;
-                bio?: string;
-                booksCount?: number;
-              }>
-          );
+        // Kick author search in parallel — shared helper so Typesense
+        // garbage and punctuated queries ("J.K. Rowling") get handled
+        // the same everywhere.
+        const authorsPromise = resolveTopAuthorMatches(hc, query, 3).catch(
+          () => [] as AuthorSearchHit[]
+        );
         const hits = await hc.searchAudiobooks(query, limit);
         const enriched: Array<{
           openLibraryId: string;
@@ -269,19 +343,12 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         }
 
         const authors = await authorsPromise;
-        const strongAuthorMatches = authors.filter(
-          (a) => a.name.toLowerCase() === query.toLowerCase().trim()
-        );
-        const weakAuthorMatches = authors.filter(
-          (a) => a.name.toLowerCase() !== query.toLowerCase().trim()
-        );
-        // Strong matches (exact name) open the grid; weak matches land
-        // just after in case the top audiobook hit is a better anchor.
-        const combined = [
-          ...strongAuthorMatches,
-          ...enriched,
-          ...weakAuthorMatches,
-        ];
+        // Author cards always lead the grid — same treatment as the
+        // series card on book search ("cela mets en top comme les
+        // series de livres"). The helper already rejects irrelevant
+        // Typesense matches, so anything that arrives here is worth
+        // showing.
+        const combined = [...authors, ...enriched];
         return res.status(200).json({
           page,
           totalPages: 1,
@@ -305,39 +372,12 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       const bookHcKeyForAudible = bookHcKey;
       const authorsPromise =
         bookHcKeyForAudible && bookHcKeyForAudible.length > 0
-          ? new HardcoverAPI(bookHcKeyForAudible)
-              .searchAuthors(query, 3)
-              .then((hits) =>
-                hits.map((a) => ({
-                  type: 'author' as const,
-                  key: `hardcover:${a.id}`,
-                  name: a.name,
-                  photoUrl: a.photoUrl,
-                  bio: a.bio,
-                  booksCount: a.booksCount,
-                }))
-              )
-              .catch(
-                () =>
-                  [] as Array<{
-                    type: 'author';
-                    key: string;
-                    name: string;
-                    photoUrl?: string;
-                    bio?: string;
-                    booksCount?: number;
-                  }>
-              )
-          : Promise.resolve(
-              [] as Array<{
-                type: 'author';
-                key: string;
-                name: string;
-                photoUrl?: string;
-                bio?: string;
-                booksCount?: number;
-              }>
-            );
+          ? resolveTopAuthorMatches(
+              new HardcoverAPI(bookHcKeyForAudible),
+              query,
+              3
+            ).catch(() => [] as AuthorSearchHit[])
+          : Promise.resolve([] as AuthorSearchHit[]);
 
       const enrichedResults = await Promise.all(
         results.map(async (result) => {
@@ -363,18 +403,9 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       );
 
       const authors = await authorsPromise;
-      const q = query.toLowerCase().trim();
-      const strongAuthorMatches = authors.filter(
-        (a) => a.name.toLowerCase() === q
-      );
-      const weakAuthorMatches = authors.filter(
-        (a) => a.name.toLowerCase() !== q
-      );
-      const combined = [
-        ...strongAuthorMatches,
-        ...enrichedResults,
-        ...weakAuthorMatches,
-      ];
+      // Author cards lead the grid unconditionally — the helper has
+      // already filtered out garbage matches.
+      const combined = [...authors, ...enrichedResults];
 
       return res.status(200).json({
         page,
@@ -446,20 +477,8 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
     let authorsPromise: Promise<AuthorHit[]> = Promise.resolve([]);
     if (effectivePrimary === 'hardcover') {
       const hcForAuthors = new HardcoverAPI(providerCfg.hardcoverApiKey);
-      authorsPromise = hcForAuthors
-        .searchAuthors(query, 3)
-        .then((hits) =>
-          hits.map(
-            (a): AuthorHit => ({
-              type: 'author',
-              key: `hardcover:${a.id}`,
-              name: a.name,
-              photoUrl: a.photoUrl,
-              bio: a.bio,
-              booksCount: a.booksCount,
-            })
-          )
-        )
+      authorsPromise = resolveTopAuthorMatches(hcForAuthors, query, 3)
+        .then((hits) => hits as AuthorHit[])
         .catch(() => [] as AuthorHit[]);
     }
     if (effectivePrimary === 'hardcover') {
@@ -658,26 +677,14 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         weakSeriesMatches.push(s);
       }
     }
-    // Author cards take precedence over everything when the query
-    // looks like an author name: if any hit's full name contains the
-    // query, float it to the very top. Otherwise they trail at the
-    // bottom like weak series matches.
-    const strongAuthorMatches: AuthorHit[] = [];
-    const weakAuthorMatches: AuthorHit[] = [];
-    for (const a of authorHits) {
-      const nameLc = a.name.toLowerCase();
-      if (nameLc === queryLc || nameLc.includes(queryLc)) {
-        strongAuthorMatches.push(a);
-      } else {
-        weakAuthorMatches.push(a);
-      }
-    }
+    // Author cards always lead the grid when there are matches —
+    // resolveTopAuthorMatches already filtered out nonsense Typesense
+    // results so we don't need a secondary strong/weak split here.
     const finalResults = [
-      ...strongAuthorMatches,
+      ...authorHits,
       ...strongSeriesMatches,
       ...enrichedBooks,
       ...weakSeriesMatches,
-      ...weakAuthorMatches,
     ];
 
     return res.status(200).json({
