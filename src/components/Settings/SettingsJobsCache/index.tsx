@@ -91,6 +91,7 @@ const messages: { [messageName: string]: MessageDescriptor } = defineMessages(
     'image-cache-cleanup': 'Image Cache Cleanup',
     'process-blocklisted-tags': 'Process Blocklisted Tags',
     'romm-scan': 'ROMM Library Scan',
+    'romm-collections-scan': 'ROMM Collections Scan',
     'audiobookshelf-scan': 'Audiobookshelf Library Scan',
     'komga-scan': 'Komga Library Scan',
     'grimmory-scan': 'Grimmory Library Scan',
