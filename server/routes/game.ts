@@ -275,12 +275,12 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
     if (
       req.user &&
       hasPermission(
-        req.user.permissions,
         [
           Permission.MANAGE_REQUESTS,
           Permission.AUTO_APPROVE,
           Permission.AUTO_APPROVE_GAME,
         ],
+        req.user.permissions,
         { type: 'or' }
       )
     ) {

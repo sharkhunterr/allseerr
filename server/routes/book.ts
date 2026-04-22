@@ -1777,7 +1777,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
     ];
     if (
       req.user &&
-      hasPermission(req.user.permissions, autoApprovePermissions, {
+      hasPermission(autoApprovePermissions, req.user.permissions, {
         type: 'or',
       })
     ) {
