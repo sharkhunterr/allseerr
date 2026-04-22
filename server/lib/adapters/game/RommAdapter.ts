@@ -317,6 +317,10 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
         isArray: Array.isArray(response.data),
         count: rows.length,
         firstName: rows[0]?.name,
+        firstKeys: rows[0] ? Object.keys(rows[0]) : null,
+        firstRomsLength: Array.isArray(rows[0]?.roms)
+          ? rows[0]?.roms?.length
+          : null,
       });
       const summaries = rows.map((c) => this.normaliseCollection(c, kind));
       // Each list row already carries the `roms` array on ROMM's
