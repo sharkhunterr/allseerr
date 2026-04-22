@@ -139,9 +139,48 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
       })
     );
 
+    // ROMM collection cards at the top when the query matches a
+    // collection name — same idea as book-series cards in book
+    // search. ROMM has no free-text endpoint so we list all
+    // collections (cached) and filter client-side by case-
+    // insensitive substring.
+    let collectionHits: Array<{
+      type: 'collection';
+      id: number;
+      name: string;
+      description?: string;
+      coverUrl?: string;
+      romCount?: number;
+    }> = [];
+    const romAdapter = createRommAdapterFromSettings();
+    if (romAdapter) {
+      try {
+        const all = await romAdapter.listCollections();
+        const q = query.toLowerCase().trim();
+        collectionHits = all
+          .filter((c) => c.name.toLowerCase().includes(q))
+          .slice(0, 3)
+          .map((c) => ({
+            type: 'collection' as const,
+            id: c.id,
+            name: c.name,
+            description: c.description,
+            coverUrl: c.coverUrl,
+            romCount: c.romCount,
+          }));
+      } catch (e) {
+        logger.debug('ROMM collection match on game search failed', {
+          label: 'game',
+          query,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    const combined = [...collectionHits, ...enriched];
     return res.status(200).json({
-      results: enriched,
-      totalResults: enriched.length,
+      results: combined,
+      totalResults: combined.length,
     });
   } catch (e) {
     logger.error('Game search failed', {

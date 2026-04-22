@@ -34,8 +34,11 @@ const messages = defineMessages('components.Search', {
   bookBadge: 'Book',
   seriesBadge: 'Series',
   authorBadge: 'Author',
+  gameBadge: 'Game',
+  collectionBadge: 'Collection',
   seriesCountFmt: '{count, plural, one {# book} other {# books}}',
   authorBooksFmt: '{count, plural, one {# book} other {# books}}',
+  collectionCountFmt: '{count, plural, one {# game} other {# games}}',
 });
 
 type MediaTab = 'all' | 'books' | 'audiobooks' | 'games';
@@ -78,6 +81,61 @@ const AuthorSearchCard = ({
             <div className="mt-1 text-xs text-gray-500">
               {intl.formatMessage(messages.authorBooksFmt, {
                 count: result.booksCount,
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+};
+
+const GameCollectionSearchCard = ({
+  result,
+}: {
+  result: GameCollectionResult;
+}) => {
+  const intl = useIntl();
+  return (
+    <Link href={`/game/collection/${result.id}`}>
+      <div className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg bg-gray-800 shadow-md ring-1 ring-gray-700 transition duration-200 hover:ring-indigo-500">
+        <div className="relative aspect-[2/3] w-full overflow-hidden bg-gray-700">
+          {result.coverUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={result.coverUrl}
+              alt={result.name}
+              className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <BookOpenIcon className="h-12 w-12 text-gray-500" />
+            </div>
+          )}
+          <div className="absolute left-0 right-0 top-0 flex items-center gap-1 p-2">
+            {/* Game badge (emerald) — mirrors the GameCard badge. */}
+            <div className="pointer-events-none z-40 rounded-full border border-emerald-500 bg-emerald-600/80 shadow-md">
+              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                {intl.formatMessage(messages.gameBadge)}
+              </div>
+            </div>
+            {/* Collection badge (indigo) — marks this as a ROMM
+                collection rather than a single game. */}
+            <div className="pointer-events-none z-40 rounded-full border border-indigo-500 bg-indigo-600/80 shadow-md">
+              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                {intl.formatMessage(messages.collectionBadge)}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-1 flex-col p-3">
+          <h3 className="truncate text-sm font-semibold text-white">
+            {result.name}
+          </h3>
+          {typeof result.romCount === 'number' && (
+            <div className="mt-1 text-xs text-gray-500">
+              {intl.formatMessage(messages.collectionCountFmt, {
+                count: result.romCount,
               })}
             </div>
           )}
@@ -214,8 +272,19 @@ interface GameResult {
   summary?: string;
 }
 
+interface GameCollectionResult {
+  type: 'collection';
+  id: number;
+  name: string;
+  description?: string;
+  coverUrl?: string;
+  romCount?: number;
+}
+
+type GameOrCollectionResult = GameResult | GameCollectionResult;
+
 interface GameSearchResponse {
-  results: GameResult[];
+  results: GameOrCollectionResult[];
   totalResults: number;
 }
 
@@ -231,7 +300,7 @@ const Search = () => {
   const [audiobookResults, setAudiobookResults] = useState<
     (BookResult | AuthorSearchResult)[]
   >([]);
-  const [gameResults, setGameResults] = useState<GameResult[]>([]);
+  const [gameResults, setGameResults] = useState<GameOrCollectionResult[]>([]);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
@@ -517,22 +586,31 @@ const Search = () => {
             </p>
           ) : (
             <ul className="cards-vertical">
-              {gameResults.map((game) => (
-                <li key={game.igdbId}>
-                  <GameCard
-                    igdbId={game.igdbId}
-                    title={game.title}
-                    platforms={game.platforms}
-                    releaseYear={game.releaseYear}
-                    developer={game.developer}
-                    publisher={game.publisher}
-                    genre={game.genre}
-                    userRating={game.userRating}
-                    coverUrl={game.coverUrl}
-                    summary={game.summary}
-                  />
-                </li>
-              ))}
+              {gameResults.map((item) => {
+                if ('igdbId' in item) {
+                  return (
+                    <li key={item.igdbId}>
+                      <GameCard
+                        igdbId={item.igdbId}
+                        title={item.title}
+                        platforms={item.platforms}
+                        releaseYear={item.releaseYear}
+                        developer={item.developer}
+                        publisher={item.publisher}
+                        genre={item.genre}
+                        userRating={item.userRating}
+                        coverUrl={item.coverUrl}
+                        summary={item.summary}
+                      />
+                    </li>
+                  );
+                }
+                return (
+                  <li key={`collection-${item.id}`}>
+                    <GameCollectionSearchCard result={item} />
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
