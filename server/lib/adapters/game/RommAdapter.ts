@@ -263,10 +263,28 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
       return hit;
     }
     try {
-      const response = await this.axios.get<RommCollectionRaw[]>(
-        '/collections'
-      );
-      const rows = response.data ?? [];
+      // ROMM wraps some endpoints in { items, total } (paginated) and
+      // returns bare arrays on others. Handle both transparently —
+      // observed the paginated shape returning an empty array without
+      // errors, which is why the first scan reported 0 collections.
+      const response = await this.axios.get<
+        RommCollectionRaw[] | { items?: RommCollectionRaw[]; total?: number }
+      >('/collections');
+      const raw = response.data;
+      const rows: RommCollectionRaw[] = Array.isArray(raw)
+        ? raw
+        : (raw?.items ?? []);
+      logger.info('ROMM /collections shape probe', {
+        label: 'romm',
+        status: response.status,
+        isArray: Array.isArray(raw),
+        arrayLength: Array.isArray(raw) ? raw.length : null,
+        objectKeys:
+          raw && !Array.isArray(raw) ? Object.keys(raw).slice(0, 10) : null,
+        itemsLength:
+          !Array.isArray(raw) && raw?.items ? raw.items.length : null,
+        firstItemName: rows[0]?.name,
+      });
       const summaries: RommCollectionSummary[] = rows.map((c) => ({
         id: c.id,
         name: c.name,
