@@ -5,6 +5,7 @@ import PageTitle from '@app/components/Common/PageTitle';
 import GameRequestModal from '@app/components/GameRequestModal';
 import StatusBadge from '@app/components/StatusBadge';
 import useSettings from '@app/hooks/useSettings';
+import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { ExclamationTriangleIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
@@ -36,6 +37,8 @@ const messages = defineMessages('pages.GameDetail', {
   publisher: 'Publisher',
   genre: 'Genre',
   rating: 'Rating',
+  collectionCountFmt:
+    '{count, plural, one {# game} other {# games}}',
 });
 
 interface Platform {
@@ -103,6 +106,14 @@ const PlayOnRommAction = ({
   );
 };
 
+interface GameCollection {
+  id: number;
+  name: string;
+  description?: string;
+  coverUrl?: string;
+  romCount?: number;
+}
+
 interface GameDetailData {
   igdbId: number;
   title: string;
@@ -114,6 +125,7 @@ interface GameDetailData {
   userRating?: number;
   coverUrl?: string;
   summary?: string;
+  collections?: GameCollection[];
 }
 
 const PlatformRequestButton = ({
@@ -373,6 +385,71 @@ const GameDetailPage: NextPage = () => {
           )}
         </div>
         <div className="media-overview-right">
+          {game.collections && game.collections.length > 0 && (
+            <>
+              {game.collections.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="group relative z-0 mb-6 block w-full cursor-pointer overflow-hidden rounded-lg bg-gray-800 bg-cover bg-center text-left shadow-md ring-1 ring-gray-700 transition duration-300 hover:scale-105 hover:ring-gray-500"
+                  onClick={() =>
+                    router.push(`/game/collection/${c.id}`)
+                  }
+                >
+                  {(c.coverUrl || game.coverUrl) && (
+                    <div className="absolute inset-0 z-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={c.coverUrl ?? game.coverUrl}
+                        alt=""
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          backgroundImage:
+                            'linear-gradient(180deg, rgba(31, 41, 55, 0.47) 0%, rgba(31, 41, 55, 0.80) 100%)',
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className="relative z-10 flex h-full items-center justify-between p-4 text-gray-200 transition duration-300 group-hover:text-white">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-flex items-center rounded-full border border-emerald-500 bg-emerald-600/80 px-2 text-[10px] font-medium uppercase tracking-wider text-white shadow-md"
+                          title="Game collection"
+                        >
+                          Game
+                        </span>
+                        <span
+                          className="inline-flex items-center rounded-full border border-indigo-500 bg-indigo-600/80 px-2 text-[10px] font-medium uppercase tracking-wider text-white shadow-md"
+                          title="ROMM collection"
+                        >
+                          Collection
+                        </span>
+                        <span>{c.name}</span>
+                      </div>
+                      {typeof c.romCount === 'number' && (
+                        <div className="text-xs text-gray-400">
+                          {intl.formatMessage(messages.collectionCountFmt, {
+                            count: c.romCount,
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <Button buttonSize="sm">
+                      {intl.formatMessage(globalMessages.view)}
+                    </Button>
+                  </div>
+                </button>
+              ))}
+            </>
+          )}
           <div className="media-facts">
             {game.userRating && (
               <div className="media-ratings">
