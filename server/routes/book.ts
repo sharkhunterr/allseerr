@@ -222,21 +222,30 @@ async function resolveTopAuthorMatches(
     if (!merged.has(c.id)) merged.set(c.id, c);
   }
 
-  return Array.from(merged.values())
+  const ranked = Array.from(merged.values())
     .filter((r) => candidateMatches(r.name))
     // Drop authors with no books — they're usually publisher stubs
     // or duplicate entries that would open an empty author page.
     .filter((r) => (r.booksCount ?? 0) > 0)
-    .sort((a, b) => (b.booksCount ?? 0) - (a.booksCount ?? 0))
-    .slice(0, limit)
-    .map((a) => ({
-      type: 'author',
-      key: `hardcover:${a.id}`,
-      name: a.name,
-      photoUrl: a.photoUrl,
-      bio: a.bio,
-      booksCount: a.booksCount,
-    }));
+    .sort((a, b) => (b.booksCount ?? 0) - (a.booksCount ?? 0));
+  logger.debug('Top author search resolved', {
+    label: 'book',
+    query,
+    qTokens,
+    mergedCandidates: merged.size,
+    candidateNames: Array.from(merged.values()).map(
+      (r) => `${r.name} (${r.booksCount ?? 0})`
+    ),
+    accepted: ranked.slice(0, limit).map((r) => r.name),
+  });
+  return ranked.slice(0, limit).map((a) => ({
+    type: 'author',
+    key: `hardcover:${a.id}`,
+    name: a.name,
+    photoUrl: a.photoUrl,
+    bio: a.bio,
+    booksCount: a.booksCount,
+  }));
 }
 
 /**
@@ -490,12 +499,19 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       booksCount?: number;
     };
 
-    // Series + author cards are Hardcover-only features in this codebase
-    // (OL has no usable free-text search for those). Only surface them
-    // when Hardcover is the effective primary.
+    // Series + author cards are Hardcover-only features in this
+    // codebase (OL has no usable free-text search for those).
+    //
+    // Author cards: enabled whenever a Hardcover key is configured —
+    // they're identity-less decorations routed to /book/author/:id,
+    // so the user benefits even on OpenLibrary-primary deployments.
+    //
+    // Series cards: still gated on effectivePrimary === 'hardcover'
+    // because they share identity with the series detail route and
+    // would mis-link when books come from OpenLibrary.
     let seriesPromise: Promise<SeriesHit[]> = Promise.resolve([]);
     let authorsPromise: Promise<AuthorHit[]> = Promise.resolve([]);
-    if (effectivePrimary === 'hardcover') {
+    if (providerCfg.hardcoverApiKey) {
       const hcForAuthors = new HardcoverAPI(providerCfg.hardcoverApiKey);
       authorsPromise = resolveTopAuthorMatches(hcForAuthors, query, 3)
         .then((hits) => hits as AuthorHit[])
