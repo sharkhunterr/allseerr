@@ -1,6 +1,7 @@
 import Alert from '@app/components/Common/Alert';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import SensitiveInput from '@app/components/Common/SensitiveInput';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { ArrowDownOnSquareIcon, BeakerIcon } from '@heroicons/react/24/outline';
@@ -29,9 +30,10 @@ const messages = defineMessages(
       "Audible's public Catalog API — free and unauthenticated, covers most commercial audiobook releases.",
     hardcover: 'Hardcover',
     hardcoverHelp:
-      'Free GraphQL metadata service (hardcover.app). Uses the same account as Book Metadata; configure the API token there.',
-    hardcoverKeyMissing:
-      'Hardcover API token is not configured yet. Add it on the Book Metadata tab, then return here.',
+      'Free GraphQL metadata service (hardcover.app). Uses a single account shared with Book Metadata — editing the token here updates both tabs.',
+    hardcoverApiKey: 'Hardcover API token',
+    hardcoverApiKeyHelp:
+      'Shared with the Book Metadata tab. Get a token from your Hardcover account settings page.',
     audibleRegion: 'Audible region',
     audibleRegionHelp:
       'Storefront the Audible API will query. Pick the region that matches your library — ASINs differ per region, so a mis-match will silently return no results.',
@@ -118,13 +120,13 @@ const SettingsAudiobookMetadata = () => {
 
   const runTest = async (
     provider: 'audible' | 'hardcover',
-    audibleRegion?: string
+    opts: { audibleRegion?: string; apiKey?: string } = {}
   ) => {
     setTesting(provider);
     try {
       const resp = await axios.post<{ success: boolean; message: string }>(
         '/api/v1/settings/audiobook/metadata-providers/test',
-        { provider, audibleRegion }
+        { provider, ...opts }
       );
       addToast(
         intl.formatMessage(
@@ -137,12 +139,17 @@ const SettingsAudiobookMetadata = () => {
         }
       );
     } catch (e) {
-      addToast(
-        intl.formatMessage(messages.testFailure, {
-          message: e instanceof Error ? e.message : String(e),
-        }),
-        { appearance: 'error', autoDismiss: true }
-      );
+      // Surface the backend error message when available — a bare
+      // "Failed" toast is useless for debugging.
+      let message = e instanceof Error ? e.message : String(e);
+      if (axios.isAxiosError(e) && e.response?.data) {
+        const data = e.response.data as { message?: string };
+        if (data.message) message = data.message;
+      }
+      addToast(intl.formatMessage(messages.testFailure, { message }), {
+        appearance: 'error',
+        autoDismiss: true,
+      });
     } finally {
       setTesting(null);
     }
@@ -162,26 +169,26 @@ const SettingsAudiobookMetadata = () => {
           enableReinitialize
           onSubmit={async (values) => {
             try {
-              // hardcoverApiKey is read-only on this tab; strip it so
-              // the PUT body only contains audiobook-owned fields.
-              const {
-                hardcoverApiKey: _hardcoverApiKey,
-                ...payload
-              } = values;
+              // Hardcover API key is shared with the Book Metadata tab,
+              // but we send it through so the user can edit it from
+              // either place — the server write-through keeps them in
+              // sync on book.metadataProviders.hardcoverApiKey.
               await axios.put(
                 '/api/v1/settings/audiobook/metadata-providers',
-                payload
+                values
               );
               await mutate();
               addToast(intl.formatMessage(messages.saved), {
                 appearance: 'success',
                 autoDismiss: true,
               });
-            } catch {
-              addToast(intl.formatMessage(messages.saveFailed), {
-                appearance: 'error',
-                autoDismiss: true,
-              });
+            } catch (e) {
+              let message = intl.formatMessage(messages.saveFailed);
+              if (axios.isAxiosError(e) && e.response?.data) {
+                const data = e.response.data as { message?: string };
+                if (data.message) message = `${message}: ${data.message}`;
+              }
+              addToast(message, { appearance: 'error', autoDismiss: true });
             }
           }}
         >
@@ -272,7 +279,9 @@ const SettingsAudiobookMetadata = () => {
                           buttonType="warning"
                           disabled={testing === 'audible'}
                           onClick={() =>
-                            runTest('audible', values.audibleRegion)
+                            runTest('audible', {
+                              audibleRegion: values.audibleRegion,
+                            })
                           }
                         >
                           <BeakerIcon />
@@ -305,22 +314,36 @@ const SettingsAudiobookMetadata = () => {
                     />
                   </div>
                 </div>
-                {values.hardcover && !values.hardcoverApiKey && (
-                  <Alert
-                    title={intl.formatMessage(messages.hardcoverKeyMissing)}
-                    type="warning"
-                  />
-                )}
-                {values.hardcover && values.hardcoverApiKey && (
+                {values.hardcover && (
                   <div className="form-row">
-                    <label className="text-label" />
+                    <label htmlFor="hardcoverApiKey" className="text-label">
+                      <span>
+                        {intl.formatMessage(messages.hardcoverApiKey)}
+                      </span>
+                      <span className="label-tip">
+                        {intl.formatMessage(messages.hardcoverApiKeyHelp)}
+                      </span>
+                    </label>
                     <div className="form-input-area">
+                      <div className="form-input-field">
+                        <SensitiveInput
+                          as="field"
+                          id="hardcoverApiKey"
+                          name="hardcoverApiKey"
+                        />
+                      </div>
                       <div className="mt-2 flex justify-end">
                         <Button
                           type="button"
                           buttonType="warning"
-                          disabled={testing === 'hardcover'}
-                          onClick={() => runTest('hardcover')}
+                          disabled={
+                            testing === 'hardcover' || !values.hardcoverApiKey
+                          }
+                          onClick={() =>
+                            runTest('hardcover', {
+                              apiKey: values.hardcoverApiKey,
+                            })
+                          }
                         >
                           <BeakerIcon />
                           <span>
