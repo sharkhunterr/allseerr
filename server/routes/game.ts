@@ -7,7 +7,7 @@ import {
 import { getRepository } from '@server/datasource';
 import { GameMedia } from '@server/entity/GameMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
-import { Permission } from '@server/lib/permissions';
+import { hasPermission, Permission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -216,6 +216,26 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
     }
   }
 
+  // Game quota — mirrors the movie path. MANAGE_USERS bypass is
+  // already applied inside User.getQuota().
+  if (req.user) {
+    try {
+      const quotas = await req.user.getQuota();
+      if (quotas.game.restricted) {
+        return res.status(403).json({
+          status: 403,
+          message: 'Game quota exceeded.',
+          quota: quotas.game,
+        });
+      }
+    } catch (e) {
+      logger.warn('Quota check failed (proceeding without enforcement)', {
+        label: 'game',
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
   try {
     // Create or reuse game media
     let gameMedia = existing;
@@ -248,6 +268,27 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
     request.gameMedia = gameMedia;
 
     await requestRepo.save(request);
+
+    // Auto-approve: MANAGE_REQUESTS / AUTO_APPROVE (generic) / the
+    // per-type AUTO_APPROVE_GAME all greenlight it. Same OR-shaped
+    // check pattern as the book route above.
+    if (
+      req.user &&
+      hasPermission(
+        req.user.permissions,
+        [
+          Permission.MANAGE_REQUESTS,
+          Permission.AUTO_APPROVE,
+          Permission.AUTO_APPROVE_GAME,
+        ],
+        { type: 'or' }
+      )
+    ) {
+      gameMedia.status = MediaStatus.PROCESSING;
+      await gameMediaRepo.save(gameMedia);
+      request.status = MediaRequestStatus.APPROVED;
+      await requestRepo.save(request);
+    }
 
     logger.info(`Game request created: ${body.title} (${body.platformName})`, {
       label: 'game',

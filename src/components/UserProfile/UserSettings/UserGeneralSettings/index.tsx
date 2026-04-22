@@ -58,6 +58,9 @@ const messages = defineMessages(
     streamingRegionTip: 'Show streaming sites by regional availability',
     movierequestlimit: 'Movie Request Limit',
     seriesrequestlimit: 'Series Request Limit',
+    bookrequestlimit: 'Book Request Limit',
+    audiobookrequestlimit: 'Audiobook Request Limit',
+    gamerequestlimit: 'Game Request Limit',
     enableOverride: 'Override Global Limit',
     applanguage: 'Display Language',
     languageDefault: 'Default ({language})',
@@ -82,6 +85,9 @@ const UserGeneralSettings = () => {
   const { locale, setLocale } = useLocale();
   const [movieQuotaEnabled, setMovieQuotaEnabled] = useState(false);
   const [tvQuotaEnabled, setTvQuotaEnabled] = useState(false);
+  const [bookQuotaEnabled, setBookQuotaEnabled] = useState(false);
+  const [audiobookQuotaEnabled, setAudiobookQuotaEnabled] = useState(false);
+  const [gameQuotaEnabled, setGameQuotaEnabled] = useState(false);
   const router = useRouter();
   const {
     user,
@@ -131,6 +137,16 @@ const UserGeneralSettings = () => {
     setTvQuotaEnabled(
       data?.tvQuotaLimit != undefined && data?.tvQuotaDays != undefined
     );
+    setBookQuotaEnabled(
+      data?.bookQuotaLimit != undefined && data?.bookQuotaDays != undefined
+    );
+    setAudiobookQuotaEnabled(
+      data?.audiobookQuotaLimit != undefined &&
+        data?.audiobookQuotaDays != undefined
+    );
+    setGameQuotaEnabled(
+      data?.gameQuotaLimit != undefined && data?.gameQuotaDays != undefined
+    );
   }, [data]);
 
   if (!data && !error) {
@@ -167,6 +183,12 @@ const UserGeneralSettings = () => {
           movieQuotaDays: data?.movieQuotaDays,
           tvQuotaLimit: data?.tvQuotaLimit,
           tvQuotaDays: data?.tvQuotaDays,
+          bookQuotaLimit: data?.bookQuotaLimit,
+          bookQuotaDays: data?.bookQuotaDays,
+          audiobookQuotaLimit: data?.audiobookQuotaLimit,
+          audiobookQuotaDays: data?.audiobookQuotaDays,
+          gameQuotaLimit: data?.gameQuotaLimit,
+          gameQuotaDays: data?.gameQuotaDays,
           watchlistSyncMovies: data?.watchlistSyncMovies,
           watchlistSyncTv: data?.watchlistSyncTv,
         }}
@@ -189,6 +211,16 @@ const UserGeneralSettings = () => {
               movieQuotaDays: movieQuotaEnabled ? values.movieQuotaDays : null,
               tvQuotaLimit: tvQuotaEnabled ? values.tvQuotaLimit : null,
               tvQuotaDays: tvQuotaEnabled ? values.tvQuotaDays : null,
+              bookQuotaLimit: bookQuotaEnabled ? values.bookQuotaLimit : null,
+              bookQuotaDays: bookQuotaEnabled ? values.bookQuotaDays : null,
+              audiobookQuotaLimit: audiobookQuotaEnabled
+                ? values.audiobookQuotaLimit
+                : null,
+              audiobookQuotaDays: audiobookQuotaEnabled
+                ? values.audiobookQuotaDays
+                : null,
+              gameQuotaLimit: gameQuotaEnabled ? values.gameQuotaLimit : null,
+              gameQuotaDays: gameQuotaEnabled ? values.gameQuotaDays : null,
               watchlistSyncMovies: values.watchlistSyncMovies,
               watchlistSyncTv: values.watchlistSyncTv,
             });
@@ -536,6 +568,101 @@ const UserGeneralSettings = () => {
                                 ? data?.globalTvQuotaLimit
                                 : undefined
                             }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <label htmlFor="bookQuotaLimit" className="text-label">
+                        <span>
+                          {intl.formatMessage(messages.bookrequestlimit)}
+                        </span>
+                      </label>
+                      <div className="form-input-area">
+                        <div className="flex flex-col">
+                          <div className="mb-4 flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={bookQuotaEnabled}
+                              onChange={() => setBookQuotaEnabled((s) => !s)}
+                            />
+                            <span className="ml-2 text-gray-300">
+                              {intl.formatMessage(messages.enableOverride)}
+                            </span>
+                          </div>
+                          <QuotaSelector
+                            isDisabled={!bookQuotaEnabled}
+                            dayFieldName="bookQuotaDays"
+                            limitFieldName="bookQuotaLimit"
+                            mediaType="book"
+                            onChange={setFieldValue}
+                            defaultDays={values.bookQuotaDays}
+                            defaultLimit={values.bookQuotaLimit}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <label
+                        htmlFor="audiobookQuotaLimit"
+                        className="text-label"
+                      >
+                        <span>
+                          {intl.formatMessage(messages.audiobookrequestlimit)}
+                        </span>
+                      </label>
+                      <div className="form-input-area">
+                        <div className="flex flex-col">
+                          <div className="mb-4 flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={audiobookQuotaEnabled}
+                              onChange={() =>
+                                setAudiobookQuotaEnabled((s) => !s)
+                              }
+                            />
+                            <span className="ml-2 text-gray-300">
+                              {intl.formatMessage(messages.enableOverride)}
+                            </span>
+                          </div>
+                          <QuotaSelector
+                            isDisabled={!audiobookQuotaEnabled}
+                            dayFieldName="audiobookQuotaDays"
+                            limitFieldName="audiobookQuotaLimit"
+                            mediaType="audiobook"
+                            onChange={setFieldValue}
+                            defaultDays={values.audiobookQuotaDays}
+                            defaultLimit={values.audiobookQuotaLimit}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <label htmlFor="gameQuotaLimit" className="text-label">
+                        <span>
+                          {intl.formatMessage(messages.gamerequestlimit)}
+                        </span>
+                      </label>
+                      <div className="form-input-area">
+                        <div className="flex flex-col">
+                          <div className="mb-4 flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={gameQuotaEnabled}
+                              onChange={() => setGameQuotaEnabled((s) => !s)}
+                            />
+                            <span className="ml-2 text-gray-300">
+                              {intl.formatMessage(messages.enableOverride)}
+                            </span>
+                          </div>
+                          <QuotaSelector
+                            isDisabled={!gameQuotaEnabled}
+                            dayFieldName="gameQuotaDays"
+                            limitFieldName="gameQuotaLimit"
+                            mediaType="game"
+                            onChange={setFieldValue}
+                            defaultDays={values.gameQuotaDays}
+                            defaultLimit={values.gameQuotaLimit}
                           />
                         </div>
                       </div>

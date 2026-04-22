@@ -31,6 +31,14 @@ export enum Permission {
   VIEW_BLOCKLIST = 1073741824,
   REQUEST_BOOK = 536870912,
   REQUEST_AUDIOBOOK = 2147483648,
+  // Bits 32+ require BigInt-backed checks — `hasPermission` below
+  // converts the operands internally so these values behave exactly
+  // like the lower bits for the caller. Enum entries stay as number
+  // since the values fit well within Number.MAX_SAFE_INTEGER (2^53).
+  REQUEST_GAME = 4294967296,
+  AUTO_APPROVE_BOOK = 8589934592,
+  AUTO_APPROVE_AUDIOBOOK = 17179869184,
+  AUTO_APPROVE_GAME = 34359738368,
 }
 
 export interface PermissionCheckOptions {
@@ -42,6 +50,11 @@ export interface PermissionCheckOptions {
  * if the user has access to the permission provided. If the user has
  * the admin permission, true will always be returned from this check!
  *
+ * All arithmetic runs via BigInt so permissions past bit 31
+ * (REQUEST_GAME and the new AUTO_APPROVE_* entries for books /
+ * audiobooks / games) are honoured — JS's `&` / `|` operators cast
+ * to int32 and silently drop bits 32+.
+ *
  * @param permissions Single permission or array of permissions
  * @param value users current permission value
  * @param options Extra options to control permission check behavior (mainly for arrays)
@@ -51,26 +64,30 @@ export const hasPermission = (
   value: number,
   options: PermissionCheckOptions = { type: 'and' }
 ): boolean => {
-  let total = 0;
-
   // If we are not checking any permissions, bail out and return true
   if (permissions === 0) {
     return true;
   }
 
+  const v = BigInt(value);
+  const admin = BigInt(Permission.ADMIN);
+  const isAdmin = (v & admin) !== 0n;
+
   if (Array.isArray(permissions)) {
-    if (value & Permission.ADMIN) {
+    if (isAdmin) {
       return true;
     }
     switch (options.type) {
       case 'and':
-        return permissions.every((permission) => !!(value & permission));
+        return permissions.every(
+          (permission) => (v & BigInt(permission)) !== 0n
+        );
       case 'or':
-        return permissions.some((permission) => !!(value & permission));
+        return permissions.some(
+          (permission) => (v & BigInt(permission)) !== 0n
+        );
     }
-  } else {
-    total = permissions;
   }
 
-  return !!(value & Permission.ADMIN) || !!(value & total);
+  return isAdmin || (v & BigInt(permissions)) !== 0n;
 };

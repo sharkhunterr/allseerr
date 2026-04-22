@@ -1626,6 +1626,30 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
     }
   }
 
+  // Quota enforcement — same pattern as the movie / TV request path
+  // (see server/entity/MediaRequest.ts). Bypasses for MANAGE_USERS are
+  // applied inside User.getQuota().
+  if (req.user) {
+    try {
+      const quotas = await req.user.getQuota();
+      const slot = isBook ? quotas.book : quotas.audiobook;
+      if (slot.restricted) {
+        return res.status(403).json({
+          status: 403,
+          message: isBook
+            ? 'Book quota exceeded.'
+            : 'Audiobook quota exceeded.',
+          quota: slot,
+        });
+      }
+    } catch (e) {
+      logger.warn('Quota check failed (proceeding without enforcement)', {
+        label: 'book',
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
   try {
     // Create or reuse media entity. When reusing, back-fill stale/empty
     // fields with fresh metadata from the request body so downstream
@@ -1742,13 +1766,20 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
 
     await requestRepo.save(request);
 
-    // Auto-approval check
-    const autoApprovePermission = isBook
-      ? Permission.AUTO_APPROVE
-      : Permission.AUTO_APPROVE;
+    // Auto-approval check — MANAGE_REQUESTS and the generic
+    // AUTO_APPROVE still green-light everything, otherwise we look at
+    // the per-media-type flags that mirror AUTO_APPROVE_MOVIE /
+    // AUTO_APPROVE_TV on the movie/TV side.
+    const autoApprovePermissions = [
+      Permission.MANAGE_REQUESTS,
+      Permission.AUTO_APPROVE,
+      isBook ? Permission.AUTO_APPROVE_BOOK : Permission.AUTO_APPROVE_AUDIOBOOK,
+    ];
     if (
       req.user &&
-      hasPermission(req.user.permissions, autoApprovePermission)
+      hasPermission(req.user.permissions, autoApprovePermissions, {
+        type: 'or',
+      })
     ) {
       media.status = MediaStatus.PROCESSING;
       await saveBookMedia(media, body.mediaType);

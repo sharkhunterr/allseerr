@@ -57,10 +57,22 @@ userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
         movieQuotaDays: user.movieQuotaDays,
         tvQuotaLimit: user.tvQuotaLimit,
         tvQuotaDays: user.tvQuotaDays,
+        bookQuotaLimit: user.bookQuotaLimit,
+        bookQuotaDays: user.bookQuotaDays,
+        audiobookQuotaLimit: user.audiobookQuotaLimit,
+        audiobookQuotaDays: user.audiobookQuotaDays,
+        gameQuotaLimit: user.gameQuotaLimit,
+        gameQuotaDays: user.gameQuotaDays,
         globalMovieQuotaDays: defaultQuotas.movie.quotaDays,
         globalMovieQuotaLimit: defaultQuotas.movie.quotaLimit,
         globalTvQuotaDays: defaultQuotas.tv.quotaDays,
         globalTvQuotaLimit: defaultQuotas.tv.quotaLimit,
+        globalBookQuotaDays: defaultQuotas.book?.quotaDays,
+        globalBookQuotaLimit: defaultQuotas.book?.quotaLimit,
+        globalAudiobookQuotaDays: defaultQuotas.audiobook?.quotaDays,
+        globalAudiobookQuotaLimit: defaultQuotas.audiobook?.quotaLimit,
+        globalGameQuotaDays: defaultQuotas.game?.quotaDays,
+        globalGameQuotaLimit: defaultQuotas.game?.quotaLimit,
         watchlistSyncMovies: user.settings?.watchlistSyncMovies,
         watchlistSyncTv: user.settings?.watchlistSyncTv,
       });
@@ -117,6 +129,12 @@ userSettingsRoutes.post<
       user.movieQuotaLimit = req.body.movieQuotaLimit;
       user.tvQuotaDays = req.body.tvQuotaDays;
       user.tvQuotaLimit = req.body.tvQuotaLimit;
+      user.bookQuotaDays = req.body.bookQuotaDays;
+      user.bookQuotaLimit = req.body.bookQuotaLimit;
+      user.audiobookQuotaDays = req.body.audiobookQuotaDays;
+      user.audiobookQuotaLimit = req.body.audiobookQuotaLimit;
+      user.gameQuotaDays = req.body.gameQuotaDays;
+      user.gameQuotaLimit = req.body.gameQuotaLimit;
     }
 
     if (!user.settings) {

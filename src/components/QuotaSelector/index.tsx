@@ -7,14 +7,23 @@ const messages = defineMessages('components.QuotaSelector', {
     '{quotaLimit} <quotaUnits>{movies} per {quotaDays} {days}</quotaUnits>',
   tvRequests:
     '{quotaLimit} <quotaUnits>{seasons} per {quotaDays} {days}</quotaUnits>',
+  bookRequests:
+    '{quotaLimit} <quotaUnits>{books} per {quotaDays} {days}</quotaUnits>',
+  audiobookRequests:
+    '{quotaLimit} <quotaUnits>{audiobooks} per {quotaDays} {days}</quotaUnits>',
+  gameRequests:
+    '{quotaLimit} <quotaUnits>{games} per {quotaDays} {days}</quotaUnits>',
   movies: '{count, plural, one {movie} other {movies}}',
   seasons: '{count, plural, one {season} other {seasons}}',
+  books: '{count, plural, one {book} other {books}}',
+  audiobooks: '{count, plural, one {audiobook} other {audiobooks}}',
+  games: '{count, plural, one {game} other {games}}',
   days: '{count, plural, one {day} other {days}}',
   unlimited: 'Unlimited',
 });
 
 interface QuotaSelectorProps {
-  mediaType: 'movie' | 'tv';
+  mediaType: 'movie' | 'tv' | 'book' | 'audiobook' | 'game';
   defaultDays?: number;
   defaultLimit?: number;
   dayOverride?: number;
@@ -53,7 +62,15 @@ const QuotaSelector = ({
   return (
     <div className={`${isDisabled ? 'opacity-50' : ''}`}>
       {intl.formatMessage(
-        mediaType === 'movie' ? messages.movieRequests : messages.tvRequests,
+        mediaType === 'movie'
+          ? messages.movieRequests
+          : mediaType === 'tv'
+            ? messages.tvRequests
+            : mediaType === 'book'
+              ? messages.bookRequests
+              : mediaType === 'audiobook'
+                ? messages.audiobookRequests
+                : messages.gameRequests,
         {
           quotaLimit: (
             <select
@@ -91,6 +108,11 @@ const QuotaSelector = ({
           ),
           movies: intl.formatMessage(messages.movies, { count: quotaLimit }),
           seasons: intl.formatMessage(messages.seasons, { count: quotaLimit }),
+          books: intl.formatMessage(messages.books, { count: quotaLimit }),
+          audiobooks: intl.formatMessage(messages.audiobooks, {
+            count: quotaLimit,
+          }),
+          games: intl.formatMessage(messages.games, { count: quotaLimit }),
           days: intl.formatMessage(messages.days, { count: quotaDays }),
           quotaUnits: function quotaUnits(msg) {
             return (

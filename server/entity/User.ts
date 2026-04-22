@@ -105,7 +105,25 @@ export class User {
   @Column({ type: 'varchar', nullable: true, unique: true })
   public oidcSub?: string | null;
 
-  @Column({ type: 'integer', default: 0 })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    transformer: {
+      // BigInt round-trip: TypeORM hands back a string for bigint
+      // columns (precision would be lost as Number for values above
+      // 2^53). Our permissions mask stays well under 2^53 for the
+      // foreseeable future (a few dozen bits), so coerce back to a
+      // regular Number for runtime math — `hasPermission` uses BigInt
+      // internally when needed.
+      to: (value: number | undefined | null): number | null =>
+        value ?? 0,
+      from: (value: string | number | null | undefined): number => {
+        if (value == null) return 0;
+        if (typeof value === 'number') return value;
+        return Number(value);
+      },
+    },
+  })
   public permissions = 0;
 
   @Column()
@@ -137,6 +155,24 @@ export class User {
 
   @Column({ nullable: true })
   public tvQuotaDays?: number;
+
+  @Column({ nullable: true })
+  public bookQuotaLimit?: number;
+
+  @Column({ nullable: true })
+  public bookQuotaDays?: number;
+
+  @Column({ nullable: true })
+  public audiobookQuotaLimit?: number;
+
+  @Column({ nullable: true })
+  public audiobookQuotaDays?: number;
+
+  @Column({ nullable: true })
+  public gameQuotaLimit?: number;
+
+  @Column({ nullable: true })
+  public gameQuotaDays?: number;
 
   @OneToOne(() => UserSettings, (settings) => settings.user, {
     cascade: true,
@@ -348,6 +384,59 @@ export class User {
         ).reduce((sum: number, req: MediaRequest) => sum + req.seasonCount, 0)
       : 0;
 
+    // Book, audiobook and game quotas follow the simpler movie
+    // pattern: one-request-per-work, counted within a rolling window.
+    const countSimpleQuota = async (
+      mediaType: MediaType,
+      limit: number,
+      days: number
+    ): Promise<number> => {
+      if (!limit) return 0;
+      const since = new Date();
+      if (days) since.setDate(since.getDate() - days);
+      return requestRepository.count({
+        where: {
+          requestedBy: { id: this.id },
+          ...(days ? { createdAt: AfterDate(since) } : {}),
+          type: mediaType,
+          status: Not(MediaRequestStatus.DECLINED),
+        },
+      });
+    };
+
+    const bookQuotaLimit = !canBypass
+      ? (this.bookQuotaLimit ?? defaultQuotas.book?.quotaLimit ?? 0)
+      : 0;
+    const bookQuotaDays =
+      this.bookQuotaDays ?? defaultQuotas.book?.quotaDays ?? 0;
+    const bookQuotaUsed = await countSimpleQuota(
+      MediaType.BOOK,
+      bookQuotaLimit,
+      bookQuotaDays
+    );
+
+    const audiobookQuotaLimit = !canBypass
+      ? (this.audiobookQuotaLimit ?? defaultQuotas.audiobook?.quotaLimit ?? 0)
+      : 0;
+    const audiobookQuotaDays =
+      this.audiobookQuotaDays ?? defaultQuotas.audiobook?.quotaDays ?? 0;
+    const audiobookQuotaUsed = await countSimpleQuota(
+      MediaType.AUDIOBOOK,
+      audiobookQuotaLimit,
+      audiobookQuotaDays
+    );
+
+    const gameQuotaLimit = !canBypass
+      ? (this.gameQuotaLimit ?? defaultQuotas.game?.quotaLimit ?? 0)
+      : 0;
+    const gameQuotaDays =
+      this.gameQuotaDays ?? defaultQuotas.game?.quotaDays ?? 0;
+    const gameQuotaUsed = await countSimpleQuota(
+      MediaType.GAME,
+      gameQuotaLimit,
+      gameQuotaDays
+    );
+
     return {
       movie: {
         days: movieQuotaDays,
@@ -368,6 +457,35 @@ export class User {
           ? Math.max(0, tvQuotaLimit - tvQuotaUsed)
           : undefined,
         restricted: !!(tvQuotaLimit && tvQuotaLimit - tvQuotaUsed <= 0),
+      },
+      book: {
+        days: bookQuotaDays,
+        limit: bookQuotaLimit,
+        used: bookQuotaUsed,
+        remaining: bookQuotaLimit
+          ? Math.max(0, bookQuotaLimit - bookQuotaUsed)
+          : undefined,
+        restricted: !!(bookQuotaLimit && bookQuotaLimit - bookQuotaUsed <= 0),
+      },
+      audiobook: {
+        days: audiobookQuotaDays,
+        limit: audiobookQuotaLimit,
+        used: audiobookQuotaUsed,
+        remaining: audiobookQuotaLimit
+          ? Math.max(0, audiobookQuotaLimit - audiobookQuotaUsed)
+          : undefined,
+        restricted: !!(
+          audiobookQuotaLimit && audiobookQuotaLimit - audiobookQuotaUsed <= 0
+        ),
+      },
+      game: {
+        days: gameQuotaDays,
+        limit: gameQuotaLimit,
+        used: gameQuotaUsed,
+        remaining: gameQuotaLimit
+          ? Math.max(0, gameQuotaLimit - gameQuotaUsed)
+          : undefined,
+        restricted: !!(gameQuotaLimit && gameQuotaLimit - gameQuotaUsed <= 0),
       },
     };
   }

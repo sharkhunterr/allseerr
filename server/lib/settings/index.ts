@@ -147,6 +147,9 @@ export interface MainSettings {
   defaultQuotas: {
     movie: Quota;
     tv: Quota;
+    book: Quota;
+    audiobook: Quota;
+    game: Quota;
   };
   hideAvailable: boolean;
   hideBlocklisted: boolean;
@@ -521,6 +524,9 @@ class Settings {
         defaultQuotas: {
           movie: {},
           tv: {},
+          book: {},
+          audiobook: {},
+          game: {},
         },
         hideAvailable: false,
         hideBlocklisted: false,

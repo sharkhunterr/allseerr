@@ -25,6 +25,13 @@ export const messages = defineMessages('components.PermissionEdit', {
   requestTv: 'Request Series',
   requestTvDescription:
     'Grant permission to submit requests for non-4K series.',
+  requestBook: 'Request Books',
+  requestBookDescription: 'Grant permission to submit book requests.',
+  requestAudiobook: 'Request Audiobooks',
+  requestAudiobookDescription:
+    'Grant permission to submit audiobook requests.',
+  requestGame: 'Request Games',
+  requestGameDescription: 'Grant permission to submit game requests.',
   autoapprove: 'Auto-Approve',
   autoapproveDescription:
     'Grant automatic approval for all non-4K media requests.',
@@ -34,6 +41,13 @@ export const messages = defineMessages('components.PermissionEdit', {
   autoapproveSeries: 'Auto-Approve Series',
   autoapproveSeriesDescription:
     'Grant automatic approval for non-4K series requests.',
+  autoapproveBook: 'Auto-Approve Books',
+  autoapproveBookDescription: 'Grant automatic approval for book requests.',
+  autoapproveAudiobook: 'Auto-Approve Audiobooks',
+  autoapproveAudiobookDescription:
+    'Grant automatic approval for audiobook requests.',
+  autoapproveGame: 'Auto-Approve Games',
+  autoapproveGameDescription: 'Grant automatic approval for game requests.',
   autoapprove4k: 'Auto-Approve 4K',
   autoapprove4kDescription:
     'Grant automatic approval for all 4K media requests.',
@@ -182,6 +196,24 @@ export const PermissionEdit = ({
           description: intl.formatMessage(messages.requestTvDescription),
           permission: Permission.REQUEST_TV,
         },
+        {
+          id: 'request-book',
+          name: intl.formatMessage(messages.requestBook),
+          description: intl.formatMessage(messages.requestBookDescription),
+          permission: Permission.REQUEST_BOOK,
+        },
+        {
+          id: 'request-audiobook',
+          name: intl.formatMessage(messages.requestAudiobook),
+          description: intl.formatMessage(messages.requestAudiobookDescription),
+          permission: Permission.REQUEST_AUDIOBOOK,
+        },
+        {
+          id: 'request-game',
+          name: intl.formatMessage(messages.requestGame),
+          description: intl.formatMessage(messages.requestGameDescription),
+          permission: Permission.REQUEST_GAME,
+        },
       ],
     },
     {
@@ -215,6 +247,48 @@ export const PermissionEdit = ({
           requires: [
             {
               permissions: [Permission.REQUEST, Permission.REQUEST_TV],
+              type: 'or',
+            },
+          ],
+        },
+        {
+          id: 'autoapprovebook',
+          name: intl.formatMessage(messages.autoapproveBook),
+          description: intl.formatMessage(
+            messages.autoapproveBookDescription
+          ),
+          permission: Permission.AUTO_APPROVE_BOOK,
+          requires: [
+            {
+              permissions: [Permission.REQUEST, Permission.REQUEST_BOOK],
+              type: 'or',
+            },
+          ],
+        },
+        {
+          id: 'autoapproveaudiobook',
+          name: intl.formatMessage(messages.autoapproveAudiobook),
+          description: intl.formatMessage(
+            messages.autoapproveAudiobookDescription
+          ),
+          permission: Permission.AUTO_APPROVE_AUDIOBOOK,
+          requires: [
+            {
+              permissions: [Permission.REQUEST, Permission.REQUEST_AUDIOBOOK],
+              type: 'or',
+            },
+          ],
+        },
+        {
+          id: 'autoapprovegame',
+          name: intl.formatMessage(messages.autoapproveGame),
+          description: intl.formatMessage(
+            messages.autoapproveGameDescription
+          ),
+          permission: Permission.AUTO_APPROVE_GAME,
+          requires: [
+            {
+              permissions: [Permission.REQUEST, Permission.REQUEST_GAME],
               type: 'or',
             },
           ],
