@@ -126,135 +126,6 @@ const remapToPublicUrl = (
   return storedUrl;
 };
 
-interface AuthorSearchHit {
-  type: 'author';
-  key: string;
-  name: string;
-  photoUrl?: string;
-  bio?: string;
-  booksCount?: number;
-}
-
-const normalizeAuthorName = (s: string): string =>
-  s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-/**
- * Look up top-result author cards for a free-text search query. Always
- * tries a direct Hasura `_eq` on several spacing variants first because
- * Hardcover's public Typesense mis-ranks short / punctuated queries so
- * badly that the top hit is often a botanical gardens listing instead
- * of the obvious author. Falls back to Typesense when the exact lookup
- * finds nothing, and filters the Typesense candidates by surname-token
- * overlap so the result list never contains nonsense matches.
- */
-async function resolveTopAuthorMatches(
-  hc: HardcoverAPI,
-  query: string,
-  limit = 3
-): Promise<AuthorSearchHit[]> {
-  const trimmed = query.trim();
-  if (!trimmed) return [];
-
-  // Normalised query tokens, filtered to things long enough to be
-  // identifying — a lone "J" in "J.K. Rowling" or a filler word is
-  // useless for disambiguation.
-  const qTokens = normalizeAuthorName(trimmed)
-    .split(' ')
-    .filter((t) => t.length > 1);
-  // No identifying tokens (e.g. query is a single initial) → bail
-  // out rather than surface noise.
-  if (qTokens.length === 0) return [];
-
-  // A candidate is valid only if ALL identifying query tokens appear
-  // as tokens in the candidate's name. This prevents "Harry Potter"
-  // the book title from surfacing "Beatrix Potter", and "Rowling"
-  // from attaching Kew Staff Royal Botanic Gardens.
-  const candidateMatches = (name: string): boolean => {
-    const cTokens = normalizeAuthorName(name).split(' ').filter(Boolean);
-    return qTokens.every((t) => cTokens.includes(t));
-  };
-
-  // Fan out Hasura exact-match (across spacing variants when the
-  // query contains dots) AND Typesense in parallel. Then merge and
-  // sort by books_count desc so the prolific author wins over any
-  // obscure homonym literally named "Tolkien" with zero books. Fixes
-  // the "Tolkien card leads to empty author page" report where the
-  // previous short-circuit returned the noise homonym before even
-  // looking at Typesense's better hits.
-  const hasDots = /\./.test(trimmed);
-  const variants = hasDots
-    ? Array.from(
-        new Set(
-          [
-            trimmed,
-            trimmed.replace(/\./g, '. ').replace(/\s+/g, ' ').trim(),
-            trimmed.replace(/\./g, ' ').replace(/\s+/g, ' ').trim(),
-            trimmed.replace(/\./g, '').replace(/\s+/g, ' ').trim(),
-          ].filter((v) => v.length > 0)
-        )
-      )
-    : [trimmed];
-  // Hardcover's public Hasura blocks `_like` along with `_ilike`
-  // ("ilike and related operations are not permitted"), so the only
-  // non-Typesense paths we have are `_eq` on exact-spelling variants.
-  // Typesense itself is erratic for surname queries — "Tolkien"
-  // routinely misses J.R.R. Tolkien out of the top 10 — so we ask
-  // for a much wider window (50) and trust the post-filter +
-  // books_count sort to surface the right person.
-  const [exactBatches, typesenseCandidates] = await Promise.all([
-    Promise.all(
-      variants.map((v) => hc.findAuthorByExactName(v).catch(() => []))
-    ),
-    hc.searchAuthors(trimmed, 50).catch(() => []),
-  ]);
-
-  type Raw = {
-    id: number;
-    name: string;
-    bio?: string;
-    photoUrl?: string;
-    booksCount?: number;
-  };
-  const merged = new Map<number, Raw>();
-  for (const batch of exactBatches) {
-    for (const r of batch) merged.set(r.id, r);
-  }
-  for (const c of typesenseCandidates) {
-    if (!merged.has(c.id)) merged.set(c.id, c);
-  }
-
-  const ranked = Array.from(merged.values())
-    .filter((r) => candidateMatches(r.name))
-    // Drop authors with no books — they're usually publisher stubs
-    // or duplicate entries that would open an empty author page.
-    .filter((r) => (r.booksCount ?? 0) > 0)
-    .sort((a, b) => (b.booksCount ?? 0) - (a.booksCount ?? 0));
-  logger.debug('Top author search resolved', {
-    label: 'book',
-    query,
-    qTokens,
-    mergedCandidates: merged.size,
-    candidateNames: Array.from(merged.values()).map(
-      (r) => `${r.name} (${r.booksCount ?? 0})`
-    ),
-    accepted: ranked.slice(0, limit).map((r) => r.name),
-  });
-  return ranked.slice(0, limit).map((a) => ({
-    type: 'author',
-    key: `hardcover:${a.id}`,
-    name: a.name,
-    photoUrl: a.photoUrl,
-    bio: a.bio,
-    booksCount: a.booksCount,
-  }));
-}
-
 /**
  * GET /api/v1/book/search
  * Search for books or audiobooks via OpenLibrary.
@@ -309,12 +180,6 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         const hc = new HardcoverAPI(bookHcKey);
         const prefLang =
           audioCfg?.preferredLanguage?.toLowerCase().trim() || undefined;
-        // Kick author search in parallel — shared helper so Typesense
-        // garbage and punctuated queries ("J.K. Rowling") get handled
-        // the same everywhere.
-        const authorsPromise = resolveTopAuthorMatches(hc, query, 3).catch(
-          () => [] as AuthorSearchHit[]
-        );
         const hits = await hc.searchAudiobooks(query, limit);
         const enriched: Array<{
           openLibraryId: string;
@@ -378,18 +243,11 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
           });
         }
 
-        const authors = await authorsPromise;
-        // Author cards always lead the grid — same treatment as the
-        // series card on book search ("cela mets en top comme les
-        // series de livres"). The helper already rejects irrelevant
-        // Typesense matches, so anything that arrives here is worth
-        // showing.
-        const combined = [...authors, ...enriched];
         return res.status(200).json({
           page,
           totalPages: 1,
-          totalResults: combined.length,
-          results: combined,
+          totalResults: enriched.length,
+          results: enriched,
         });
       }
 
@@ -399,21 +257,6 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         limit,
         Math.max(0, page - 1)
       );
-
-      // Author cards at the top of the grid — same pattern as book
-      // search. We always try Hardcover when the book-side key is set,
-      // so the Audible-primary audiobook tab still benefits from the
-      // author lookup (no other provider exposes free-text author
-      // search).
-      const bookHcKeyForAudible = bookHcKey;
-      const authorsPromise =
-        bookHcKeyForAudible && bookHcKeyForAudible.length > 0
-          ? resolveTopAuthorMatches(
-              new HardcoverAPI(bookHcKeyForAudible),
-              query,
-              3
-            ).catch(() => [] as AuthorSearchHit[])
-          : Promise.resolve([] as AuthorSearchHit[]);
 
       const enrichedResults = await Promise.all(
         results.map(async (result) => {
@@ -438,16 +281,11 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         })
       );
 
-      const authors = await authorsPromise;
-      // Author cards lead the grid unconditionally — the helper has
-      // already filtered out garbage matches.
-      const combined = [...authors, ...enrichedResults];
-
       return res.status(200).json({
         page,
         totalPages: Math.ceil(totalResults / limit),
-        totalResults: combined.length,
-        results: combined,
+        totalResults: enrichedResults.length,
+        results: enrichedResults,
       });
     }
 
@@ -497,33 +335,13 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
       aggregateStatus?: MediaStatus;
     };
 
-    type AuthorHit = {
-      type: 'author';
-      key: string;
-      name: string;
-      photoUrl?: string;
-      bio?: string;
-      booksCount?: number;
-    };
-
-    // Series + author cards are Hardcover-only features in this
-    // codebase (OL has no usable free-text search for those).
-    //
-    // Author cards: enabled whenever a Hardcover key is configured —
-    // they're identity-less decorations routed to /book/author/:id,
-    // so the user benefits even on OpenLibrary-primary deployments.
-    //
-    // Series cards: still gated on effectivePrimary === 'hardcover'
-    // because they share identity with the series detail route and
-    // would mis-link when books come from OpenLibrary.
+    // Series cards stay Hardcover-only: they share identity with the
+    // /book/series/:id route and would mis-link on OpenLibrary-primary.
+    // Author cards at the top of the search grid are intentionally
+    // disabled — Hardcover's public Typesense + Hasura combo doesn't
+    // rank the obvious author reliably (see b85fffd4 / 50b50b98) and
+    // the feature was more confusing than useful.
     let seriesPromise: Promise<SeriesHit[]> = Promise.resolve([]);
-    let authorsPromise: Promise<AuthorHit[]> = Promise.resolve([]);
-    if (providerCfg.hardcoverApiKey) {
-      const hcForAuthors = new HardcoverAPI(providerCfg.hardcoverApiKey);
-      authorsPromise = resolveTopAuthorMatches(hcForAuthors, query, 3)
-        .then((hits) => hits as AuthorHit[])
-        .catch(() => [] as AuthorHit[]);
-    }
     if (effectivePrimary === 'hardcover') {
       const hcForSeries = new HardcoverAPI(providerCfg.hardcoverApiKey);
       seriesPromise = hcForSeries
@@ -685,10 +503,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
     // Overlay BookMedia availability — single-key lookup (the primary
     // source's key) is enough now that identity no longer flips
     // between sources.
-    const [seriesHits, authorHits] = await Promise.all([
-      seriesPromise,
-      authorsPromise,
-    ]);
+    const seriesHits = await seriesPromise;
     const bookMediaRepo = getRepository(BookMedia);
     const enrichedBooks = await Promise.all(
       merged.map(async (result) => {
@@ -720,11 +535,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         weakSeriesMatches.push(s);
       }
     }
-    // Author cards always lead the grid when there are matches —
-    // resolveTopAuthorMatches already filtered out nonsense Typesense
-    // results so we don't need a secondary strong/weak split here.
     const finalResults = [
-      ...authorHits,
       ...strongSeriesMatches,
       ...enrichedBooks,
       ...weakSeriesMatches,
