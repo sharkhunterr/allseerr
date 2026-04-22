@@ -5049,6 +5049,99 @@ paths:
                 properties:
                   success: { type: boolean }
                   message: { type: string }
+  /settings/audiobook/metadata-providers:
+    get:
+      summary: Get audiobook metadata provider config
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  primarySource:
+                    type: string
+                    enum: [audible, hardcover]
+                  audible:
+                    type: boolean
+                  audibleRegion:
+                    type: string
+                  hardcover:
+                    type: boolean
+                  hardcoverApiKey:
+                    type: string
+                  preferredLanguage:
+                    type: string
+                  languagePolicy:
+                    type: string
+                    enum: [prefer, strict]
+    put:
+      summary: Update audiobook metadata provider config
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                primarySource:
+                  type: string
+                  enum: [audible, hardcover]
+                audible:
+                  type: boolean
+                audibleRegion:
+                  type: string
+                hardcover:
+                  type: boolean
+                hardcoverApiKey:
+                  type: string
+                preferredLanguage:
+                  type: string
+                languagePolicy:
+                  type: string
+                  enum: [prefer, strict]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/audiobook/metadata-providers/test:
+    post:
+      summary: Test an audiobook metadata provider's credentials
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  enum: [audible, hardcover]
+                audibleRegion:
+                  type: string
+                apiKey:
+                  type: string
+              required: [provider]
+      responses:
+        '200':
+          description: Test complete (see success flag in body)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
   /settings/book/download-managers:
     get:
       summary: Get book download manager instances
