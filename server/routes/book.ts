@@ -200,12 +200,22 @@ async function resolveTopAuthorMatches(
         )
       )
     : [trimmed];
-  const [exactBatches, typesenseCandidates] = await Promise.all([
-    Promise.all(
-      variants.map((v) => hc.findAuthorByExactName(v).catch(() => []))
-    ),
-    hc.searchAuthors(trimmed, 10).catch(() => []),
-  ]);
+  // Typesense's public index on Hardcover is effectively broken for
+  // surname queries — "Tolkien" returns NASA history office and
+  // assorted unknowns in the top 10, with no J.R.R. Tolkien in sight.
+  // We compensate by also doing a token-prefix `_like` on each
+  // identifying token, which hits the Postgres index directly and
+  // reliably surfaces authors whose full name contains that token.
+  const [exactBatches, typesenseCandidates, ...tokenBatches] =
+    await Promise.all([
+      Promise.all(
+        variants.map((v) => hc.findAuthorByExactName(v).catch(() => []))
+      ),
+      hc.searchAuthors(trimmed, 10).catch(() => []),
+      ...qTokens.map((t) =>
+        hc.findAuthorsByTokenLike(t, 25).catch(() => [])
+      ),
+    ]);
 
   type Raw = {
     id: number;
@@ -220,6 +230,11 @@ async function resolveTopAuthorMatches(
   }
   for (const c of typesenseCandidates) {
     if (!merged.has(c.id)) merged.set(c.id, c);
+  }
+  for (const batch of tokenBatches) {
+    for (const r of batch) {
+      if (!merged.has(r.id)) merged.set(r.id, r);
+    }
   }
 
   const ranked = Array.from(merged.values())

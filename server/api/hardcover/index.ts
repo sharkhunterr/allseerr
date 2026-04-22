@@ -751,6 +751,95 @@ class HardcoverAPI {
   }
 
   /**
+   * Prefix lookup on the authors table. Hardcover's public Hasura
+   * rejects `_ilike` but allows case-sensitive `_like`, so we try
+   * both the exact casing and a capital-first variant of the query
+   * to cover the common author-name capitalisation. Returns up to
+   * `limit` rows sorted by books_count desc so prolific authors
+   * surface first. Used as a fallback when Typesense fails to rank
+   * the obvious author (e.g. "Tolkien" returning unrelated hits).
+   */
+  async findAuthorsByTokenLike(
+    token: string,
+    limit = 25
+  ): Promise<
+    Array<{ id: number; name: string; bio?: string; photoUrl?: string; booksCount?: number }>
+  > {
+    const trimmed = token.trim();
+    if (!trimmed) return [];
+    // Capital-first variant covers the common case author names are
+    // stored as "Tolkien" rather than "tolkien". `_like` is case-
+    // sensitive on Postgres so we have to OR the two casings.
+    const capital =
+      trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+    const lower = trimmed.toLowerCase();
+    const patterns = Array.from(
+      new Set(
+        [
+          `${capital}%`,
+          `% ${capital}%`,
+          `${lower}%`,
+          `% ${lower}%`,
+        ]
+      )
+    );
+    return cached(
+      `author:tokenlike:${lower}:${limit}`,
+      async () => {
+        const orClauses = patterns
+          .map((_, i) => `{ name: { _like: $p${i} } }`)
+          .join(', ');
+        const varDecls = patterns
+          .map((_, i) => `$p${i}: String!`)
+          .join(', ');
+        const gqlQuery = `
+          query AuthorsByTokenLike(${varDecls}, $limit: Int!) {
+            authors(
+              where: { _or: [${orClauses}] }
+              order_by: { books_count: desc_nulls_last }
+              limit: $limit
+            ) {
+              id
+              name
+              bio
+              cached_image
+              books_count
+            }
+          }
+        `;
+        const vars: Record<string, unknown> = { limit };
+        patterns.forEach((p, i) => {
+          vars[`p${i}`] = p;
+        });
+        const { data } = await this.gql<{
+          authors: Array<{
+            id: number;
+            name: string;
+            bio?: string | null;
+            cached_image?: string | { url?: string } | null;
+            books_count?: number | null;
+          }>;
+        }>(gqlQuery, vars);
+        return (data?.authors ?? []).map((a) => {
+          const photoRaw = a.cached_image;
+          const photo =
+            typeof photoRaw === 'string'
+              ? photoRaw
+              : photoRaw?.url ?? undefined;
+          return {
+            id: a.id,
+            name: a.name,
+            bio: a.bio ?? undefined,
+            photoUrl: photo,
+            booksCount: a.books_count ?? undefined,
+          };
+        });
+      },
+      3600
+    );
+  }
+
+  /**
    * Direct Hasura lookup of an author by exact name. Used as a
    * fallback when Typesense returns garbage for short / punctuated
    * queries (e.g. "J.K. Rowling" → unrelated mathematicians and
