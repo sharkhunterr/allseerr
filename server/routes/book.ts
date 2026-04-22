@@ -1752,10 +1752,18 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         // didn't find the book (common for less popular titles or
         // ASINs that only exist in foreign Audible regions).
         if (!authorKey && product.authorName) {
+          const primaryName = product.authorName.split(',')[0]?.trim();
           try {
-            const primaryName = product.authorName.split(',')[0]?.trim();
             if (primaryName) {
               const [match] = await hc.searchAuthors(primaryName, 1);
+              logger.info('Audiobook author fallback search', {
+                label: 'book',
+                asin: product.asin,
+                primaryName,
+                matched: !!match,
+                matchId: match?.id,
+                matchName: match?.name,
+              });
               if (match) {
                 const detail = await hc.getAuthor(match.id);
                 authorKey = `hardcover:${match.id}`;
@@ -1766,10 +1774,25 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
                 authorDeathDate = detail?.death_date ?? undefined;
               }
             }
-          } catch {
-            /* best-effort */
+          } catch (e) {
+            logger.warn('Audiobook author fallback threw', {
+              label: 'book',
+              asin: product.asin,
+              primaryName,
+              error: e instanceof Error ? e.message : String(e),
+            });
           }
         }
+      } else {
+        // Surface why the enrichment path was skipped — either the
+        // key isn't set or neither provider has the Hardcover flag on.
+        logger.info('Audiobook Hardcover enrichment skipped (gate off)', {
+          label: 'book',
+          asin: product.asin,
+          hasKey: !!bookCfg?.hardcoverApiKey,
+          bookFlag: !!bookCfg?.hardcover,
+          audioFlag: !!audioCfg?.hardcover,
+        });
       }
 
       return res.status(200).json({
