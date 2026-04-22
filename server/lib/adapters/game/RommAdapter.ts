@@ -255,7 +255,13 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
   async listCollections(): Promise<RommCollectionSummary[]> {
     const key = 'collections:list';
     const hit = rommCache.get<RommCollectionSummary[]>(key);
-    if (hit) return hit;
+    if (hit) {
+      logger.debug('ROMM listCollections cache hit', {
+        label: 'romm',
+        count: hit.length,
+      });
+      return hit;
+    }
     try {
       const response = await this.axios.get<RommCollectionRaw[]>(
         '/collections'
@@ -269,8 +275,15 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
         romCount: c.rom_count ?? c.roms?.length ?? undefined,
       }));
       // 10 min TTL — collections change rarely but a longer window
-      // would mask a newly-created collection for too long.
+      // would mask a newly-created collection for too long. The
+      // scheduled ROMM Collections Scan primes this cache directly
+      // so the first interactive lookup is always warm when a scan
+      // has run since the server started.
       rommCache.set(key, summaries, 600);
+      logger.debug('ROMM listCollections fetched', {
+        label: 'romm',
+        count: summaries.length,
+      });
       return summaries;
     } catch (e) {
       logger.warn('ROMM listCollections failed', {

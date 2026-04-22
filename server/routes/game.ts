@@ -155,6 +155,7 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
     const romAdapter = createRommAdapterFromSettings();
     if (romAdapter) {
       try {
+        const startedAt = Date.now();
         const all = await romAdapter.listCollections();
         const q = query.toLowerCase().trim();
         collectionHits = all
@@ -168,6 +169,14 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
             coverUrl: c.coverUrl,
             romCount: c.romCount,
           }));
+        logger.info('ROMM collection search match', {
+          label: 'romm',
+          query,
+          totalCollections: all.length,
+          matched: collectionHits.length,
+          matchedNames: collectionHits.map((c) => c.name),
+          ms: Date.now() - startedAt,
+        });
       } catch (e) {
         logger.debug('ROMM collection match on game search failed', {
           label: 'game',
@@ -611,6 +620,7 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
       const romAdapter = createRommAdapterFromSettings();
       if (romAdapter) {
         try {
+          const startedAt = Date.now();
           const summaries = await romAdapter.listCollections();
           // listCollections response lacks rom_ids on most ROMM
           // installs — we need the full getCollection for each to
@@ -628,6 +638,15 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
           collections = matched.filter(
             (c): c is NonNullable<typeof c> => c !== null
           );
+          logger.info('ROMM collections resolved for game detail', {
+            label: 'romm',
+            igdbId,
+            rommIds,
+            totalCollections: summaries.length,
+            matched: collections.length,
+            matchedNames: collections.map((c) => c.name),
+            ms: Date.now() - startedAt,
+          });
         } catch (e) {
           logger.debug('ROMM collection enrichment failed on game detail', {
             label: 'game',
