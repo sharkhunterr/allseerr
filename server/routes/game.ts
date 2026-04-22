@@ -8,6 +8,7 @@ import { getRepository } from '@server/datasource';
 import { GameMedia } from '@server/entity/GameMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
+import { createRommAdapterFromSettings } from '@server/lib/adapters/game/RommAdapter';
 import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -404,6 +405,78 @@ gameRoutes.get('/platforms', isAuthenticated(), async (_req, res) => {
 });
 
 /**
+ * GET /api/v1/game/collection/:id
+ * Fetch a ROMM collection by id along with each member rom's metadata.
+ * Mirrors the /book/series/:id shape so the frontend collection page
+ * can reuse the series-page layout.
+ */
+gameRoutes.get('/collection/:id', isAuthenticated(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res
+      .status(400)
+      .json({ status: 400, message: 'Invalid collection id.' });
+  }
+  const adapter = createRommAdapterFromSettings();
+  if (!adapter) {
+    return res
+      .status(503)
+      .json({ status: 503, message: 'ROMM is not configured.' });
+  }
+  try {
+    const detail = await adapter.getCollection(id);
+    if (!detail) {
+      return res
+        .status(404)
+        .json({ status: 404, message: 'Collection not found.' });
+    }
+    const roms = await adapter.getRomsByIds(detail.romIds);
+    const gameMediaRepo = getRepository(GameMedia);
+    const members = await Promise.all(
+      roms.map(async (r) => {
+        const existing = r.igdbId
+          ? await gameMediaRepo.findOne({
+              where: {
+                igdbId: r.igdbId,
+                platformIgdbId: r.platformIgdbId ?? 0,
+              },
+            })
+          : null;
+        return {
+          igdbId: r.igdbId,
+          rommId: r.id,
+          title: r.title,
+          platformName: r.platformName,
+          platformIgdbId: r.platformIgdbId,
+          coverUrl: r.coverUrl,
+          releaseYear: r.releaseYear,
+          mediaStatus: existing?.status ?? null,
+          gameMediaId: existing?.id ?? null,
+          rommUrl: remapRommPublicUrl(existing?.rommUrl),
+        };
+      })
+    );
+    return res.status(200).json({
+      id: detail.id,
+      name: detail.name,
+      description: detail.description,
+      coverUrl: detail.coverUrl,
+      romCount: detail.romCount,
+      members,
+    });
+  } catch (e) {
+    logger.error('ROMM collection fetch failed', {
+      label: 'game',
+      id,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res
+      .status(500)
+      .json({ status: 500, message: 'Failed to load collection.' });
+  }
+});
+
+/**
  * GET /api/v1/game/:igdbId
  * Get game details by IGDB ID.
  * MUST be registered last to avoid catching /search, /request, /platforms.
@@ -481,6 +554,51 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
       };
     });
 
+    // ROMM collections that contain any of the ROM rows we already
+    // matched for this IGDB id. Cheap when ROMM is disabled (adapter
+    // factory returns null) and short-TTL cached inside the adapter
+    // so repeat detail hits don't re-list 100 collections each time.
+    let collections: Array<{
+      id: number;
+      name: string;
+      description?: string;
+      coverUrl?: string;
+      romCount?: number;
+    }> = [];
+    const rommIds = existingMedia
+      .map((m) => m.rommId)
+      .filter((v): v is number => typeof v === 'number');
+    if (rommIds.length > 0) {
+      const romAdapter = createRommAdapterFromSettings();
+      if (romAdapter) {
+        try {
+          const summaries = await romAdapter.listCollections();
+          // listCollections response lacks rom_ids on most ROMM
+          // installs — we need the full getCollection for each to
+          // run the intersection. Parallel but bounded: collections
+          // are typically in the dozens, not thousands.
+          const rommIdSet = new Set(rommIds);
+          const matched = await Promise.all(
+            summaries.map(async (s) => {
+              const detail = await romAdapter.getCollection(s.id);
+              if (!detail) return null;
+              const intersects = detail.romIds.some((r) => rommIdSet.has(r));
+              return intersects ? { ...s, romCount: detail.romCount } : null;
+            })
+          );
+          collections = matched.filter(
+            (c): c is NonNullable<typeof c> => c !== null
+          );
+        } catch (e) {
+          logger.debug('ROMM collection enrichment failed on game detail', {
+            label: 'game',
+            igdbId,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+    }
+
     return res.status(200).json({
       igdbId: game.id,
       title: game.name,
@@ -494,6 +612,7 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
         ? `https:${game.cover.url.replace('t_thumb', 't_cover_big')}`
         : undefined,
       summary: game.summary,
+      collections,
       mediaType: MediaType.GAME,
     });
   } catch (e) {

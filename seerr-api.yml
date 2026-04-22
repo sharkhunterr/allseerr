@@ -4368,6 +4368,35 @@ paths:
             application/json:
               schema:
                 type: object
+  /game/collection/{id}:
+    get:
+      summary: Get ROMM collection details
+      description: Returns a ROMM collection with its member games' metadata.
+      tags:
+        - game
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Collection returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: number }
+                  name: { type: string }
+                  description: { type: string }
+                  coverUrl: { type: string }
+                  romCount: { type: number }
+                  members:
+                    type: array
+                    items:
+                      type: object
   /game/request:
     post:
       summary: Submit a game request
