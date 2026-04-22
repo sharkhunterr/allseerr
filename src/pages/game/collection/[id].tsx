@@ -176,12 +176,6 @@ const GameCollectionPage: NextPage = () => {
     );
   }
 
-  // Virtual collections ship ROMM-generated boilerplate descriptions
-  // ("A collection of games in the Castlevania franchise") that add
-  // nothing beyond what the title already says. Only show the
-  // description for user-created collections.
-  const showDescription =
-    data.kind !== 'virtual' && !!data.description && data.description.length > 0;
 
   return (
     <div className="media-page" style={{ height: 493 }}>
@@ -240,12 +234,6 @@ const GameCollectionPage: NextPage = () => {
           )}
         </div>
       </div>
-
-      {showDescription && (
-        <div className="relative mt-4 text-gray-300">
-          <p>{data.description}</p>
-        </div>
-      )}
 
       <div className="mt-8">
         {groups.length === 0 ? (
