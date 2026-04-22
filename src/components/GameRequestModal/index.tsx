@@ -1,11 +1,15 @@
+import Alert from '@app/components/Common/Alert';
 import Badge from '@app/components/Common/Badge';
 import Modal from '@app/components/Common/Modal';
+import RequestAsUserSelect from '@app/components/RequestModal/RequestAsUserSelect';
+import type { User } from '@app/hooks/useUser';
+import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
 import { MediaStatus } from '@server/constants/media';
 import axios from 'axios';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useIntl } from 'react-intl';
 import { useToasts } from 'react-toast-notifications';
 
@@ -24,6 +28,7 @@ const messages = defineMessages('components.GameRequestModal', {
     'Request {count} {count, plural, one {Platform} other {Platforms}}',
   requestSuccess: '<strong>{title}</strong> requested successfully!',
   requestFailed: 'Failed to submit request.',
+  autoApprove: 'This request will be approved automatically.',
 });
 
 interface Platform {
@@ -73,8 +78,24 @@ const GameRequestModal = ({
 }: GameRequestModalProps) => {
   const intl = useIntl();
   const { addToast } = useToasts();
+  const { hasPermission } = useUser();
   const [selected, setSelected] = useState<number[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [requestAsUser, setRequestAsUser] = useState<User | null>(null);
+
+  const willAutoApprove = hasPermission(
+    [
+      Permission.MANAGE_REQUESTS,
+      Permission.AUTO_APPROVE,
+      Permission.AUTO_APPROVE_GAME,
+    ],
+    { type: 'or' }
+  );
+
+  const requestAsRequiredPermissions = useMemo(
+    () => [Permission.REQUEST, Permission.REQUEST_GAME],
+    []
+  );
 
   const requestable = platforms.filter((p) => !isPlatformDisabled(p));
   const allSelected =
@@ -113,6 +134,7 @@ const GameRequestModal = ({
           publisher,
           genre,
           coverUrl,
+          userId: requestAsUser?.id,
         });
         success++;
       } catch {
@@ -196,6 +218,14 @@ const GameRequestModal = ({
         okButtonType="primary"
         backdrop={coverUrl}
       >
+        {willAutoApprove && (
+          <div className="mt-6">
+            <Alert
+              title={intl.formatMessage(messages.autoApprove)}
+              type="info"
+            />
+          </div>
+        )}
         <p className="mb-4 text-sm text-gray-300">
           {intl.formatMessage(messages.description)}
         </p>
@@ -287,6 +317,10 @@ const GameRequestModal = ({
             </div>
           </div>
         </div>
+        <RequestAsUserSelect
+          requiredPermissions={requestAsRequiredPermissions}
+          onChange={setRequestAsUser}
+        />
       </Modal>
     </Transition>
   );

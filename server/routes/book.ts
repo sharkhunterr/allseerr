@@ -5,11 +5,9 @@ import HardcoverAPI, {
   hardcoverPrimaryAuthor,
   hardcoverPrimaryAuthorId,
 } from '@server/api/hardcover';
-import { isOLWorkKey, toOLWorkKey } from '@server/lib/bookIds';
 import OpenLibraryAPI, { cleanOpenLibraryText } from '@server/api/openlibrary';
 import BinderyAPI from '@server/api/servarr/bindery';
 import BookshelfAPI from '@server/api/servarr/bookshelf';
-import { getSettings } from '@server/lib/settings';
 import {
   MediaRequestStatus,
   MediaStatus,
@@ -19,7 +17,10 @@ import { getRepository } from '@server/datasource';
 import { AudiobookMedia } from '@server/entity/AudiobookMedia';
 import { BookMedia } from '@server/entity/BookMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
+import { User } from '@server/entity/User';
+import { toOLWorkKey } from '@server/lib/bookIds';
 import { Permission, hasPermission } from '@server/lib/permissions';
+import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
 import { Router } from 'express';
@@ -57,9 +58,7 @@ const getAudibleClient = (): AudibleAPI => {
   const configured = settings.metadataSettings.audibleRegion?.toLowerCase();
   const fallback = settings.main.discoverRegion?.toLowerCase();
   const region = (configured || fallback || 'us') as AudibleRegion;
-  return new AudibleAPI(
-    AUDIBLE_VALID_REGIONS.includes(region) ? region : 'us'
-  );
+  return new AudibleAPI(AUDIBLE_VALID_REGIONS.includes(region) ? region : 'us');
 };
 
 /**
@@ -376,16 +375,11 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
     if (preferredLanguage) {
       if (languagePolicy === 'strict') {
         merged = merged.filter(
-          (r) =>
-            !r.language || r.language.toLowerCase() === preferredLanguage
+          (r) => !r.language || r.language.toLowerCase() === preferredLanguage
         );
       } else {
         const rank = (lang?: string): number =>
-          !lang
-            ? 1
-            : lang.toLowerCase() === preferredLanguage
-              ? 0
-              : 2;
+          !lang ? 1 : lang.toLowerCase() === preferredLanguage ? 0 : 2;
         merged.sort((a, b) => rank(a.language) - rank(b.language));
       }
     }
@@ -583,12 +577,12 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           .replace(/^(the|a|an|le|la|les|un|une)\s+/, '')
           .replace(/[^a-z0-9]+/g, ' ')
           .trim();
-      const byPosition = new Map<number, typeof rawMembers[number]>();
-      const looseByTitle = new Map<string, typeof rawMembers[number]>();
+      const byPosition = new Map<number, (typeof rawMembers)[number]>();
+      const looseByTitle = new Map<string, (typeof rawMembers)[number]>();
       const pickBetter = (
-        current: typeof rawMembers[number] | undefined,
-        next: typeof rawMembers[number]
-      ): typeof rawMembers[number] => {
+        current: (typeof rawMembers)[number] | undefined,
+        next: (typeof rawMembers)[number]
+      ): (typeof rawMembers)[number] => {
         if (!current) return next;
         const cu = current.book?.users_count ?? 0;
         const nu = next.book?.users_count ?? 0;
@@ -604,10 +598,9 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           looseByTitle.set(key, pickBetter(looseByTitle.get(key), m));
         }
       }
-      const deduped = [
-        ...byPosition.values(),
-        ...looseByTitle.values(),
-      ].sort((a, b) => (a.position ?? 1e9) - (b.position ?? 1e9));
+      const deduped = [...byPosition.values(), ...looseByTitle.values()].sort(
+        (a, b) => (a.position ?? 1e9) - (b.position ?? 1e9)
+      );
 
       const bookMediaRepo = getRepository(BookMedia);
       const enrichedRaw = await Promise.all(
@@ -624,9 +617,7 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           // wins identity in the current aggregation.
           const candidateKeys = Array.from(
             new Set(
-              [normalisedOL, hardcoverKey].filter(
-                (k): k is string => !!k
-              )
+              [normalisedOL, hardcoverKey].filter((k): k is string => !!k)
             )
           );
           const existing = candidateKeys.length
@@ -664,12 +655,10 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           byOLKey.set(m.openLibraryId, m);
         }
       }
-      const enriched = [...byOLKey.values()].map(
-        ({ _usersCount, ...rest }) => {
-          void _usersCount;
-          return rest;
-        }
-      );
+      const enriched = [...byOLKey.values()].map(({ _usersCount, ...rest }) => {
+        void _usersCount;
+        return rest;
+      });
 
       // Author enrichment — pick the primary author from the most-read
       // member's contributions, then fetch their full record so the
@@ -682,11 +671,9 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
       let seriesAuthorBio: string | undefined;
       let seriesAuthorBirthDate: string | undefined;
       let seriesAuthorDeathDate: string | undefined;
-      const mostReadMember = [...(detail.book_series ?? [])]
-        .sort(
-          (a, b) =>
-            (b.book?.users_count ?? 0) - (a.book?.users_count ?? 0)
-        )[0];
+      const mostReadMember = [...(detail.book_series ?? [])].sort(
+        (a, b) => (b.book?.users_count ?? 0) - (a.book?.users_count ?? 0)
+      )[0];
       const seriesAuthorId = hardcoverPrimaryAuthorId(
         mostReadMember?.book?.contributions
       );
@@ -1045,9 +1032,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
           releaseDate: e.release_date ?? undefined,
           pageCount: e.pages ?? undefined,
           format: e.edition_format ?? undefined,
-          coverUrl: e.image?.url?.startsWith('http')
-            ? e.image.url
-            : undefined,
+          coverUrl: e.image?.url?.startsWith('http') ? e.image.url : undefined,
           publisher: e.publisher?.name ?? undefined,
           country: hardcoverCountryIso2(e.country),
           language: e.language?.code2 ?? undefined,
@@ -1174,7 +1159,9 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
     // and fetch the author's display name, photo, and bio (Work itself
     // doesn't carry any of these).
     const authorKey = work.authors?.[0]?.author?.key?.split('/').pop();
-    const authorInfo = authorKey ? await openLibrary.getAuthor(authorKey) : null;
+    const authorInfo = authorKey
+      ? await openLibrary.getAuthor(authorKey)
+      : null;
     const authorName = authorInfo?.name ?? null;
     const authorPhotoUrl = authorInfo?.photoUrl;
     const authorBio = authorInfo?.bio;
@@ -1231,8 +1218,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
               language = language || match.language;
               if (
                 match.description &&
-                match.description.length >
-                  (enrichedDescription?.length ?? 0)
+                match.description.length > (enrichedDescription?.length ?? 0)
               ) {
                 enrichedDescription = match.description;
               }
@@ -1524,10 +1510,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
             ? work.description
             : work.description?.value;
         const best =
-          hardcoverDescription ??
-          enrichedDescription ??
-          olDescRaw ??
-          undefined;
+          hardcoverDescription ?? enrichedDescription ?? olDescRaw ?? undefined;
         return best ? cleanOpenLibraryText(best) : undefined;
       })(),
       mediaStatus: existing?.status ?? null,
@@ -1568,6 +1551,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
     year?: number;
     publisher?: string;
     narratorName?: string;
+    userId?: number;
   };
 
   if (
@@ -1596,6 +1580,28 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
   const bookMediaRepo = getRepository(BookMedia);
   const audiobookMediaRepo = getRepository(AudiobookMedia);
   const requestRepo = getRepository(MediaRequest);
+  const userRepo = getRepository(User);
+
+  // Admin-attributed request — mirrors server/entity/MediaRequest.ts
+  // where MANAGE_USERS / MANAGE_REQUESTS lets a caller attribute the
+  // request to someone else. Silently fall back to req.user when the
+  // caller lacks the permission so older clients that always send
+  // their own id keep working.
+  let requestUser = req.user!;
+  if (
+    body.userId &&
+    body.userId !== req.user?.id &&
+    hasPermission(
+      [Permission.MANAGE_USERS, Permission.MANAGE_REQUESTS],
+      req.user?.permissions ?? 0,
+      { type: 'or' }
+    )
+  ) {
+    const target = await userRepo.findOne({ where: { id: body.userId } });
+    if (target) {
+      requestUser = target;
+    }
+  }
 
   // Duplicate detection: check if already requested
   const existingMedia = isBook
@@ -1629,25 +1635,21 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
   // Quota enforcement — same pattern as the movie / TV request path
   // (see server/entity/MediaRequest.ts). Bypasses for MANAGE_USERS are
   // applied inside User.getQuota().
-  if (req.user) {
-    try {
-      const quotas = await req.user.getQuota();
-      const slot = isBook ? quotas.book : quotas.audiobook;
-      if (slot.restricted) {
-        return res.status(403).json({
-          status: 403,
-          message: isBook
-            ? 'Book quota exceeded.'
-            : 'Audiobook quota exceeded.',
-          quota: slot,
-        });
-      }
-    } catch (e) {
-      logger.warn('Quota check failed (proceeding without enforcement)', {
-        label: 'book',
-        error: e instanceof Error ? e.message : String(e),
+  try {
+    const quotas = await requestUser.getQuota();
+    const slot = isBook ? quotas.book : quotas.audiobook;
+    if (slot.restricted) {
+      return res.status(403).json({
+        status: 403,
+        message: isBook ? 'Book quota exceeded.' : 'Audiobook quota exceeded.',
+        quota: slot,
       });
     }
+  } catch (e) {
+    logger.warn('Quota check failed (proceeding without enforcement)', {
+      label: 'book',
+      error: e instanceof Error ? e.message : String(e),
+    });
   }
 
   try {
@@ -1756,7 +1758,7 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
     const request = new MediaRequest();
     request.status = MediaRequestStatus.PENDING;
     request.type = body.mediaType;
-    request.requestedBy = req.user!;
+    request.requestedBy = requestUser;
 
     if (isBook) {
       request.bookMedia = media as BookMedia;

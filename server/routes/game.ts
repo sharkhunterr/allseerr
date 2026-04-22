@@ -7,7 +7,8 @@ import {
 import { getRepository } from '@server/datasource';
 import { GameMedia } from '@server/entity/GameMedia';
 import { MediaRequest } from '@server/entity/MediaRequest';
-import { hasPermission, Permission } from '@server/lib/permissions';
+import { User } from '@server/entity/User';
+import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -90,11 +91,6 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
         const existingMedia = await gameMediaRepo.find({
           where: { igdbId: game.id },
         });
-        const availableRommPlatforms = new Set(
-          existingMedia
-            .filter((m) => m.status === MediaStatus.AVAILABLE)
-            .map((m) => m.platformName?.toLowerCase())
-        );
 
         const availabilityChecks = platforms.map((p) => {
           // ROMM availability: match by platform name (case-insensitive) —
@@ -108,8 +104,7 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
           // requests are keyed on IGDB platform id.
           const requestedMatch = existingMedia.find(
             (m) =>
-              m.platformIgdbId === p.id &&
-              m.status !== MediaStatus.AVAILABLE
+              m.platformIgdbId === p.id && m.status !== MediaStatus.AVAILABLE
           );
           const matchedMedia = availableMatch ?? requestedMatch;
 
@@ -117,7 +112,7 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
             ...p,
             mediaStatus: availableMatch
               ? MediaStatus.AVAILABLE
-              : matchedMedia?.status ?? null,
+              : (matchedMedia?.status ?? null),
             gameMediaId: matchedMedia?.id ?? null,
             rommUrl: remapRommPublicUrl(matchedMedia?.rommUrl),
           };
@@ -176,6 +171,7 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
     genre?: string;
     coverUrl?: string;
     note?: string;
+    userId?: number;
   };
 
   if (
@@ -192,6 +188,24 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
 
   const gameMediaRepo = getRepository(GameMedia);
   const requestRepo = getRepository(MediaRequest);
+  const userRepo = getRepository(User);
+
+  // Admin impersonation — see the mirror logic in server/routes/book.ts.
+  let requestUser = req.user!;
+  if (
+    body.userId &&
+    body.userId !== req.user?.id &&
+    hasPermission(
+      [Permission.MANAGE_USERS, Permission.MANAGE_REQUESTS],
+      req.user?.permissions ?? 0,
+      { type: 'or' }
+    )
+  ) {
+    const target = await userRepo.findOne({ where: { id: body.userId } });
+    if (target) {
+      requestUser = target;
+    }
+  }
 
   // Duplicate detection (same game + platform)
   const existing = await gameMediaRepo.findOne({
@@ -218,22 +232,20 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
 
   // Game quota — mirrors the movie path. MANAGE_USERS bypass is
   // already applied inside User.getQuota().
-  if (req.user) {
-    try {
-      const quotas = await req.user.getQuota();
-      if (quotas.game.restricted) {
-        return res.status(403).json({
-          status: 403,
-          message: 'Game quota exceeded.',
-          quota: quotas.game,
-        });
-      }
-    } catch (e) {
-      logger.warn('Quota check failed (proceeding without enforcement)', {
-        label: 'game',
-        error: e instanceof Error ? e.message : String(e),
+  try {
+    const quotas = await requestUser.getQuota();
+    if (quotas.game.restricted) {
+      return res.status(403).json({
+        status: 403,
+        message: 'Game quota exceeded.',
+        quota: quotas.game,
       });
     }
+  } catch (e) {
+    logger.warn('Quota check failed (proceeding without enforcement)', {
+      label: 'game',
+      error: e instanceof Error ? e.message : String(e),
+    });
   }
 
   try {
@@ -264,7 +276,7 @@ gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
     const request = new MediaRequest();
     request.status = MediaRequestStatus.PENDING;
     request.type = MediaType.GAME;
-    request.requestedBy = req.user!;
+    request.requestedBy = requestUser;
     request.gameMedia = gameMedia;
 
     await requestRepo.save(request);
@@ -447,11 +459,6 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
     const existingMedia = await gameMediaRepo.find({
       where: { igdbId: game.id },
     });
-    const availableRommPlatforms = new Set(
-      existingMedia
-        .filter((m) => m.status === MediaStatus.AVAILABLE)
-        .map((m) => m.platformName?.toLowerCase())
-    );
 
     const availabilityChecks = platforms.map((p) => {
       const availableMatch = existingMedia.find(
@@ -460,8 +467,7 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
           m.platformName?.toLowerCase() === p.name.toLowerCase()
       );
       const requestedMatch = existingMedia.find(
-        (m) =>
-          m.platformIgdbId === p.id && m.status !== MediaStatus.AVAILABLE
+        (m) => m.platformIgdbId === p.id && m.status !== MediaStatus.AVAILABLE
       );
       const matchedMedia = availableMatch ?? requestedMatch;
 
@@ -469,7 +475,7 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
         ...p,
         mediaStatus: availableMatch
           ? MediaStatus.AVAILABLE
-          : matchedMedia?.status ?? null,
+          : (matchedMedia?.status ?? null),
         gameMediaId: matchedMedia?.id ?? null,
         rommUrl: remapRommPublicUrl(matchedMedia?.rommUrl),
       };

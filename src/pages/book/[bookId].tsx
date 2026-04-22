@@ -184,9 +184,7 @@ const EditionSelect = ({
     if (ed.year) bits.push(String(ed.year));
     if (ed.format) bits.push(ed.format);
     if (ed.publisher) bits.push(ed.publisher);
-    return bits.length > 0
-      ? bits.join(' · ')
-      : ed.title ?? originalLabel;
+    return bits.length > 0 ? bits.join(' · ') : (ed.title ?? originalLabel);
   };
 
   const sortByYearDesc = (a: Edition, b: Edition) =>
@@ -308,8 +306,7 @@ const BookDetailPage: NextPage = () => {
     return [...editions].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))[0];
   };
   const selectedEdition =
-    editions.find((e) => e.id === selectedEditionId) ??
-    getDefaultEdition();
+    editions.find((e) => e.id === selectedEditionId) ?? getDefaultEdition();
 
   // Edition-aware overrides. Book-level fields are the default, but
   // any field the selected edition supplies wins — lets the user flip
@@ -334,8 +331,7 @@ const BookDetailPage: NextPage = () => {
   const displayedPageCount = selectedEdition?.pageCount ?? data.pageCount;
   const displayedPublisher = selectedEdition?.publisher ?? data.publisher;
   const displayedYear = selectedEdition?.year ?? data.year;
-  const displayedReleaseDate =
-    selectedEdition?.releaseDate ?? data.releaseDate;
+  const displayedReleaseDate = selectedEdition?.releaseDate ?? data.releaseDate;
   const displayedLanguage = selectedEdition?.language ?? data.language;
 
   const isAvailable = data.mediaStatus === MediaStatus.AVAILABLE;
@@ -378,8 +374,10 @@ const BookDetailPage: NextPage = () => {
         <div className="media-title">
           <div className="media-status">
             <span
-              className={`rounded-full px-3 py-1 text-xs font-bold text-white ${
-                isAudiobook ? 'bg-purple-600' : 'bg-indigo-600'
+              className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-md ${
+                isAudiobook
+                  ? 'border-pink-500 bg-pink-600/80'
+                  : 'border-orange-500 bg-orange-600/80'
               }`}
             >
               {isAudiobook ? 'Audiobook' : 'Book'}
@@ -579,8 +577,8 @@ const BookDetailPage: NextPage = () => {
                   <div className="group relative z-0 mb-6 scale-100 transform-gpu cursor-pointer overflow-hidden rounded-lg bg-gray-800 bg-cover bg-center shadow-md ring-1 ring-gray-700 transition duration-300 hover:scale-105 hover:ring-gray-500">
                     {coverUrl && (
                       <div className="absolute inset-0 z-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          // eslint-disable-next-line @next/next/no-img-element
                           src={coverUrl}
                           alt=""
                           style={{
