@@ -67,6 +67,37 @@ const countryFlag = (code: string): string => {
     .join('');
 };
 
+// Best-effort ISO-639-1 → ISO-3166 country fallback for flag rendering
+// next to a language label. Languages don't map 1:1 to countries (en →
+// GB/US/AU…), so we pick the canonical "mother tongue" region. Keeps the
+// audiobook detail page consistent with the book page's country flag.
+const LANG_TO_COUNTRY: Record<string, string> = {
+  en: 'GB',
+  fr: 'FR',
+  de: 'DE',
+  es: 'ES',
+  it: 'IT',
+  pt: 'PT',
+  nl: 'NL',
+  ja: 'JP',
+  zh: 'CN',
+  ru: 'RU',
+  pl: 'PL',
+  sv: 'SE',
+  no: 'NO',
+  da: 'DK',
+  fi: 'FI',
+  cs: 'CZ',
+  el: 'GR',
+  tr: 'TR',
+  ko: 'KR',
+  he: 'IL',
+  ar: 'SA',
+};
+
+const languageFlag = (code?: string): string =>
+  code ? countryFlag(LANG_TO_COUNTRY[code.toLowerCase()] ?? '') : '';
+
 interface Edition {
   id: number;
   title?: string;
@@ -675,8 +706,13 @@ const BookDetailPage: NextPage = () => {
             {displayedLanguage && (
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.language)}</span>
-                <span className="media-fact-value uppercase">
-                  {displayedLanguage}
+                <span className="media-fact-value inline-flex items-center gap-1 uppercase">
+                  {languageFlag(displayedLanguage) && (
+                    <span className="text-base leading-none">
+                      {languageFlag(displayedLanguage)}
+                    </span>
+                  )}
+                  <span>{displayedLanguage}</span>
                 </span>
               </div>
             )}
