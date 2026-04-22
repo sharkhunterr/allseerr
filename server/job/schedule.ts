@@ -14,6 +14,7 @@ import { komgaScanner } from '@server/lib/scanners/komga';
 import { plexFullScanner, plexRecentScanner } from '@server/lib/scanners/plex';
 import { radarrScanner } from '@server/lib/scanners/radarr';
 import { rommScanner } from '@server/lib/scanners/romm';
+import { rommCollectionsScanner } from '@server/lib/scanners/romm-collections';
 import { sonarrScanner } from '@server/lib/scanners/sonarr';
 import type { JobId } from '@server/lib/settings';
 import { getSettings } from '@server/lib/settings';
@@ -278,6 +279,28 @@ export const startJobs = (): void => {
     }),
     running: () => rommScanner.status().running,
     cancelFn: () => rommScanner.cancel(),
+  });
+
+  // Weekly ROMM collections refresh. Collections are slow-changing
+  // curated lists so a lower cadence than the main ROMM scan keeps
+  // the cache primed without hammering the instance.
+  scheduledJobs.push({
+    id: 'romm-collections-scan',
+    name: 'ROMM Collections Scan',
+    type: 'process',
+    interval: 'hours',
+    cronSchedule: jobs['romm-collections-scan'].schedule,
+    job: schedule.scheduleJob(
+      jobs['romm-collections-scan'].schedule,
+      () => {
+        logger.info('Starting scheduled job: ROMM Collections Scan', {
+          label: 'Jobs',
+        });
+        rommCollectionsScanner.run();
+      }
+    ),
+    running: () => rommCollectionsScanner.status().running,
+    cancelFn: () => rommCollectionsScanner.cancel(),
   });
 
   // Run Audiobookshelf scan every 15 minutes

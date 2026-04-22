@@ -379,6 +379,7 @@ export type JobId =
   | 'availability-sync'
   | 'process-blocklisted-tags'
   | 'romm-scan'
+  | 'romm-collections-scan'
   | 'audiobookshelf-scan'
   | 'komga-scan'
   | 'grimmory-scan';
@@ -747,6 +748,13 @@ class Settings {
         },
         'romm-scan': {
           schedule: '0 */15 * * * *',
+        },
+        'romm-collections-scan': {
+          // Weekly by default (Sundays at 04:00). Collections are
+          // user-curated and rarely change between ROM additions, so
+          // a slower cadence than the main ROMM Library Scan is the
+          // right default. User can override from Settings → Jobs.
+          schedule: '0 0 4 * * 0',
         },
         'audiobookshelf-scan': {
           schedule: '0 */15 * * * *',
