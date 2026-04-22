@@ -53,6 +53,47 @@ const AUDIBLE_VALID_REGIONS: AudibleRegion[] = [
   'br',
 ];
 
+/**
+ * Audible returns language as free-text — sometimes the English name
+ * ("French"), sometimes native ("français"), sometimes an ISO code
+ * ("fr"). We normalise to the ISO-639-1 code so the audiobook author
+ * tab's language filter works regardless of which form Audible gives
+ * for a given ASIN / region. Unknown values fall through — callers
+ * treat them as "unknown language" under the prefer policy.
+ */
+const AUDIBLE_LANG_TO_ISO: Record<string, string> = {
+  english: 'en',
+  en: 'en',
+  french: 'fr',
+  francais: 'fr',
+  fr: 'fr',
+  german: 'de',
+  deutsch: 'de',
+  de: 'de',
+  spanish: 'es',
+  espanol: 'es',
+  es: 'es',
+  italian: 'it',
+  italiano: 'it',
+  it: 'it',
+  portuguese: 'pt',
+  portugues: 'pt',
+  pt: 'pt',
+  dutch: 'nl',
+  nederlands: 'nl',
+  nl: 'nl',
+  japanese: 'ja',
+  ja: 'ja',
+  chinese: 'zh',
+  zh: 'zh',
+  russian: 'ru',
+  ru: 'ru',
+  polish: 'pl',
+  pl: 'pl',
+  swedish: 'sv',
+  sv: 'sv',
+};
+
 const getAudibleClient = (): AudibleAPI => {
   const settings = getSettings();
   // Prefer the audiobook-scoped region so the audiobook metadata tab is
@@ -1061,9 +1102,36 @@ bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
               .replace(/[^a-z0-9\s]/g, '')
               .trim();
           const wanted = normalize(author.name);
-          const matched = results.filter((r) =>
+          const authorMatched = results.filter((r) =>
             normalize(r.authorName).includes(wanted)
           );
+
+          // Language filter — mirrors the book side. Audible returns a
+          // free-text language ("French", "English", "français"...) so
+          // we normalise both sides before comparing. Under "strict"
+          // we drop non-matching entries outright; under "prefer"
+          // matches float to the top and the rest stay so the user
+          // isn't left with an empty tab for bilingual authors.
+          const policy = audioCfg?.languagePolicy ?? 'prefer';
+          const matchesLang = (lang?: string): boolean => {
+            if (!prefLang || !lang) return !prefLang;
+            return AUDIBLE_LANG_TO_ISO[normalize(lang)] === prefLang;
+          };
+          let matched = authorMatched;
+          if (prefLang) {
+            if (policy === 'strict') {
+              matched = authorMatched.filter((r) => matchesLang(r.language));
+            } else {
+              // Stable partition: preferred-language first, unknown
+              // language next, other languages last.
+              const rank = (lang?: string): number =>
+                matchesLang(lang) ? 0 : !lang ? 1 : 2;
+              matched = [...authorMatched].sort(
+                (a, b) => rank(a.language) - rank(b.language)
+              );
+            }
+          }
+
           audiobooks = await Promise.all(
             matched.map(async (r): Promise<AudiobookEntry> => {
               const existing = await audiobookMediaRepo.findOne({
