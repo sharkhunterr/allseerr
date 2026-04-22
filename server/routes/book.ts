@@ -1782,22 +1782,56 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
                   );
                 });
 
-              // First pass: full name as typed on Audible. Hardcover's
-              // Typesense mangles short queries with dots (J.K. Rowling
-              // → Jeffrey C. Lagarias), so this often returns garbage
-              // for initials-heavy authors.
-              let candidates = await hc.searchAuthors(primaryName, 5);
-              let match = pickMatch(candidates);
-              let pass = 'primary';
+              // Pass 0 — direct Hasura lookup by exact name on the
+              // authors table. Bypasses Typesense entirely (which is
+              // broken for initials / short queries on Hardcover's
+              // public API). Tries a few common spacing variants
+              // since Audible joins differ from Hardcover's stored
+              // form ("J.K. Rowling" vs "J. K. Rowling").
+              const variants = Array.from(
+                new Set(
+                  [
+                    primaryName,
+                    primaryName.replace(/\./g, '. ').replace(/\s+/g, ' ').trim(),
+                    primaryName.replace(/\./g, ' ').replace(/\s+/g, ' ').trim(),
+                    primaryName.replace(/\./g, '').replace(/\s+/g, ' ').trim(),
+                  ].filter((v) => v.length > 0)
+                )
+              );
+              let candidates: {
+                id: number;
+                name: string;
+                bio?: string;
+                photoUrl?: string;
+                booksCount?: number;
+              }[] = [];
+              let match: typeof candidates[number] | undefined;
+              let pass = 'exact';
+              for (const v of variants) {
+                const hits = await hc.findAuthorByExactName(v);
+                if (hits.length > 0) {
+                  candidates = hits;
+                  // Take the most-prolific match (query already sorts
+                  // desc by books_count) — if there are homonyms,
+                  // Hardcover's famous author outranks.
+                  match = hits[0];
+                  break;
+                }
+              }
 
-              // Second pass: fall back to the bare surname if the
-              // first pass yielded nothing matchable. Single-token
-              // queries like "Rowling" skip the initials trap and
-              // hit the expected author directly.
+              // Pass 1 — Typesense fuzzy on the full name.
+              if (!match) {
+                candidates = await hc.searchAuthors(primaryName, 5);
+                match = pickMatch(candidates);
+                pass = 'typesense-primary';
+              }
+
+              // Pass 2 — Typesense on just the surname for
+              // initials-heavy names.
               if (!match && qSurname && qSurname !== normName(primaryName)) {
                 candidates = await hc.searchAuthors(qSurname, 5);
                 match = pickMatch(candidates);
-                pass = 'surname';
+                pass = 'typesense-surname';
               }
 
               logger.info('Audiobook author fallback search', {

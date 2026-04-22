@@ -751,6 +751,65 @@ class HardcoverAPI {
   }
 
   /**
+   * Direct Hasura lookup of an author by exact name. Used as a
+   * fallback when Typesense returns garbage for short / punctuated
+   * queries (e.g. "J.K. Rowling" → unrelated mathematicians and
+   * botanical gardens). Public Hasura permits `_eq` on the authors
+   * table. Returns up to 5 rows ordered by books_count desc so the
+   * most prolific match wins when several homonyms exist.
+   */
+  async findAuthorByExactName(
+    name: string
+  ): Promise<
+    Array<{ id: number; name: string; bio?: string; photoUrl?: string; booksCount?: number }>
+  > {
+    return cached(
+      `author:eq:${name.toLowerCase()}`,
+      async () => {
+        const gqlQuery = `
+          query AuthorByName($name: String!) {
+            authors(
+              where: { name: { _eq: $name } }
+              order_by: { books_count: desc_nulls_last }
+              limit: 5
+            ) {
+              id
+              name
+              bio
+              cached_image
+              books_count
+            }
+          }
+        `;
+        const { data } = await this.gql<{
+          authors: Array<{
+            id: number;
+            name: string;
+            bio?: string | null;
+            cached_image?: string | { url?: string } | null;
+            books_count?: number | null;
+          }>;
+        }>(gqlQuery, { name });
+        return (data?.authors ?? []).map((a) => {
+          const photoRaw = a.cached_image;
+          const photo =
+            typeof photoRaw === 'string'
+              ? photoRaw
+              : photoRaw?.url ?? undefined;
+          return {
+            id: a.id,
+            name: a.name,
+            bio: a.bio ?? undefined,
+            photoUrl: photo,
+            booksCount: a.books_count ?? undefined,
+          };
+        });
+      },
+      3600
+    );
+  }
+
+  /**
    * Free-text author search via Typesense → batched authors(where:_in)
    * follow-up. Used to surface author cards at the top of the book
    * search grid.
