@@ -4371,7 +4371,11 @@ paths:
   /game/collection/{id}:
     get:
       summary: Get ROMM collection details
-      description: Returns a ROMM collection with its member games' metadata.
+      description: |
+        Returns a ROMM collection with its member games' metadata.
+        The id is a string so it can carry both numeric user-collection
+        ids and the base64-encoded payload that ROMM uses for virtual
+        (auto-generated) collections.
       tags:
         - game
       parameters:
@@ -4379,7 +4383,7 @@ paths:
           name: id
           required: true
           schema:
-            type: number
+            type: string
       responses:
         '200':
           description: Collection returned

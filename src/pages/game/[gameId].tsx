@@ -394,7 +394,9 @@ const GameDetailPage: NextPage = () => {
                   type="button"
                   className="group relative z-0 mb-6 block w-full cursor-pointer overflow-hidden rounded-lg bg-gray-800 bg-cover bg-center text-left shadow-md ring-1 ring-gray-700 transition duration-300 hover:scale-105 hover:ring-gray-500"
                   onClick={() =>
-                    router.push(`/game/collection/${c.id}`)
+                    router.push(
+                      `/game/collection/${encodeURIComponent(c.id)}`
+                    )
                   }
                 >
                   {(c.coverUrl || game.coverUrl) && (

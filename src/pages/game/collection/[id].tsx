@@ -44,7 +44,7 @@ const GameCollectionPage: NextPage = () => {
   const { id } = router.query;
 
   const { data, error } = useSWR<CollectionDetail>(
-    id ? `/api/v1/game/collection/${id}` : null
+    id ? `/api/v1/game/collection/${encodeURIComponent(String(id))}` : null
   );
 
   if (!data && !error) return <LoadingSpinner />;

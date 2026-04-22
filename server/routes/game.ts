@@ -461,10 +461,16 @@ gameRoutes.get('/platforms', isAuthenticated(), async (_req, res) => {
  * can reuse the series-page layout.
  */
 gameRoutes.get('/collection/:id', isAuthenticated(), async (req, res) => {
-  // Virtual collections use string ids (e.g. "franchise_castlevania")
-  // alongside the numeric ids of user-created ones, so we keep the
-  // parameter as-is rather than forcing it through parseInt.
+  // Virtual collections use base64-JSON ids (e.g. the payload
+  // {"name":"Castlevania","type":"franchise"}) alongside the numeric
+  // ids of user-created ones, so we keep the parameter as a string
+  // rather than forcing it through parseInt.
   const id = req.params.id;
+  logger.info('ROMM collection detail request', {
+    label: 'romm',
+    id,
+    idLength: id?.length,
+  });
   if (!id) {
     return res
       .status(400)

@@ -97,7 +97,10 @@ const GameCollectionSearchCard = ({
 }) => {
   const intl = useIntl();
   return (
-    <Link href={`/game/collection/${result.id}`}>
+    // Virtual-collection ids are base64 JSON — encode before
+    // pushing into the path so `=` / `/` characters don't break
+    // Next.js routing.
+    <Link href={`/game/collection/${encodeURIComponent(result.id)}`}>
       <div className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg bg-gray-800 shadow-md ring-1 ring-gray-700 transition duration-200 hover:ring-indigo-500">
         <div className="relative aspect-[2/3] w-full overflow-hidden bg-gray-700">
           {result.coverUrl ? (
