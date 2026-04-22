@@ -1,3 +1,4 @@
+import AudiobookCard from '@app/components/AudiobookCard';
 import BookCard from '@app/components/BookCard';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
@@ -20,9 +21,11 @@ const messages = defineMessages('pages.BookAuthor', {
   notFound: 'Author not found.',
   emptyWorks: 'No works listed yet.',
   emptySeries: 'No series listed yet.',
+  emptyAudiobooks: 'No audiobooks found for this author yet.',
   works: 'Works',
   tabBooks: 'Books',
   tabSeries: 'Series',
+  tabAudiobooks: 'Audiobooks',
   totalWorksFmt: '{count, plural, one {# book} other {# books}}',
   worksListedFmt: '{count, plural, one {# work} other {# works}} on OpenLibrary',
   uniqueTitlesFmt:
@@ -47,6 +50,16 @@ interface SeriesLink {
   coverUrl?: string;
 }
 
+interface Audiobook {
+  openLibraryId: string;
+  title: string;
+  authorName: string;
+  coverUrl?: string;
+  durationSeconds?: number;
+  mediaStatus?: MediaStatus | null;
+  bookMediaId?: number | null;
+}
+
 interface AuthorDetail {
   key: string;
   name?: string;
@@ -58,9 +71,10 @@ interface AuthorDetail {
   uniqueWorks?: number;
   works: Work[];
   series?: SeriesLink[];
+  audiobooks?: Audiobook[];
 }
 
-type AuthorTab = 'books' | 'series';
+type AuthorTab = 'books' | 'series' | 'audiobooks';
 
 const AuthorPage: NextPage = () => {
   const router = useRouter();
@@ -195,6 +209,22 @@ const AuthorPage: NextPage = () => {
               </span>
             </button>
           )}
+          {(data.audiobooks?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('audiobooks')}
+              className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium transition ${
+                activeTab === 'audiobooks'
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-gray-400 hover:border-gray-400 hover:text-gray-200'
+              }`}
+            >
+              {intl.formatMessage(messages.tabAudiobooks)}
+              <span className="ml-2 text-xs text-gray-500">
+                ({data.audiobooks?.length})
+              </span>
+            </button>
+          )}
         </nav>
       </div>
       {activeTab === 'books' && (
@@ -213,6 +243,30 @@ const AuthorPage: NextPage = () => {
                     authorName={w.authorName}
                     coverUrl={w.coverUrl}
                     mediaStatus={w.mediaStatus ?? undefined}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+      {activeTab === 'audiobooks' && (
+        <>
+          {!data.audiobooks?.length ? (
+            <p className="py-8 text-center text-gray-400">
+              {intl.formatMessage(messages.emptyAudiobooks)}
+            </p>
+          ) : (
+            <ul className="cards-vertical">
+              {data.audiobooks.map((a) => (
+                <li key={a.openLibraryId}>
+                  <AudiobookCard
+                    openLibraryId={a.openLibraryId}
+                    title={a.title}
+                    authorName={a.authorName}
+                    coverUrl={a.coverUrl}
+                    durationSeconds={a.durationSeconds}
+                    mediaStatus={a.mediaStatus ?? undefined}
                   />
                 </li>
               ))}

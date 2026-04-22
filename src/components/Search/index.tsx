@@ -228,7 +228,9 @@ const Search = () => {
   const gameEnabled = currentSettings.gameEnabled;
   const [activeTab, setActiveTab] = useState<MediaTab>('all');
   const [bookResults, setBookResults] = useState<BookOrSeriesResult[]>([]);
-  const [audiobookResults, setAudiobookResults] = useState<BookResult[]>([]);
+  const [audiobookResults, setAudiobookResults] = useState<
+    (BookResult | AuthorSearchResult)[]
+  >([]);
   const [gameResults, setGameResults] = useState<GameResult[]>([]);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
@@ -291,9 +293,13 @@ const Search = () => {
           paramsSerializer,
         })
         .then((res) =>
-          // Audiobook search never returns series items; narrow the union.
+          // Audiobook search never returns series items — filter them
+          // out so the author-card path and the audiobook cards don't
+          // have to worry about a third shape.
           setAudiobookResults(
-            res.data.results.filter((r): r is BookResult => r.type !== 'series')
+            res.data.results.filter(
+              (r): r is BookResult | AuthorSearchResult => r.type !== 'series'
+            )
           )
         )
         .catch(() => setAudiobookResults([]))
@@ -471,21 +477,30 @@ const Search = () => {
             </p>
           ) : (
             <ul className="cards-vertical">
-              {audiobookResults.map((book) => (
-                <li key={book.openLibraryId}>
-                  <AudiobookCard
-                    openLibraryId={book.openLibraryId}
-                    title={book.title}
-                    authorName={book.authorName}
-                    narratorName={book.narratorName}
-                    durationSeconds={book.durationSeconds}
-                    coverUrl={book.coverUrl}
-                    year={book.year}
-                    publisher={book.publisher}
-                    mediaStatus={book.mediaStatus ?? undefined}
-                  />
-                </li>
-              ))}
+              {audiobookResults.map((item) => {
+                if (item.type === 'author') {
+                  return (
+                    <li key={`author:${item.key}`}>
+                      <AuthorSearchCard result={item} />
+                    </li>
+                  );
+                }
+                return (
+                  <li key={item.openLibraryId}>
+                    <AudiobookCard
+                      openLibraryId={item.openLibraryId}
+                      title={item.title}
+                      authorName={item.authorName}
+                      narratorName={item.narratorName}
+                      durationSeconds={item.durationSeconds}
+                      coverUrl={item.coverUrl}
+                      year={item.year}
+                      publisher={item.publisher}
+                      mediaStatus={item.mediaStatus ?? undefined}
+                    />
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

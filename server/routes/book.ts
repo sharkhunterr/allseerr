@@ -139,6 +139,31 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         const hc = new HardcoverAPI(bookHcKey);
         const prefLang =
           audioCfg?.preferredLanguage?.toLowerCase().trim() || undefined;
+        // Kick author search in parallel — matches the book path, so
+        // author cards surface at the top of the audiobook grid too.
+        const authorsPromise = hc
+          .searchAuthors(query, 3)
+          .then((hits) =>
+            hits.map((a) => ({
+              type: 'author' as const,
+              key: `hardcover:${a.id}`,
+              name: a.name,
+              photoUrl: a.photoUrl,
+              bio: a.bio,
+              booksCount: a.booksCount,
+            }))
+          )
+          .catch(
+            () =>
+              [] as Array<{
+                type: 'author';
+                key: string;
+                name: string;
+                photoUrl?: string;
+                bio?: string;
+                booksCount?: number;
+              }>
+          );
         const hits = await hc.searchAudiobooks(query, limit);
         const enriched: Array<{
           openLibraryId: string;
@@ -202,11 +227,25 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
           });
         }
 
+        const authors = await authorsPromise;
+        const strongAuthorMatches = authors.filter(
+          (a) => a.name.toLowerCase() === query.toLowerCase().trim()
+        );
+        const weakAuthorMatches = authors.filter(
+          (a) => a.name.toLowerCase() !== query.toLowerCase().trim()
+        );
+        // Strong matches (exact name) open the grid; weak matches land
+        // just after in case the top audiobook hit is a better anchor.
+        const combined = [
+          ...strongAuthorMatches,
+          ...enriched,
+          ...weakAuthorMatches,
+        ];
         return res.status(200).json({
           page,
           totalPages: 1,
-          totalResults: enriched.length,
-          results: enriched,
+          totalResults: combined.length,
+          results: combined,
         });
       }
 
@@ -888,9 +927,22 @@ bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
         });
       }
       const hc = new HardcoverAPI(cfg.hardcoverApiKey);
-      const author = await hc.getAuthor(
-        Number(rawKey.slice('hardcover:'.length))
-      );
+      const authorId = Number(rawKey.slice('hardcover:'.length));
+      // Audiobook tab only renders when the audiobook provider block has
+      // Hardcover enabled — otherwise we skip the extra query altogether
+      // so authors on a Audible-only deployment don't pay the round-trip.
+      const audioCfg = settings.audiobook?.metadataProviders;
+      const audiobooksEnabled = !!audioCfg?.hardcover;
+      const prefLang =
+        audioCfg?.preferredLanguage?.toLowerCase().trim() || undefined;
+      const [author, audioWorks] = await Promise.all([
+        hc.getAuthor(authorId),
+        audiobooksEnabled
+          ? hc
+              .getAuthorAudiobooks(authorId, { editionLanguage: prefLang })
+              .catch(() => [])
+          : Promise.resolve([]),
+      ]);
       if (!author) {
         return res
           .status(404)
@@ -913,6 +965,40 @@ bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
           };
         })
       );
+      // Audiobook works route to /book/:asin (Audible detail flow) when
+      // an ASIN is available; entries without an ASIN are dropped since
+      // the detail page can't render them today.
+      const audiobookMediaRepo = getRepository(AudiobookMedia);
+      const audiobooks = (
+        await Promise.all(
+          audioWorks
+            .filter((w) => !!w.asin)
+            .map(async (w) => {
+              const existing = await audiobookMediaRepo.findOne({
+                where: { asin: w.asin! },
+              });
+              return {
+                openLibraryId: w.asin!,
+                title: w.title,
+                authorName: author.name,
+                coverUrl: w.coverUrl,
+                mediaStatus: existing?.status ?? null,
+                bookMediaId: existing?.id ?? null,
+                mediaType: MediaType.AUDIOBOOK,
+                durationSeconds: w.audioSeconds ?? undefined,
+              };
+            })
+        )
+      ) as Array<{
+        openLibraryId: string;
+        title: string;
+        authorName: string;
+        coverUrl?: string;
+        mediaStatus: MediaStatus | null;
+        bookMediaId: number | null;
+        mediaType: MediaType;
+        durationSeconds?: number;
+      }>;
       return res.status(200).json({
         key: rawKey,
         name: author.name,
@@ -928,6 +1014,7 @@ bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
           name: s.name,
           coverUrl: s.coverUrl,
         })),
+        audiobooks,
       });
     }
 
@@ -1220,11 +1307,58 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         where: { asin: product.asin },
       });
 
+      // Audible's API doesn't carry author bio / photo / lifespan —
+      // when the user has Hardcover enabled, resolve the first author
+      // name against Hardcover's searchAuthors to hydrate the author
+      // card on the audiobook detail page (same fields as the book
+      // detail page).
+      let authorKey: string | undefined;
+      let authorPhotoUrl: string | undefined;
+      let authorBio: string | undefined;
+      let authorBirthDate: string | undefined;
+      let authorDeathDate: string | undefined;
+      const audioCfg = getSettings().audiobook?.metadataProviders;
+      const bookCfg = getSettings().book?.metadataProviders;
+      const hcReady =
+        !!audioCfg?.hardcover && !!bookCfg?.hardcoverApiKey;
+      const primaryName = product.authorName?.split(',')[0]?.trim();
+      if (hcReady && primaryName) {
+        try {
+          const hc = new HardcoverAPI(bookCfg!.hardcoverApiKey);
+          const [match] = await hc.searchAuthors(primaryName, 1);
+          if (match) {
+            // Hardcover's searchAuthors returns lean profile data;
+            // the full getAuthor call pulls birth/death which the UI
+            // renders in the "lived" line under the photo.
+            const detail = await hc.getAuthor(match.id);
+            authorKey = `hardcover:${match.id}`;
+            authorPhotoUrl =
+              detail?.cached_image_url ?? match.photoUrl ?? undefined;
+            authorBio = detail?.bio ?? match.bio ?? undefined;
+            authorBirthDate = detail?.birth_date ?? undefined;
+            authorDeathDate = detail?.death_date ?? undefined;
+          }
+        } catch (e) {
+          // Hardcover enrichment is best-effort — never block the
+          // audiobook detail response because it failed.
+          logger.debug('Hardcover author enrichment failed on audiobook', {
+            label: 'book',
+            asin: id,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+
       return res.status(200).json({
         key: product.asin,
         title: product.title,
         subtitle: product.subtitle,
         authorName: product.authorName,
+        authorKey,
+        authorPhotoUrl,
+        authorBio,
+        authorBirthDate,
+        authorDeathDate,
         narratorName: product.narratorName,
         description: product.summary,
         coverUrl: product.coverUrl,

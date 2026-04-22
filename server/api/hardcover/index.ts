@@ -1113,6 +1113,113 @@ class HardcoverAPI {
       };
     });
   }
+
+  /**
+   * Fetch an author's audiobook works — books they're credited on that
+   * have at least one audiobook edition. Each entry carries the ASIN of
+   * the first matching edition (preferring preferredLanguage when
+   * supplied) so the audiobook author tab can link straight into
+   * /book/:asin which hits the Audible detail flow.
+   */
+  async getAuthorAudiobooks(
+    authorId: number,
+    opts?: { editionLanguage?: string }
+  ): Promise<
+    Array<{
+      bookId: number;
+      title: string;
+      coverUrl?: string;
+      asin?: string;
+      audioSeconds?: number;
+    }>
+  > {
+    const lang = opts?.editionLanguage?.toLowerCase().trim();
+    return cached(
+      `author:${authorId}:audiobooks:${lang ?? 'all'}`,
+      async () => {
+        const audioFmtId = HARDCOVER_READING_FORMAT.audiobook;
+        // Build a language-aware editions sub-filter so Hardcover only
+        // returns the subset we care about; keeps the response small.
+        const whereBits = [`reading_format_id: { _eq: ${audioFmtId} }`];
+        if (lang) whereBits.push(`language: { code2: { _eq: "${lang}" } }`);
+        const editionsFilter = `where: { ${whereBits.join(', ')} }`;
+        const gqlQuery = `
+          query AuthorAudiobooks($id: Int!) {
+            contributions(
+              where: {
+                author_id: { _eq: $id },
+                book: { editions: { reading_format_id: { _eq: ${audioFmtId} } } }
+              }
+              order_by: { book: { users_count: desc_nulls_last } }
+              limit: 100
+            ) {
+              contribution
+              book {
+                id
+                title
+                image { url }
+                editions(${editionsFilter}, limit: 5, order_by: { release_date: desc_nulls_last }) {
+                  asin
+                  audio_seconds
+                  language { code2 }
+                }
+              }
+            }
+          }
+        `;
+        const { data } = await this.gql<{
+          contributions: Array<{
+            contribution?: string | null;
+            book?: {
+              id: number;
+              title: string;
+              image?: { url?: string } | null;
+              editions?: Array<{
+                asin?: string | null;
+                audio_seconds?: number | null;
+                language?: { code2?: string | null } | null;
+              }>;
+            } | null;
+          }>;
+        }>(gqlQuery, { id: authorId });
+        const rows = (data?.contributions ?? [])
+          .filter(
+            (c) =>
+              c.book &&
+              (!c.contribution ||
+                c.contribution.toLowerCase() === 'author' ||
+                c.contribution.toLowerCase().includes('author'))
+          )
+          .map((c) => c.book!);
+        // Dedupe — a translator/author double contribution on the same
+        // book would surface twice otherwise.
+        const seen = new Set<number>();
+        const result: Array<{
+          bookId: number;
+          title: string;
+          coverUrl?: string;
+          asin?: string;
+          audioSeconds?: number;
+        }> = [];
+        for (const book of rows) {
+          if (seen.has(book.id)) continue;
+          seen.add(book.id);
+          // Prefer an edition with an ASIN; fall back to the first
+          // returned edition for duration only.
+          const withAsin = book.editions?.find((e) => !!e.asin);
+          const firstEd = withAsin ?? book.editions?.[0];
+          result.push({
+            bookId: book.id,
+            title: book.title,
+            coverUrl: book.image?.url ?? undefined,
+            asin: withAsin?.asin ?? undefined,
+            audioSeconds: firstEd?.audio_seconds ?? undefined,
+          });
+        }
+        return result;
+      }
+    );
+  }
 }
 
 export default HardcoverAPI;
