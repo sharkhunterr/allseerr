@@ -712,23 +712,39 @@ class HardcoverAPI {
     asin: string
   ): Promise<HardcoverSearchHit | null> {
     return cached(`audiobook:asin:${asin}`, async () => {
+      // Hardcover's public Hasura rejects `_ilike` with 403; we drop
+      // the platform-name filter and lean on the ASIN's own uniqueness
+      // (10-char Audible identifier). Over-fetch a few rows in case
+      // the same ASIN shows up under multiple platforms and pick the
+      // first with a book_id.
       const gqlQuery = `
         query ByAsin($asin: String!) {
           book_mappings(
-            where: {
-              external_id: { _eq: $asin }
-              platform: { name: { _ilike: "audible" } }
-            }
-            limit: 1
+            where: { external_id: { _eq: $asin } }
+            limit: 5
           ) {
             book_id
+            platform { name }
           }
         }
       `;
       const { data } = await this.gql<{
-        book_mappings: Array<{ book_id?: number | null }>;
+        book_mappings: Array<{
+          book_id?: number | null;
+          platform?: { name?: string | null } | null;
+        }>;
       }>(gqlQuery, { asin });
-      const bookId = data?.book_mappings?.[0]?.book_id;
+      const rows = data?.book_mappings ?? [];
+      // Prefer the Audible-tagged row when present, otherwise the
+      // first row with a book_id — some ASIN/ISBN collisions land on
+      // non-audio platforms and we'd rather skip than misattribute.
+      const audible = rows.find(
+        (r) =>
+          r.book_id != null &&
+          r.platform?.name?.toLowerCase().includes('audible')
+      );
+      const fallback = rows.find((r) => r.book_id != null);
+      const bookId = audible?.book_id ?? fallback?.book_id ?? null;
       if (!bookId) return null;
       return this.getAudiobookById(bookId);
     });
