@@ -33,6 +33,13 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Bump Node's old-space heap from the 2 GB default to 4 GB. Next.js dev
+# mode compiles routes on demand and accumulates memory across each
+# /book/[bookId], /movie/[movieId], etc. — a long session triggers
+# "Reached heap limit / Allocation failed" once enough routes have been
+# touched. 4 GB is plenty for development without affecting production.
+export NODE_OPTIONS="${NODE_OPTIONS:-} --max-old-space-size=4096"
+
 # Start dev server in its own process group so we can kill all children cleanly
 set -m
 HOST=0.0.0.0 PORT="$PORT" npx pnpm@10.24.0 run dev &
