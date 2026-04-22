@@ -1755,15 +1755,6 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
           const primaryName = product.authorName.split(',')[0]?.trim();
           try {
             if (primaryName) {
-              // Typesense-backed search is fuzzy enough to return
-              // wildly unrelated names as the "top" hit for short
-              // queries (e.g. "J.K. Rowling" returned Jeffrey C.
-              // Lagarias). Over-fetch and accept only candidates
-              // whose surname — or, as a looser fallback, any token
-              // except a single-letter initial — overlaps with the
-              // query. Without this guard we silently attributed
-              // Rowling's audiobook to a mathematician.
-              const candidates = await hc.searchAuthors(primaryName, 5);
               const normName = (s: string) =>
                 s
                   .toLowerCase()
@@ -1776,24 +1767,47 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
                 .split(' ')
                 .filter((t) => t.length > 1);
               const qSurname = qTokens[qTokens.length - 1];
-              const match = candidates.find((c) => {
-                const cTokens = normName(c.name).split(' ').filter(Boolean);
-                if (qSurname && cTokens.includes(qSurname)) return true;
-                // Token-overlap fallback for cases like "Stephen King"
-                // vs "King, Stephen" where the join order differs.
-                const overlap = qTokens.filter((t) =>
-                  cTokens.includes(t)
-                ).length;
-                return (
-                  qTokens.length > 0 && overlap >= Math.ceil(qTokens.length / 2)
-                );
-              });
+              const pickMatch = (
+                candidates: { id: number; name: string; bio?: string; photoUrl?: string }[]
+              ) =>
+                candidates.find((c) => {
+                  const cTokens = normName(c.name).split(' ').filter(Boolean);
+                  if (qSurname && cTokens.includes(qSurname)) return true;
+                  const overlap = qTokens.filter((t) =>
+                    cTokens.includes(t)
+                  ).length;
+                  return (
+                    qTokens.length > 0 &&
+                    overlap >= Math.ceil(qTokens.length / 2)
+                  );
+                });
+
+              // First pass: full name as typed on Audible. Hardcover's
+              // Typesense mangles short queries with dots (J.K. Rowling
+              // → Jeffrey C. Lagarias), so this often returns garbage
+              // for initials-heavy authors.
+              let candidates = await hc.searchAuthors(primaryName, 5);
+              let match = pickMatch(candidates);
+              let pass = 'primary';
+
+              // Second pass: fall back to the bare surname if the
+              // first pass yielded nothing matchable. Single-token
+              // queries like "Rowling" skip the initials trap and
+              // hit the expected author directly.
+              if (!match && qSurname && qSurname !== normName(primaryName)) {
+                candidates = await hc.searchAuthors(qSurname, 5);
+                match = pickMatch(candidates);
+                pass = 'surname';
+              }
+
               logger.info('Audiobook author fallback search', {
                 label: 'book',
                 asin: product.asin,
                 primaryName,
+                surname: qSurname,
+                pass,
                 candidates: candidates.length,
-                rejected: candidates.length > 0 && !match,
+                candidateNames: candidates.map((c) => c.name),
                 matched: !!match,
                 matchId: match?.id,
                 matchName: match?.name,
