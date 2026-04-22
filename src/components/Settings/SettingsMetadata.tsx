@@ -3,7 +3,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import SubTabs from '@app/components/Common/SubTabs';
-import SettingsAudibleMetadata from '@app/components/Settings/BooksAudiobooks/SettingsAudibleMetadata';
+import SettingsAudiobookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsAudiobookMetadata';
 import SettingsBookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsBookMetadata';
 import SettingsIgdb from '@app/components/Settings/Games/SettingsIgdb';
 import MetadataSelector, {
@@ -502,7 +502,7 @@ const SettingsMetadata = () => {
       <SubTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
       {activeTab === 'movies-tv' && <MoviesAndTVMetadata />}
       {activeTab === 'books' && <SettingsBookMetadata />}
-      {activeTab === 'audiobooks' && <SettingsAudibleMetadata />}
+      {activeTab === 'audiobooks' && <SettingsAudiobookMetadata />}
       {activeTab === 'games' && <SettingsIgdb />}
     </>
   );
