@@ -55,7 +55,13 @@ const AUDIBLE_VALID_REGIONS: AudibleRegion[] = [
 
 const getAudibleClient = (): AudibleAPI => {
   const settings = getSettings();
-  const configured = settings.metadataSettings.audibleRegion?.toLowerCase();
+  // Prefer the audiobook-scoped region so the audiobook metadata tab is
+  // the single source of truth going forward. Fall back to the legacy
+  // metadataSettings.audibleRegion for unmigrated configs, then to the
+  // user's discover region, then 'us'.
+  const configured =
+    settings.audiobook?.metadataProviders?.audibleRegion?.toLowerCase() ??
+    settings.metadataSettings.audibleRegion?.toLowerCase();
   const fallback = settings.main.discoverRegion?.toLowerCase();
   const region = (configured || fallback || 'us') as AudibleRegion;
   return new AudibleAPI(AUDIBLE_VALID_REGIONS.includes(region) ? region : 'us');

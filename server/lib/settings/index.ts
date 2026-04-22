@@ -449,6 +449,31 @@ export interface BookSettings {
   };
 }
 
+export interface AudiobookSettings {
+  metadataProviders: {
+    // Single identity source for audiobooks — same split as
+    // book.metadataProviders.primarySource. Audible is the de-facto
+    // default because it's free and covers the widest catalog; users
+    // with a Hardcover account can flip to Hardcover for richer
+    // metadata (ratings, tags, narrator). The non-primary provider is
+    // enrichment-only.
+    primarySource: 'audible' | 'hardcover';
+    audible: boolean;
+    // Audible regional storefront — ISO-ish 2-letter code consumed by
+    // server/api/audible. Moved here from metadataSettings.audibleRegion
+    // so the audiobook provider tab owns all its state; the legacy
+    // field is kept as a fallback for old configs.
+    audibleRegion?: string;
+    hardcover: boolean;
+    // Hardcover uses a single account so the API key is *shared* with
+    // book.metadataProviders.hardcoverApiKey at runtime; we don't store
+    // a duplicate here. The boolean above only gates whether Hardcover
+    // is considered for audiobooks at all.
+    preferredLanguage: string;
+    languagePolicy: 'prefer' | 'strict';
+  };
+}
+
 export interface GameSettings {
   igdb: {
     clientId: string;
@@ -497,6 +522,7 @@ export interface AllSettings {
   metadataSettings: MetadataSettings;
   game: GameSettings;
   book: BookSettings;
+  audiobook: AudiobookSettings;
   oidc: OidcSettings;
   migrations: string[];
 }
@@ -804,6 +830,16 @@ class Settings {
           languagePolicy: 'prefer',
         },
       },
+      audiobook: {
+        metadataProviders: {
+          primarySource: 'audible',
+          audible: true,
+          audibleRegion: 'us',
+          hardcover: false,
+          preferredLanguage: '',
+          languagePolicy: 'prefer',
+        },
+      },
       oidc: {
         enabled: false,
         issuerUrl: '',
@@ -911,6 +947,14 @@ class Settings {
 
   set book(data: BookSettings) {
     this.data.book = mergeSettings(this.data.book, data);
+  }
+
+  get audiobook(): AudiobookSettings {
+    return this.data.audiobook;
+  }
+
+  set audiobook(data: AudiobookSettings) {
+    this.data.audiobook = mergeSettings(this.data.audiobook, data);
   }
 
   get oidc(): OidcSettings {
