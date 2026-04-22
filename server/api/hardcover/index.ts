@@ -1234,8 +1234,10 @@ class HardcoverAPI {
                 title
                 image { url }
                 editions(${editionsFilter}, limit: 5, order_by: { release_date: desc_nulls_last }) {
+                  title
                   asin
                   audio_seconds
+                  image { url }
                   language { code2 }
                 }
               }
@@ -1250,8 +1252,10 @@ class HardcoverAPI {
               title: string;
               image?: { url?: string } | null;
               editions?: Array<{
+                title?: string | null;
                 asin?: string | null;
                 audio_seconds?: number | null;
+                image?: { url?: string } | null;
                 language?: { code2?: string | null } | null;
               }>;
             } | null;
@@ -1280,13 +1284,18 @@ class HardcoverAPI {
           if (seen.has(book.id)) continue;
           seen.add(book.id);
           // Prefer an edition with an ASIN; fall back to the first
-          // returned edition for duration only.
+          // returned edition for duration / title / cover.
           const withAsin = book.editions?.find((e) => !!e.asin);
           const firstEd = withAsin ?? book.editions?.[0];
+          // Use the edition's localized title / cover when present
+          // so books with a preferred-language edition show that
+          // language's title on the author tab (e.g. "Le Seigneur
+          // des Anneaux" instead of "The Lord of the Rings" when
+          // preferredLanguage=fr).
           result.push({
             bookId: book.id,
-            title: book.title,
-            coverUrl: book.image?.url ?? undefined,
+            title: firstEd?.title ?? book.title,
+            coverUrl: firstEd?.image?.url ?? book.image?.url ?? undefined,
             asin: withAsin?.asin ?? undefined,
             audioSeconds: firstEd?.audio_seconds ?? undefined,
           });

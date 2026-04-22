@@ -1671,12 +1671,58 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       if (hcReady) {
         const hc = new HardcoverAPI(bookCfg!.hardcoverApiKey);
         try {
-          const hit = await hc.searchAudiobookByAsin(product.asin);
+          // Pass 1 — ASIN → Hardcover book_mappings. Cheapest lookup
+          // when it works; misses for ASINs Hardcover hasn't indexed.
+          let hit = await hc.searchAudiobookByAsin(product.asin);
+          let enrichmentPass: 'asin' | 'title' | 'none' = hit ? 'asin' : 'none';
+
+          // Pass 2 — free-text book search by Audible title. When the
+          // ASIN isn't mapped, the underlying work usually still is
+          // (Hardcover just never linked the audio ASIN). Match back
+          // to our Audible product via a normalized author-name
+          // check so a homonym title on Hardcover doesn't misattribute
+          // the audiobook.
+          if (!hit && product.title && product.authorName) {
+            try {
+              const candidates = await hc.searchBooks(product.title, 5);
+              const normName = (s: string) =>
+                s
+                  .toLowerCase()
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .replace(/[^a-z\s]/g, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+              const audibleAuthorTokens = normName(product.authorName)
+                .split(' ')
+                .filter((t) => t.length > 1);
+              const audibleSurname =
+                audibleAuthorTokens[audibleAuthorTokens.length - 1];
+              hit =
+                candidates.find((c) => {
+                  const primaryAuthor =
+                    hardcoverPrimaryAuthor(c.contributions) ?? '';
+                  const cTokens = normName(primaryAuthor).split(' ').filter(Boolean);
+                  return !!audibleSurname && cTokens.includes(audibleSurname);
+                }) ?? null;
+              if (hit) enrichmentPass = 'title';
+            } catch (e) {
+              logger.debug('Title-based audiobook enrichment threw', {
+                label: 'book',
+                asin: product.asin,
+                title: product.title,
+                error: e instanceof Error ? e.message : String(e),
+              });
+            }
+          }
+
           logger.info('Audiobook Hardcover ASIN enrichment', {
             label: 'book',
             asin: product.asin,
+            pass: enrichmentPass,
             matched: !!hit,
             hitId: hit?.id,
+            hitTitle: hit?.title,
             hasContribs: (hit?.contributions?.length ?? 0) > 0,
             hasMoods: (hit?.cached_tags?.Mood?.length ?? 0) > 0,
           });
