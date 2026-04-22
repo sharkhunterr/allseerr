@@ -90,14 +90,16 @@ class RommCollectionsScanner {
         // ROM that was just added to a collection surfaces in the
         // next /game/:id hit without waiting for the 10-min TTL.
         cache.del(`collection:${s.id}`);
-        await adapter.getCollection(s.id);
+        await adapter.getCollection(s.id, s.kind);
         this.progress++;
       }
 
       this.lastScanAt = Date.now();
       this.lastDurationMs = this.lastScanAt - startedAt;
+      const userCount = summaries.filter((s) => s.kind === 'user').length;
+      const virtualCount = summaries.filter((s) => s.kind === 'virtual').length;
       logger.info(
-        `ROMM collections scan complete: ${summaries.length} collections cached in ${this.lastDurationMs}ms`,
+        `ROMM collections scan complete: ${summaries.length} cached (${userCount} user, ${virtualCount} virtual) in ${this.lastDurationMs}ms`,
         { label: 'ROMM Collections Scan' }
       );
     } catch (e) {

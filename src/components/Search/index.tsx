@@ -274,11 +274,12 @@ interface GameResult {
 
 interface GameCollectionResult {
   type: 'collection';
-  id: number;
+  id: string;
   name: string;
   description?: string;
   coverUrl?: string;
   romCount?: number;
+  kind?: 'user' | 'virtual';
 }
 
 type GameOrCollectionResult = GameResult | GameCollectionResult;

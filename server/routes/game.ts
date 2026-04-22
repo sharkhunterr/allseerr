@@ -146,11 +146,12 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
     // insensitive substring.
     let collectionHits: Array<{
       type: 'collection';
-      id: number;
+      id: string;
       name: string;
       description?: string;
       coverUrl?: string;
       romCount?: number;
+      kind: 'user' | 'virtual';
     }> = [];
     const romAdapter = createRommAdapterFromSettings();
     if (romAdapter) {
@@ -168,6 +169,7 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
             description: c.description,
             coverUrl: c.coverUrl,
             romCount: c.romCount,
+            kind: c.kind,
           }));
         logger.info('ROMM collection search match', {
           label: 'romm',
@@ -459,8 +461,11 @@ gameRoutes.get('/platforms', isAuthenticated(), async (_req, res) => {
  * can reuse the series-page layout.
  */
 gameRoutes.get('/collection/:id', isAuthenticated(), async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) {
+  // Virtual collections use string ids (e.g. "franchise_castlevania")
+  // alongside the numeric ids of user-created ones, so we keep the
+  // parameter as-is rather than forcing it through parseInt.
+  const id = req.params.id;
+  if (!id) {
     return res
       .status(400)
       .json({ status: 400, message: 'Invalid collection id.' });
@@ -607,11 +612,12 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
     // factory returns null) and short-TTL cached inside the adapter
     // so repeat detail hits don't re-list 100 collections each time.
     let collections: Array<{
-      id: number;
+      id: string;
       name: string;
       description?: string;
       coverUrl?: string;
       romCount?: number;
+      kind: 'user' | 'virtual';
     }> = [];
     const rommIds = existingMedia
       .map((m) => m.rommId)
@@ -629,10 +635,19 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
           const rommIdSet = new Set(rommIds);
           const matched = await Promise.all(
             summaries.map(async (s) => {
-              const detail = await romAdapter.getCollection(s.id);
+              const detail = await romAdapter.getCollection(s.id, s.kind);
               if (!detail) return null;
               const intersects = detail.romIds.some((r) => rommIdSet.has(r));
-              return intersects ? { ...s, romCount: detail.romCount } : null;
+              return intersects
+                ? {
+                    id: s.id,
+                    name: s.name,
+                    description: s.description,
+                    coverUrl: s.coverUrl,
+                    romCount: detail.romCount,
+                    kind: s.kind,
+                  }
+                : null;
             })
           );
           collections = matched.filter(

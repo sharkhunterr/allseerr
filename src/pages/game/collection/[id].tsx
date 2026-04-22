@@ -29,11 +29,12 @@ interface CollectionMember {
 }
 
 interface CollectionDetail {
-  id: number;
+  id: string;
   name: string;
   description?: string;
   coverUrl?: string;
   romCount?: number;
+  kind?: 'user' | 'virtual';
   members: CollectionMember[];
 }
 
