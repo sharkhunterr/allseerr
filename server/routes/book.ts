@@ -1755,11 +1755,45 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
           const primaryName = product.authorName.split(',')[0]?.trim();
           try {
             if (primaryName) {
-              const [match] = await hc.searchAuthors(primaryName, 1);
+              // Typesense-backed search is fuzzy enough to return
+              // wildly unrelated names as the "top" hit for short
+              // queries (e.g. "J.K. Rowling" returned Jeffrey C.
+              // Lagarias). Over-fetch and accept only candidates
+              // whose surname — or, as a looser fallback, any token
+              // except a single-letter initial — overlaps with the
+              // query. Without this guard we silently attributed
+              // Rowling's audiobook to a mathematician.
+              const candidates = await hc.searchAuthors(primaryName, 5);
+              const normName = (s: string) =>
+                s
+                  .toLowerCase()
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .replace(/[^a-z\s]/g, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+              const qTokens = normName(primaryName)
+                .split(' ')
+                .filter((t) => t.length > 1);
+              const qSurname = qTokens[qTokens.length - 1];
+              const match = candidates.find((c) => {
+                const cTokens = normName(c.name).split(' ').filter(Boolean);
+                if (qSurname && cTokens.includes(qSurname)) return true;
+                // Token-overlap fallback for cases like "Stephen King"
+                // vs "King, Stephen" where the join order differs.
+                const overlap = qTokens.filter((t) =>
+                  cTokens.includes(t)
+                ).length;
+                return (
+                  qTokens.length > 0 && overlap >= Math.ceil(qTokens.length / 2)
+                );
+              });
               logger.info('Audiobook author fallback search', {
                 label: 'book',
                 asin: product.asin,
                 primaryName,
+                candidates: candidates.length,
+                rejected: candidates.length > 0 && !match,
                 matched: !!match,
                 matchId: match?.id,
                 matchName: match?.name,
