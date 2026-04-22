@@ -959,7 +959,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       // then discarding them client-side, so books with dozens of
       // French editions actually show them all.
       const prefLang = cfg.preferredLanguage?.toLowerCase().trim() || undefined;
-      const hit = await hc.getBookById(hcId, prefLang);
+      const hit = await hc.getBookById(hcId, { editionLanguage: prefLang });
       if (!hit) {
         return res.status(404).json({
           status: 404,

@@ -62,14 +62,34 @@ export interface HardcoverEdition {
   subtitle?: string | null;
   isbn_13?: string | null;
   isbn_10?: string | null;
+  asin?: string | null;
   release_date?: string | null;
   pages?: number | null;
+  audio_seconds?: number | null;
   edition_format?: string | null;
+  // Hardcover's numeric enum for edition medium — 1 = physical book,
+  // 2 = audiobook, 4 = e-book. Used by the audiobook queries to filter
+  // editions on the server side.
+  reading_format_id?: number | null;
   image?: { url?: string | null } | null;
   publisher?: { name?: string | null } | null;
   country?: { name?: string | null; code2?: string | null } | null;
   language?: { code2?: string | null } | null;
 }
+
+/**
+ * Numeric IDs Hardcover assigns in the `reading_formats` table. These
+ * look stable enough that hard-coding is fine — if Hardcover ever
+ * renumbers we switch to the `reading_format { format }` relation path.
+ */
+export const HARDCOVER_READING_FORMAT = {
+  book: 1,
+  audiobook: 2,
+  ebook: 4,
+} as const;
+
+export type HardcoverReadingFormat =
+  keyof typeof HARDCOVER_READING_FORMAT;
 
 /**
  * Fallback mapping when Hardcover's `country.code2` is null — common
@@ -332,16 +352,21 @@ class HardcoverAPI {
   }
 
   // Fields for a single edition row. Reused by the parameterised
-  // bookFields() builder below.
+  // bookFields() builder below. `asin` + `audio_seconds` are pulled so
+  // audiobook editions can be matched back to Audible by ASIN and show
+  // a runtime on the detail page.
   private static EDITION_FIELDS = `
     id
     title
     subtitle
     isbn_13
     isbn_10
+    asin
     release_date
     pages
+    audio_seconds
     edition_format
+    reading_format_id
     image { url }
     publisher { name }
     country { name code2 }
@@ -352,13 +377,26 @@ class HardcoverAPI {
    * Builds the book-level GraphQL fragment. `editionLang` filters the
    * `editions` sub-query to a single ISO-639-1 language — used by the
    * detail handler so the UI only ever sees editions in the user's
-   * configured preferredLanguage. When omitted, all editions come
-   * back (search paths keep their current behaviour).
+   * configured preferredLanguage. `editionFormat` further restricts to
+   * one reading medium (book / audiobook / ebook) — used by the
+   * audiobook code paths so we only consider audio editions. When
+   * omitted, all editions come back (search paths keep their current
+   * behaviour).
    */
-  private static bookFields(opts?: { editionLang?: string }): string {
+  private static bookFields(opts?: {
+    editionLang?: string;
+    editionFormat?: HardcoverReadingFormat;
+  }): string {
     const lang = opts?.editionLang?.toLowerCase().trim();
-    const langFilter = lang
-      ? `where: { language: { code2: { _eq: "${lang}" } } }`
+    const format = opts?.editionFormat;
+    const whereClauses: string[] = [];
+    if (lang) whereClauses.push(`language: { code2: { _eq: "${lang}" } }`);
+    if (format)
+      whereClauses.push(
+        `reading_format_id: { _eq: ${HARDCOVER_READING_FORMAT[format]} }`
+      );
+    const filter = whereClauses.length
+      ? `where: { ${whereClauses.join(', ')} }`
       : '';
     // Detail view: newest edition first so Dune / HP users see the
     // currently-printed edition at the top of the dropdown. Search
@@ -401,7 +439,7 @@ class HardcoverAPI {
       editions(
         limit: 50
         order_by: { release_date: ${order} }
-        ${langFilter}
+        ${filter}
       ) {
         ${HardcoverAPI.EDITION_FIELDS}
       }
@@ -416,14 +454,19 @@ class HardcoverAPI {
    */
   public async getBookById(
     id: number,
-    editionLanguage?: string
+    opts?: { editionLanguage?: string; editionFormat?: HardcoverReadingFormat }
   ): Promise<HardcoverSearchHit | null> {
-    const cacheKey = `book:${id}:${editionLanguage ?? 'all'}`;
+    const lang = opts?.editionLanguage;
+    const format = opts?.editionFormat;
+    const cacheKey = `book:${id}:${format ?? 'any'}:${lang ?? 'all'}`;
     return cached(cacheKey, async () => {
       const gqlQuery = `
         query BookById($id: Int!) {
           books(where: { id: { _eq: $id } }, limit: 1) {
-            ${HardcoverAPI.bookFields({ editionLang: editionLanguage })}
+            ${HardcoverAPI.bookFields({
+              editionLang: lang,
+              editionFormat: format,
+            })}
           }
         }
       `;
@@ -432,6 +475,23 @@ class HardcoverAPI {
         { id }
       );
       return data?.books?.[0] ?? null;
+    });
+  }
+
+  /**
+   * Audiobook-focused variant of getBookById: only audio editions are
+   * returned (ordered newest first when a language filter is in play,
+   * oldest first otherwise — mirrors the book path). The full book
+   * record (title, author, series, ratings, tags) is unchanged, but
+   * the `editions` list is filtered to `reading_format_id = audiobook`.
+   */
+  public async getAudiobookById(
+    id: number,
+    editionLanguage?: string
+  ): Promise<HardcoverSearchHit | null> {
+    return this.getBookById(id, {
+      editionLanguage,
+      editionFormat: 'audiobook',
     });
   }
 
@@ -565,6 +625,113 @@ class HardcoverAPI {
       },
       3600
     );
+  }
+
+  /**
+   * Audiobook-specific search. Hardcover's Typesense index doesn't have
+   * a dedicated `audiobooks` query_type, so we reuse the `books` index
+   * and then filter the follow-up `books(where: _in)` batch to only
+   * keep entries that actually have an audiobook edition. The edition
+   * list on the returned hit is pre-filtered to audiobook editions so
+   * callers can render runtime / ASIN metadata without another round-
+   * trip.
+   */
+  async searchAudiobooks(
+    query: string,
+    limit = 10
+  ): Promise<HardcoverSearchHit[]> {
+    return cached(
+      `search-audiobooks:${query.toLowerCase()}:${limit}`,
+      async () => {
+        const searchGql = `
+          query Search($q: String!, $per: Int!) {
+            search(
+              query: $q,
+              query_type: "books",
+              per_page: $per,
+              page: 1
+            ) {
+              results
+            }
+          }
+        `;
+        // We over-fetch from Typesense because many books have no audio
+        // edition at all; without the buffer the final list collapses
+        // to a handful once the audiobook-edition filter runs.
+        const typesensePer = Math.min(limit * 3, 50);
+        const { data: searchData } = await this.gql<{
+          search: TypesenseSearchResponse;
+        }>(searchGql, { q: query, per: typesensePer });
+        const ids = (searchData?.search?.results?.hits ?? [])
+          .map((h) => h.document?.id)
+          .filter((v): v is number | string => v != null)
+          .map((v) => Number(v))
+          .filter((v) => Number.isFinite(v));
+        if (ids.length === 0) return [];
+        // Nested where on the editions relation keeps us to books that
+        // actually ship an audio edition; the editions field returned
+        // inside each book is filtered to audiobook editions only via
+        // bookFields({ editionFormat: 'audiobook' }).
+        const audiobookFmtId = HARDCOVER_READING_FORMAT.audiobook;
+        const batchGql = `
+          query AudiobooksByIds($ids: [Int!]!) {
+            books(
+              where: {
+                id: { _in: $ids },
+                editions: { reading_format_id: { _eq: ${audiobookFmtId} } }
+              }
+              limit: ${ids.length}
+            ) {
+              ${HardcoverAPI.bookFields({ editionFormat: 'audiobook' })}
+            }
+          }
+        `;
+        const { data: batch } = await this.gql<{
+          books: HardcoverSearchHit[];
+        }>(batchGql, { ids });
+        // Preserve Typesense ordering, and drop the over-fetched extras
+        // so callers get at most `limit` hits.
+        const byId = new Map(
+          (batch?.books ?? []).map((b) => [b.id, b])
+        );
+        return ids
+          .map((id) => byId.get(id))
+          .filter((b): b is HardcoverSearchHit => !!b)
+          .slice(0, limit);
+      },
+      3600
+    );
+  }
+
+  /**
+   * ASIN lookup via the book_mappings table (Audible is the canonical
+   * ASIN source on Hardcover). Returns the parent book with its audio
+   * editions filtered in so the UI immediately has narrator / duration.
+   */
+  async searchAudiobookByAsin(
+    asin: string
+  ): Promise<HardcoverSearchHit | null> {
+    return cached(`audiobook:asin:${asin}`, async () => {
+      const gqlQuery = `
+        query ByAsin($asin: String!) {
+          book_mappings(
+            where: {
+              external_id: { _eq: $asin }
+              platform: { name: { _ilike: "audible" } }
+            }
+            limit: 1
+          ) {
+            book_id
+          }
+        }
+      `;
+      const { data } = await this.gql<{
+        book_mappings: Array<{ book_id?: number | null }>;
+      }>(gqlQuery, { asin });
+      const bookId = data?.book_mappings?.[0]?.book_id;
+      if (!bookId) return null;
+      return this.getAudiobookById(bookId);
+    });
   }
 
   /**
