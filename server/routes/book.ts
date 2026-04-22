@@ -180,11 +180,13 @@ async function resolveTopAuthorMatches(
     return qTokens.every((t) => cTokens.includes(t));
   };
 
-  // Pass 1 — direct Hasura exact match. We try the query as typed
-  // first; if it contains dots (initials like "J.K."), we also fan
-  // out across common spacing variants in parallel so we don't pay
-  // 4 sequential round-trips when a single request would have
-  // worked.
+  // Fan out Hasura exact-match (across spacing variants when the
+  // query contains dots) AND Typesense in parallel. Then merge and
+  // sort by books_count desc so the prolific author wins over any
+  // obscure homonym literally named "Tolkien" with zero books. Fixes
+  // the "Tolkien card leads to empty author page" report where the
+  // previous short-circuit returned the noise homonym before even
+  // looking at Typesense's better hits.
   const hasDots = /\./.test(trimmed);
   const variants = hasDots
     ? Array.from(
@@ -198,35 +200,34 @@ async function resolveTopAuthorMatches(
         )
       )
     : [trimmed];
-  const exactBatches = await Promise.all(
-    variants.map((v) => hc.findAuthorByExactName(v).catch(() => []))
-  );
-  const seen = new Set<number>();
-  const exact: AuthorSearchHit[] = [];
-  for (const batch of exactBatches) {
-    for (const r of batch) {
-      if (seen.has(r.id)) continue;
-      if (!candidateMatches(r.name)) continue;
-      seen.add(r.id);
-      exact.push({
-        type: 'author',
-        key: `hardcover:${r.id}`,
-        name: r.name,
-        photoUrl: r.photoUrl,
-        bio: r.bio,
-        booksCount: r.booksCount,
-      });
-      if (exact.length >= limit) break;
-    }
-    if (exact.length >= limit) break;
-  }
-  if (exact.length > 0) return exact;
+  const [exactBatches, typesenseCandidates] = await Promise.all([
+    Promise.all(
+      variants.map((v) => hc.findAuthorByExactName(v).catch(() => []))
+    ),
+    hc.searchAuthors(trimmed, 10).catch(() => []),
+  ]);
 
-  // Pass 2 — Typesense fallback. Public index is noisy so we still
-  // require every identifying token to appear in the candidate.
-  const candidates = await hc.searchAuthors(trimmed, 10).catch(() => []);
-  return candidates
-    .filter((c) => candidateMatches(c.name))
+  type Raw = {
+    id: number;
+    name: string;
+    bio?: string;
+    photoUrl?: string;
+    booksCount?: number;
+  };
+  const merged = new Map<number, Raw>();
+  for (const batch of exactBatches) {
+    for (const r of batch) merged.set(r.id, r);
+  }
+  for (const c of typesenseCandidates) {
+    if (!merged.has(c.id)) merged.set(c.id, c);
+  }
+
+  return Array.from(merged.values())
+    .filter((r) => candidateMatches(r.name))
+    // Drop authors with no books — they're usually publisher stubs
+    // or duplicate entries that would open an empty author page.
+    .filter((r) => (r.booksCount ?? 0) > 0)
+    .sort((a, b) => (b.booksCount ?? 0) - (a.booksCount ?? 0))
     .slice(0, limit)
     .map((a) => ({
       type: 'author',
