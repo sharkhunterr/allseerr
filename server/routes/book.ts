@@ -115,6 +115,101 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
 
   try {
     if (type === 'audiobook') {
+      const settings = getSettings();
+      const audioCfg = settings.audiobook?.metadataProviders;
+      const bookHcKey = settings.book?.metadataProviders?.hardcoverApiKey;
+      // Hardcover uses a single account shared with books, so the key
+      // itself comes from book.metadataProviders.hardcoverApiKey — the
+      // audiobook block only gates whether Hardcover is considered.
+      const hcReady =
+        !!audioCfg?.hardcover && !!bookHcKey && bookHcKey.length > 0;
+      const effectivePrimary =
+        audioCfg?.primarySource === 'hardcover' && hcReady
+          ? 'hardcover'
+          : 'audible';
+
+      const audiobookMediaRepo = getRepository(AudiobookMedia);
+
+      if (effectivePrimary === 'hardcover') {
+        // Hardcover path — we only surface audiobook hits that have an
+        // ASIN on at least one audio edition, because the detail flow
+        // still routes through Audible (/book/:asin). The rating /
+        // narrator / tag enrichment lands directly on the result shape
+        // so the grid reuses the same card component.
+        const hc = new HardcoverAPI(bookHcKey);
+        const prefLang =
+          audioCfg?.preferredLanguage?.toLowerCase().trim() || undefined;
+        const hits = await hc.searchAudiobooks(query, limit);
+        const enriched: Array<{
+          openLibraryId: string;
+          title: string;
+          authorName: string;
+          narratorName?: string;
+          coverUrl?: string;
+          year?: number;
+          publisher?: string;
+          durationSeconds?: number;
+          summary?: string;
+          mediaType: MediaType;
+          mediaStatus: MediaStatus | null;
+          bookMediaId: number | null;
+        }> = [];
+        for (const hit of hits) {
+          // Drop the non-preferred-language audio editions under the
+          // "strict" policy; under "prefer" we let them through so the
+          // user isn't blocked from requesting a book that happens to
+          // have no audio edition in their language.
+          const audioEds = (hit.editions ?? []).filter(
+            (e) =>
+              !prefLang ||
+              audioCfg?.languagePolicy !== 'strict' ||
+              e.language?.code2?.toLowerCase() === prefLang
+          );
+          // Prefer an ASIN from a language-matching edition so UIs keep
+          // showing the French / German version when the user has set
+          // a preference, even though detail-page metadata still comes
+          // from Audible.
+          const withAsin =
+            audioEds.find(
+              (e) =>
+                !!e.asin &&
+                (!prefLang ||
+                  e.language?.code2?.toLowerCase() === prefLang)
+            ) ?? audioEds.find((e) => !!e.asin);
+          if (!withAsin?.asin) continue;
+          const existing = await audiobookMediaRepo.findOne({
+            where: { asin: withAsin.asin },
+          });
+          const coverUrl =
+            withAsin.image?.url ?? hit.image?.url ?? undefined;
+          enriched.push({
+            openLibraryId: withAsin.asin,
+            title: hit.title,
+            authorName: hardcoverPrimaryAuthor(hit.contributions) ?? 'Unknown',
+            narratorName: undefined,
+            coverUrl,
+            year: withAsin.release_date
+              ? parseInt(withAsin.release_date.slice(0, 4), 10)
+              : hit.release_date
+                ? parseInt(hit.release_date.slice(0, 4), 10)
+                : undefined,
+            publisher: withAsin.publisher?.name ?? undefined,
+            durationSeconds: withAsin.audio_seconds ?? undefined,
+            summary: hit.description ?? undefined,
+            mediaType: MediaType.AUDIOBOOK,
+            mediaStatus: existing?.status ?? null,
+            bookMediaId: existing?.id ?? null,
+          });
+        }
+
+        return res.status(200).json({
+          page,
+          totalPages: 1,
+          totalResults: enriched.length,
+          results: enriched,
+        });
+      }
+
       // Audible Catalog API (free, no auth) — same source as AudioBookRequest
       const { results, totalResults } = await getAudibleClient().search(
         query,
@@ -122,7 +217,6 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         Math.max(0, page - 1)
       );
 
-      const audiobookMediaRepo = getRepository(AudiobookMedia);
       const enrichedResults = await Promise.all(
         results.map(async (result) => {
           const existing = await audiobookMediaRepo.findOne({
