@@ -1016,16 +1016,19 @@ bookRoutes.get('/author/:authorKey', isAuthenticated(), async (req, res) => {
     if (/^hardcover:\d+$/i.test(rawKey)) {
       const settings = getSettings();
       const cfg = settings.book.metadataProviders;
-      if (!cfg.hardcover || !cfg.hardcoverApiKey) {
+      const audioCfg = settings.audiobook?.metadataProviders;
+      // Accept Hardcover set on either tab — the author card links use
+      // hardcover:<id> regardless of whether the user primarily wants
+      // Hardcover for books or for audiobooks.
+      if (!cfg.hardcoverApiKey || (!cfg.hardcover && !audioCfg?.hardcover)) {
         return res.status(400).json({
           status: 400,
           message:
-            'Hardcover is not enabled. Turn it on in Settings → Metadata Providers → Books.',
+            'Hardcover is not enabled. Turn it on in Settings → Metadata Providers → Books or Audiobooks.',
         });
       }
       const hc = new HardcoverAPI(cfg.hardcoverApiKey);
       const authorId = Number(rawKey.slice('hardcover:'.length));
-      const audioCfg = settings.audiobook?.metadataProviders;
       const prefLang =
         audioCfg?.preferredLanguage?.toLowerCase().trim() || undefined;
       // Resolve Hardcover author first so we know the name — used by
@@ -1340,11 +1343,17 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       const settings = getSettings();
       const bookCfg = settings.book.metadataProviders;
       const audioCfg = settings.audiobook?.metadataProviders;
-      if (!bookCfg.hardcover || !bookCfg.hardcoverApiKey) {
+      // Same widened gate as the Audible detail branch: accept the
+      // Hardcover flag set on either the Book or Audiobook tab so long
+      // as the shared API key is present.
+      if (
+        !bookCfg.hardcoverApiKey ||
+        (!bookCfg.hardcover && !audioCfg?.hardcover)
+      ) {
         return res.status(400).json({
           status: 400,
           message:
-            'Hardcover is not enabled. Turn it on in Settings → Metadata Providers → Books.',
+            'Hardcover is not enabled. Turn it on in Settings → Metadata Providers → Books or Audiobooks.',
         });
       }
       const hcId = Number(id.slice('hcab:'.length));
@@ -1650,11 +1659,27 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       }> = [];
       let enrichedDescription: string | undefined;
       const bookCfg = getSettings().book?.metadataProviders;
-      const hcReady = !!bookCfg?.hardcover && !!bookCfg?.hardcoverApiKey;
+      const audioCfg = getSettings().audiobook?.metadataProviders;
+      // Gate on the Hardcover key + an explicit "use Hardcover" flag
+      // on either tab. Prior build only checked the book-tab flag,
+      // which meant a user who turned Hardcover on only in the
+      // Audiobook metadata tab got no enrichment — the key was stored
+      // (write-through) but the flag wasn't, so hcReady stayed false.
+      const hcReady =
+        !!bookCfg?.hardcoverApiKey &&
+        (!!bookCfg?.hardcover || !!audioCfg?.hardcover);
       if (hcReady) {
         const hc = new HardcoverAPI(bookCfg!.hardcoverApiKey);
         try {
           const hit = await hc.searchAudiobookByAsin(product.asin);
+          logger.info('Audiobook Hardcover ASIN enrichment', {
+            label: 'book',
+            asin: product.asin,
+            matched: !!hit,
+            hitId: hit?.id,
+            hasContribs: (hit?.contributions?.length ?? 0) > 0,
+            hasMoods: (hit?.cached_tags?.Mood?.length ?? 0) > 0,
+          });
           if (hit) {
             rating = hit.rating ?? undefined;
             ratingsCount = hit.ratings_count ?? undefined;
