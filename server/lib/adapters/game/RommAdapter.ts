@@ -299,15 +299,17 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
 
   private async fetchCollectionList(
     path: string,
-    kind: 'user' | 'virtual'
+    kind: 'user' | 'virtual',
+    params?: Record<string, string>
   ): Promise<RommCollectionSummary[]> {
     try {
-      const response = await this.axios.get<unknown>(path);
+      const response = await this.axios.get<unknown>(path, { params });
       const rows = this.rowsFromResponse(response.data);
       logger.info('ROMM collection list shape probe', {
         label: 'romm',
         path,
         kind,
+        params,
         status: response.status,
         isArray: Array.isArray(response.data),
         count: rows.length,
@@ -315,15 +317,18 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
       });
       return rows.map((c) => this.normaliseCollection(c, kind));
     } catch (e) {
-      // 404 on /collections/virtual is expected on older ROMM
-      // builds; log at debug instead of warn so it doesn't spam.
+      // 404 / 422 on some variants are expected (older ROMM builds
+      // don't have the endpoint; certain virtual-collection types
+      // aren't supported by every install). Demote them to debug so
+      // we don't spam warns.
       const status = (e as { response?: { status?: number } }).response?.status;
-      logger[status === 404 ? 'debug' : 'warn'](
+      logger[status === 404 || status === 422 ? 'debug' : 'warn'](
         'ROMM collection list failed',
         {
           label: 'romm',
           path,
           kind,
+          params,
           status,
           error: e instanceof Error ? e.message : String(e),
         }
@@ -331,6 +336,22 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
       return [];
     }
   }
+
+  /**
+   * Virtual-collection types ROMM supports. Each yields a distinct
+   * set of auto-groupings (e.g. "franchise" → Castlevania, Zelda,
+   * Final Fantasy; "company" → Nintendo, Konami). Filtering by type
+   * is mandatory on /api/collections/virtual — the endpoint 422s
+   * without it. We hit the handful that make sense for a "is this
+   * game part of a known group?" lookup.
+   */
+  private static VIRTUAL_COLLECTION_TYPES = [
+    'franchise',
+    'genre',
+    'company',
+    'mode',
+    'category',
+  ] as const;
 
   async listCollections(): Promise<RommCollectionSummary[]> {
     const key = 'collections:list';
@@ -343,14 +364,28 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
       return hit;
     }
     // User-created collections (/api/collections) + auto-generated
-    // virtual collections (/api/collections/virtual, ROMM 3.8+) —
-    // merged so the UI only ever sees one flat list. The ids are
-    // already prefixed at the normalise step so callers can tell
-    // them apart later.
-    const [userCollections, virtualCollections] = await Promise.all([
+    // virtual collections (/api/collections/virtual?type=<type>,
+    // ROMM 3.8+) — merged so the UI only ever sees one flat list.
+    // Virtual types are mandatory so we fan them out; untyped
+    // requests just 422. Ids already carry their prefix/shape
+    // difference so callers can tell them apart later.
+    const [userCollections, ...virtualBatches] = await Promise.all([
       this.fetchCollectionList('/collections', 'user'),
-      this.fetchCollectionList('/collections/virtual', 'virtual'),
+      ...RommAdapter.VIRTUAL_COLLECTION_TYPES.map((type) =>
+        this.fetchCollectionList('/collections/virtual', 'virtual', { type })
+      ),
     ]);
+    // Dedup across types: the same virtual id shouldn't appear
+    // twice, but if it did we'd keep the first occurrence.
+    const seen = new Set<string>();
+    const virtualCollections: RommCollectionSummary[] = [];
+    for (const batch of virtualBatches) {
+      for (const c of batch) {
+        if (seen.has(c.id)) continue;
+        seen.add(c.id);
+        virtualCollections.push(c);
+      }
+    }
     const summaries = [...userCollections, ...virtualCollections];
     rommCache.set(key, summaries, 600);
     logger.debug('ROMM listCollections fetched', {
