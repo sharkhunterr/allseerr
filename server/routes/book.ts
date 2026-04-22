@@ -161,25 +161,52 @@ async function resolveTopAuthorMatches(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  const variants = Array.from(
-    new Set(
-      [
-        trimmed,
-        trimmed.replace(/\./g, '. ').replace(/\s+/g, ' ').trim(),
-        trimmed.replace(/\./g, ' ').replace(/\s+/g, ' ').trim(),
-        trimmed.replace(/\./g, '').replace(/\s+/g, ' ').trim(),
-      ].filter((v) => v.length > 0)
-    )
-  );
+  // Normalised query tokens, filtered to things long enough to be
+  // identifying — a lone "J" in "J.K. Rowling" or a filler word is
+  // useless for disambiguation.
+  const qTokens = normalizeAuthorName(trimmed)
+    .split(' ')
+    .filter((t) => t.length > 1);
+  // No identifying tokens (e.g. query is a single initial) → bail
+  // out rather than surface noise.
+  if (qTokens.length === 0) return [];
 
-  // Pass 1 — direct Hasura exact match on each spacing variant.
-  // Merged + deduped so homonyms from different variants collapse.
+  // A candidate is valid only if ALL identifying query tokens appear
+  // as tokens in the candidate's name. This prevents "Harry Potter"
+  // the book title from surfacing "Beatrix Potter", and "Rowling"
+  // from attaching Kew Staff Royal Botanic Gardens.
+  const candidateMatches = (name: string): boolean => {
+    const cTokens = normalizeAuthorName(name).split(' ').filter(Boolean);
+    return qTokens.every((t) => cTokens.includes(t));
+  };
+
+  // Pass 1 — direct Hasura exact match. We try the query as typed
+  // first; if it contains dots (initials like "J.K."), we also fan
+  // out across common spacing variants in parallel so we don't pay
+  // 4 sequential round-trips when a single request would have
+  // worked.
+  const hasDots = /\./.test(trimmed);
+  const variants = hasDots
+    ? Array.from(
+        new Set(
+          [
+            trimmed,
+            trimmed.replace(/\./g, '. ').replace(/\s+/g, ' ').trim(),
+            trimmed.replace(/\./g, ' ').replace(/\s+/g, ' ').trim(),
+            trimmed.replace(/\./g, '').replace(/\s+/g, ' ').trim(),
+          ].filter((v) => v.length > 0)
+        )
+      )
+    : [trimmed];
+  const exactBatches = await Promise.all(
+    variants.map((v) => hc.findAuthorByExactName(v).catch(() => []))
+  );
   const seen = new Set<number>();
   const exact: AuthorSearchHit[] = [];
-  for (const v of variants) {
-    const rows = await hc.findAuthorByExactName(v).catch(() => []);
-    for (const r of rows) {
+  for (const batch of exactBatches) {
+    for (const r of batch) {
       if (seen.has(r.id)) continue;
+      if (!candidateMatches(r.name)) continue;
       seen.add(r.id);
       exact.push({
         type: 'author',
@@ -195,28 +222,20 @@ async function resolveTopAuthorMatches(
   }
   if (exact.length > 0) return exact;
 
-  // Pass 2 — Typesense with surname-overlap filter. The filter is the
-  // only thing stopping garbage matches from leaking through ("Rowling"
-  // otherwise returns "Kew Staff Royal Botanic Gardens").
-  const qTokens = normalizeAuthorName(trimmed)
-    .split(' ')
-    .filter((t) => t.length > 1);
-  const qSurname = qTokens[qTokens.length - 1];
+  // Pass 2 — Typesense fallback. Public index is noisy so we still
+  // require every identifying token to appear in the candidate.
   const candidates = await hc.searchAuthors(trimmed, 10).catch(() => []);
-  const filtered = candidates.filter((c) => {
-    const cTokens = normalizeAuthorName(c.name).split(' ').filter(Boolean);
-    if (qSurname && cTokens.includes(qSurname)) return true;
-    const overlap = qTokens.filter((t) => cTokens.includes(t)).length;
-    return qTokens.length > 0 && overlap >= Math.ceil(qTokens.length / 2);
-  });
-  return filtered.slice(0, limit).map((a) => ({
-    type: 'author',
-    key: `hardcover:${a.id}`,
-    name: a.name,
-    photoUrl: a.photoUrl,
-    bio: a.bio,
-    booksCount: a.booksCount,
-  }));
+  return candidates
+    .filter((c) => candidateMatches(c.name))
+    .slice(0, limit)
+    .map((a) => ({
+      type: 'author',
+      key: `hardcover:${a.id}`,
+      name: a.name,
+      photoUrl: a.photoUrl,
+      bio: a.bio,
+      booksCount: a.booksCount,
+    }));
 }
 
 /**
