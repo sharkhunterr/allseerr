@@ -84,16 +84,26 @@ interface RommCollectionRaw {
   id: number | string;
   name: string;
   description?: string | null;
+  // User-created collections use scalar `path_cover_s` / `_l`;
+  // virtual collections ship `path_cover_small` / `_large` + arrays
+  // `path_covers_small` / `_large`. We probe all of them.
   path_cover_s?: string | null;
   path_cover_l?: string | null;
+  path_cover_small?: string | null;
+  path_cover_large?: string | null;
   url_cover?: string | null;
   url_covers?: string[] | null;
   path_covers_s?: string[] | null;
   path_covers_l?: string[] | null;
+  path_covers_small?: string[] | null;
+  path_covers_large?: string[] | null;
   user_id?: number | null;
   is_public?: boolean | null;
   rom_count?: number | null;
+  // User-created: `roms`. Virtual: `rom_ids`. Shape is the same
+  // (array of numeric rom ids) so we coalesce at the read site.
   roms?: number[] | null;
+  rom_ids?: number[] | null;
   is_virtual?: boolean | null;
 }
 
@@ -277,14 +287,19 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
     c: RommCollectionRaw,
     kind: 'user' | 'virtual'
   ): RommCollectionSummary {
-    // Virtual collections expose an array of cover paths (one per
-    // rom) rather than the single path/url fields the user-created
-    // ones use; fall back gracefully across both shapes.
+    // Try every cover shape ROMM has used across versions. Scalar
+    // `path_cover_s` / `_l` for user-created; `path_cover_small` /
+    // `_large` for virtual. Array variants (`path_covers_*`) when
+    // the collection covers are composited from N roms.
     const cover =
       c.url_cover ??
       c.url_covers?.[0] ??
+      c.path_cover_large ??
+      c.path_covers_large?.[0] ??
       c.path_cover_l ??
       c.path_covers_l?.[0] ??
+      c.path_cover_small ??
+      c.path_covers_small?.[0] ??
       c.path_cover_s ??
       c.path_covers_s?.[0];
     return {
@@ -292,7 +307,8 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
       name: c.name,
       description: c.description ?? undefined,
       coverUrl: this.coverUrl(cover ?? null),
-      romCount: c.rom_count ?? c.roms?.length ?? undefined,
+      romCount:
+        c.rom_count ?? c.roms?.length ?? c.rom_ids?.length ?? undefined,
       kind,
     };
   }
@@ -323,14 +339,19 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
           : null,
       });
       const summaries = rows.map((c) => this.normaliseCollection(c, kind));
-      // Each list row already carries the `roms` array on ROMM's
-      // virtual endpoint, so we build the detail shape right here.
-      // That avoids a second per-collection round-trip (1488 virtual
-      // collections × socket-hang-up floods ROMM otherwise).
-      const details: RommCollectionDetail[] = rows.map((c, idx) => ({
-        ...summaries[idx],
-        romIds: Array.isArray(c.roms) ? c.roms : [],
-      }));
+      // Rom id list is on `roms` for user-created collections and
+      // `rom_ids` on virtual. Coalesce so the cached detail is
+      // populated regardless of which bucket the collection came
+      // from. Avoids the per-id GET flood that used to 502 on
+      // 1000+-collection instances.
+      const details: RommCollectionDetail[] = rows.map((c, idx) => {
+        const romIds = Array.isArray(c.roms)
+          ? c.roms
+          : Array.isArray(c.rom_ids)
+            ? c.rom_ids
+            : [];
+        return { ...summaries[idx], romIds };
+      });
       return { summaries, details };
     } catch (e) {
       // 404 / 422 on some variants are expected (older ROMM builds
@@ -466,10 +487,12 @@ export class RommAdapter extends ExternalAPI implements MediaLibraryAdapter {
       const c = response.data;
       if (!c) return null;
       const summary = this.normaliseCollection(c, 'user');
-      const detail: RommCollectionDetail = {
-        ...summary,
-        romIds: Array.isArray(c.roms) ? c.roms : [],
-      };
+      const romIds = Array.isArray(c.roms)
+        ? c.roms
+        : Array.isArray(c.rom_ids)
+          ? c.rom_ids
+          : [];
+      const detail: RommCollectionDetail = { ...summary, romIds };
       rommCache.set(key, detail, 600);
       return detail;
     } catch (e) {
