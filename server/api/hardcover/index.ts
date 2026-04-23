@@ -1027,7 +1027,7 @@ class HardcoverAPI {
               image { url }
               contributions(limit: 5) {
                 contribution
-                # `id` was missing here — the series-route's
+                # author.id was missing here — the series-route's
                 # author-enrichment path needs it to call getAuthor
                 # for photo / bio / lifespan. Without it the cards
                 # rendered with name only.
