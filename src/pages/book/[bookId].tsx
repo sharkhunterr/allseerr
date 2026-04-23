@@ -583,14 +583,14 @@ const BookDetailPage: NextPage = () => {
                       })}
                     </div>
                   )}
-                  {data.country && (
-                    <div className="mt-1 inline-flex items-center gap-1 text-xs text-gray-400">
-                      <span className="text-base leading-none">
-                        {countryFlag(data.country)}
-                      </span>
-                      <span className="uppercase">{data.country}</span>
-                    </div>
-                  )}
+                  {/* `data.country` is the book's first-edition
+                      country (Hardcover.getBookOriginalCountry), not
+                      the author's nationality. Showing it inside the
+                      author card was misleading — Rowling's UK books
+                      surfaced BR / US flags depending on which
+                      edition Hardcover dated first. The country
+                      stays available on the media-facts block on the
+                      right rail when present. */}
                 </div>
               </div>
               {data.authorBio && (
@@ -721,6 +721,19 @@ const BookDetailPage: NextPage = () => {
                     </span>
                   )}
                   <span>{displayedLanguage}</span>
+                </span>
+              </div>
+            )}
+            {data.country && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.country)}</span>
+                <span className="media-fact-value inline-flex items-center gap-1 uppercase">
+                  {countryFlag(data.country) && (
+                    <span className="text-base leading-none">
+                      {countryFlag(data.country)}
+                    </span>
+                  )}
+                  <span>{data.country}</span>
                 </span>
               </div>
             )}

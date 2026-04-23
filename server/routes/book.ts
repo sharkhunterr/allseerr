@@ -707,7 +707,14 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
           );
           const normalisedOL = toOLWorkKey(olMapping?.external_id);
           const hardcoverKey = `hardcover:${m.book?.id ?? ''}`;
-          const openLibraryId = normalisedOL ?? hardcoverKey;
+          // Force Hardcover identity on every member of a Hardcover-
+          // keyed series. Earlier versions preferred the OL key when
+          // a book_mapping was present, but that produced a mixed
+          // grid: some members linked to /book/OL...W (OL detail →
+          // OL author), others to /book/hardcover:... (Hardcover
+          // detail → Hardcover author). Clicking jumped between two
+          // unrelated author pages for the same series.
+          const openLibraryId = hardcoverKey;
           // Check BookMedia under every key we know for this book — if
           // the user previously requested it via one id we don't want
           // the badge to go missing just because another provider
@@ -838,12 +845,84 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
       })
     );
 
+    // Author enrichment for OL-keyed series. The OL series record
+    // doesn't carry author identity, so we resolve it from the first
+    // member's work (its `authors[0].author.key`), look up that
+    // author's profile via OL, then optionally upgrade the photo /
+    // bio / lifespan via Hardcover when the user has a Hardcover key
+    // configured. Mirrors the parity the user asked for: the series
+    // author card now shows the same shape as the book detail card.
+    let seriesAuthorName: string | undefined;
+    let seriesAuthorKey: string | undefined;
+    let seriesAuthorPhotoUrl: string | undefined;
+    let seriesAuthorBio: string | undefined;
+    let seriesAuthorBirthDate: string | undefined;
+    let seriesAuthorDeathDate: string | undefined;
+    try {
+      const firstMember = members[0];
+      if (firstMember?.workKey) {
+        const work = await openLibrary.getWork(`/works/${firstMember.workKey}`);
+        const olAuthorKey = work?.authors?.[0]?.author?.key
+          ?.split('/')
+          .pop();
+        if (olAuthorKey) {
+          const olAuthor = await openLibrary.getAuthor(olAuthorKey);
+          if (olAuthor) {
+            seriesAuthorName = olAuthor.name ?? undefined;
+            seriesAuthorKey = olAuthorKey;
+            seriesAuthorPhotoUrl = olAuthor.photoUrl;
+            seriesAuthorBio = olAuthor.bio;
+            seriesAuthorBirthDate = olAuthor.birthDate;
+            seriesAuthorDeathDate = olAuthor.deathDate;
+          }
+        }
+        // Cross-source upgrade: if Hardcover is configured, prefer
+        // its photo / bio / dates when the OL ones are missing or
+        // sparse. Switches the author card to a Hardcover-keyed link
+        // so the audiobooks tab on the author page works too.
+        const cfg = getSettings().book?.metadataProviders;
+        if (
+          seriesAuthorName &&
+          cfg?.hardcover &&
+          cfg?.hardcoverApiKey
+        ) {
+          const hc = new HardcoverAPI(cfg.hardcoverApiKey);
+          const [match] = await hc.findAuthorByExactName(seriesAuthorName);
+          if (match) {
+            const detail = await hc.getAuthor(match.id);
+            if (detail) {
+              seriesAuthorKey = `hardcover:${detail.id}`;
+              seriesAuthorPhotoUrl =
+                detail.cached_image_url ?? seriesAuthorPhotoUrl;
+              seriesAuthorBio = detail.bio ?? seriesAuthorBio;
+              seriesAuthorBirthDate =
+                detail.birth_date ?? seriesAuthorBirthDate;
+              seriesAuthorDeathDate =
+                detail.death_date ?? seriesAuthorDeathDate;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      logger.debug('OL series author enrichment failed', {
+        label: 'book',
+        seriesId: id,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+
     return res.status(200).json({
       key: `openlibrary:${series.key}`,
       name: series.name,
       description: series.description,
       seedCount: series.seedCount,
       members: enriched,
+      authorName: seriesAuthorName,
+      authorKey: seriesAuthorKey,
+      authorPhotoUrl: seriesAuthorPhotoUrl,
+      authorBio: seriesAuthorBio,
+      authorBirthDate: seriesAuthorBirthDate,
+      authorDeathDate: seriesAuthorDeathDate,
     });
   } catch (e) {
     logger.error('Book series fetch failed', {
