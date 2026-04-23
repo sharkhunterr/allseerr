@@ -239,7 +239,7 @@ export interface HardcoverSeriesMember {
     image?: { url?: string } | null;
     contributions?: {
       contribution?: string | null;
-      author?: { name?: string } | null;
+      author?: { id?: number; name?: string } | null;
     }[];
     book_mappings?: HardcoverBookMapping[];
   } | null;
@@ -1027,7 +1027,11 @@ class HardcoverAPI {
               image { url }
               contributions(limit: 5) {
                 contribution
-                author { name }
+                # `id` was missing here — the series-route's
+                # author-enrichment path needs it to call getAuthor
+                # for photo / bio / lifespan. Without it the cards
+                # rendered with name only.
+                author { id name }
               }
               book_mappings {
                 external_id
