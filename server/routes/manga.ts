@@ -3,10 +3,19 @@ import AniListAPI, {
   aniListPrimaryTitle,
   aniListYear,
 } from '@server/api/anilist';
-import { MediaType } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
+import { MangaMedia } from '@server/entity/MangaMedia';
+import { MediaRequest } from '@server/entity/MediaRequest';
+import { User } from '@server/entity/User';
+import { hasPermission, Permission } from '@server/lib/permissions';
 import { isAuthenticated } from '@server/middleware/auth';
 import logger from '@server/logger';
 import { Router } from 'express';
+import { getRepository } from '@server/datasource';
 
 const mangaRoutes = Router();
 
@@ -320,6 +329,189 @@ mangaRoutes.get('/:id', isAuthenticated(), async (req, res) => {
     return res.status(500).json({
       status: 500,
       message: 'Failed to fetch manga details.',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/manga/request
+ * Submit a manga request. No download manager wired in this phase —
+ * the row sits at PENDING / PROCESSING and the dispatcher (Phase 7,
+ * Suwayomi) picks it up later. Manual workflow when no DM is
+ * configured, mirroring the game flow.
+ */
+mangaRoutes.post('/request', isAuthenticated(), async (req, res) => {
+  const body = req.body as {
+    anilistId: number;
+    malId?: number;
+    title: string;
+    titleNative?: string;
+    coverUrl?: string;
+    year?: number;
+    format?: string;
+    statusAnilist?: string;
+    chapters?: number;
+    volumes?: number;
+    countryOfOrigin?: string;
+    authorName?: string;
+    userId?: number;
+  };
+
+  if (!body.anilistId || !body.title) {
+    return res.status(400).json({
+      status: 400,
+      message: 'anilistId and title are required.',
+    });
+  }
+
+  if (
+    !hasPermission(
+      [Permission.REQUEST, Permission.REQUEST_MANGA],
+      req.user?.permissions ?? 0,
+      { type: 'or' }
+    )
+  ) {
+    return res.status(403).json({
+      status: 403,
+      message: 'You do not have permission to request manga.',
+    });
+  }
+
+  const mangaMediaRepo = getRepository(MangaMedia);
+  const requestRepo = getRepository(MediaRequest);
+  const userRepo = getRepository(User);
+
+  // Admin "Request As" — same shape as the game / book routes. The
+  // caller must hold MANAGE_USERS or MANAGE_REQUESTS to swap the
+  // requesting identity; otherwise the body.userId is ignored.
+  let requestUser = req.user!;
+  if (
+    body.userId &&
+    body.userId !== req.user?.id &&
+    hasPermission(
+      [Permission.MANAGE_USERS, Permission.MANAGE_REQUESTS],
+      req.user?.permissions ?? 0,
+      { type: 'or' }
+    )
+  ) {
+    const target = await userRepo.findOne({ where: { id: body.userId } });
+    if (target) {
+      requestUser = target;
+    }
+  }
+
+  // Duplicate detection — one row per AniList id (the unique
+  // constraint on MangaMedia). A previously declined request can be
+  // re-submitted; an active one returns 409 with the existing id.
+  const existing = await mangaMediaRepo.findOne({
+    where: { anilistId: body.anilistId },
+  });
+
+  if (existing) {
+    const existingRequest = await requestRepo.findOne({
+      where: { mangaMedia: { id: existing.id } },
+    });
+    if (
+      existingRequest &&
+      existingRequest.status !== MediaRequestStatus.DECLINED
+    ) {
+      return res.status(409).json({
+        status: 409,
+        message: 'This manga has already been requested.',
+        existingRequestId: existingRequest.id,
+        existingStatus: existingRequest.status,
+      });
+    }
+  }
+
+  // Quota check — MANAGE_USERS bypass is handled inside getQuota().
+  try {
+    const quotas = await requestUser.getQuota();
+    if (quotas.manga.restricted) {
+      return res.status(403).json({
+        status: 403,
+        message: 'Manga quota exceeded.',
+        quota: quotas.manga,
+      });
+    }
+  } catch (e) {
+    logger.warn('Quota check failed (proceeding without enforcement)', {
+      label: 'manga',
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  try {
+    let mangaMedia = existing;
+    if (!mangaMedia) {
+      mangaMedia = new MangaMedia({
+        title: body.title,
+        anilistId: body.anilistId,
+        malId: body.malId ?? null,
+        titleNative: body.titleNative ?? null,
+        coverUrl: body.coverUrl ?? null,
+        year: body.year ?? null,
+        format: body.format ?? null,
+        status_anilist: body.statusAnilist ?? null,
+        chapters: body.chapters ?? null,
+        volumes: body.volumes ?? null,
+        countryOfOrigin: body.countryOfOrigin ?? null,
+        authorName: body.authorName ?? null,
+        status: MediaStatus.PENDING,
+      });
+      await mangaMediaRepo.save(mangaMedia);
+    } else if (mangaMedia.status !== MediaStatus.AVAILABLE) {
+      // Re-requesting a previously declined / removed manga — reset
+      // status so the badge + button reflect the new pending state.
+      mangaMedia.status = MediaStatus.PENDING;
+      await mangaMediaRepo.save(mangaMedia);
+    }
+
+    const request = new MediaRequest();
+    request.status = MediaRequestStatus.PENDING;
+    request.type = MediaType.MANGA;
+    request.requestedBy = requestUser;
+    request.mangaMedia = mangaMedia;
+
+    await requestRepo.save(request);
+
+    // Auto-approve: MANAGE_REQUESTS / AUTO_APPROVE / AUTO_APPROVE_MANGA
+    // greenlight the submission. Same OR-shaped check as game / book.
+    if (
+      req.user &&
+      hasPermission(
+        [
+          Permission.MANAGE_REQUESTS,
+          Permission.AUTO_APPROVE,
+          Permission.AUTO_APPROVE_MANGA,
+        ],
+        req.user.permissions,
+        { type: 'or' }
+      )
+    ) {
+      mangaMedia.status = MediaStatus.PROCESSING;
+      await mangaMediaRepo.save(mangaMedia);
+      request.status = MediaRequestStatus.APPROVED;
+      await requestRepo.save(request);
+    }
+
+    logger.info(`Manga request created: ${body.title} (anilist:${body.anilistId})`, {
+      label: 'manga',
+      requestId: request.id,
+    });
+
+    return res.status(201).json({
+      ...request,
+      mangaMedia,
+    });
+  } catch (e) {
+    logger.error('Manga request creation failed', {
+      label: 'manga',
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(500).json({
+      status: 500,
+      message: 'Manga request creation failed. Please try again.',
     });
   }
 });

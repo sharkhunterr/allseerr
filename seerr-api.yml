@@ -4409,6 +4409,55 @@ paths:
             application/json:
               schema:
                 type: object
+  /manga/request:
+    post:
+      summary: Submit a manga request
+      description: Creates a new manga request from an AniList result.
+      tags:
+        - manga
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - anilistId
+                - title
+              properties:
+                anilistId:
+                  type: number
+                malId:
+                  type: number
+                title:
+                  type: string
+                titleNative:
+                  type: string
+                coverUrl:
+                  type: string
+                year:
+                  type: number
+                format:
+                  type: string
+                statusAnilist:
+                  type: string
+                chapters:
+                  type: number
+                volumes:
+                  type: number
+                countryOfOrigin:
+                  type: string
+                authorName:
+                  type: string
+                userId:
+                  type: number
+      responses:
+        '201':
+          description: Manga request created
+          content:
+            application/json:
+              schema:
+                type: object
   /game/{igdbId}:
     get:
       summary: Get game details

@@ -1,10 +1,13 @@
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import MangaRequestModal from '@app/components/RequestModal/MangaRequestModal';
+import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
 import type { NextPage } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import { useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -30,6 +33,7 @@ const messages = defineMessages('pages.MangaDetail', {
   aboutAuthor: 'About the author',
   related: 'Related works',
   popularityCountFmt: '{count, plural, one {# user} other {# users}}',
+  request: 'Request',
 });
 
 interface MangaRelation {
@@ -89,9 +93,16 @@ const MangaDetailPage: NextPage = () => {
   const router = useRouter();
   const intl = useIntl();
   const { mangaId } = router.query;
+  const { hasPermission } = useUser();
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
-  const { data, error } = useSWR<MangaDetailData>(
+  const { data, error, mutate } = useSWR<MangaDetailData>(
     mangaId ? `/api/v1/manga/${mangaId}` : null
+  );
+
+  const canRequest = hasPermission(
+    [Permission.REQUEST, Permission.REQUEST_MANGA],
+    { type: 'or' }
   );
 
   if (!data && !error) return <LoadingSpinner />;
@@ -165,6 +176,18 @@ const MangaDetailPage: NextPage = () => {
               </>
             )}
           </span>
+          {canRequest && (
+            <div className="media-actions mt-4">
+              <button
+                type="button"
+                onClick={() => setShowRequestModal(true)}
+                className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                <BookOpenIcon className="mr-2 h-5 w-5" />
+                {intl.formatMessage(messages.request)}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -403,6 +426,27 @@ const MangaDetailPage: NextPage = () => {
         </div>
       </div>
       <div className="extra-bottom-space relative" />
+
+      <MangaRequestModal
+        show={showRequestModal}
+        anilistId={data.anilistId}
+        malId={data.malId}
+        title={data.title}
+        titleNative={data.titleNative}
+        coverUrl={data.coverUrl}
+        year={data.year}
+        format={data.format}
+        statusAnilist={data.status}
+        chapters={data.chapters}
+        volumes={data.volumes}
+        countryOfOrigin={data.countryOfOrigin}
+        authorName={data.authorName}
+        onCancel={() => setShowRequestModal(false)}
+        onComplete={() => {
+          setShowRequestModal(false);
+          mutate();
+        }}
+      />
     </div>
   );
 };
