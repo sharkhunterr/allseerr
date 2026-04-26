@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.2](https://github.com/seerr-team/seerr/-/compare/v0.2.1...v0.2.2) (2026-04-26)
+
+
+### Bug Fixes
+
+* **ci:** regenerate lockfile after standard-version dep + bump build memory ([587a67e](https://github.com/seerr-team/seerr/-/commit/587a67e83664a8601bb77fd8005c38001650d7c3))
+
 ### [0.2.1](https://github.com/seerr-team/seerr/-/compare/v0.2.0...v0.2.1) (2026-04-26)
 
 
