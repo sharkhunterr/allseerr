@@ -7,6 +7,7 @@ import SettingsAudiobookMetadata from '@app/components/Settings/BooksAudiobooks/
 import SettingsBookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsBookMetadata';
 import SettingsIgdb from '@app/components/Settings/Games/SettingsIgdb';
 import SettingsMangaMetadata from '@app/components/Settings/MangaComics/SettingsMangaMetadata';
+import SettingsSuwayomi from '@app/components/Settings/MangaComics/SettingsSuwayomi';
 import MetadataSelector, {
   MetadataProviderType,
 } from '@app/components/MetadataSelector';
@@ -506,7 +507,12 @@ const SettingsMetadata = () => {
       {activeTab === 'books' && <SettingsBookMetadata />}
       {activeTab === 'audiobooks' && <SettingsAudiobookMetadata />}
       {activeTab === 'games' && <SettingsIgdb />}
-      {activeTab === 'manga' && <SettingsMangaMetadata />}
+      {activeTab === 'manga' && (
+        <>
+          <SettingsMangaMetadata />
+          <SettingsSuwayomi />
+        </>
+      )}
     </>
   );
 };

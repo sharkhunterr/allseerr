@@ -23,6 +23,7 @@ import SeasonRequest from '@server/entity/SeasonRequest';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { submitToBindery } from '@server/lib/services/binderyDispatcher';
 import { submitToBookshelf } from '@server/lib/services/bookshelfDispatcher';
+import { submitToSuwayomi } from '@server/lib/services/suwayomiDispatcher';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isEqual, truncate } from 'lodash';
@@ -1190,6 +1191,48 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
   }
 
+  /**
+   * Dispatches manga requests to a configured Suwayomi (Tachidesk)
+   * instance on approval. Skips silently when Suwayomi is not enabled
+   * — that's the manual-workflow case (parallel to ROMM for games).
+   */
+  public async sendToSuwayomi(entity: MediaRequest): Promise<void> {
+    if (entity.status !== MediaRequestStatus.APPROVED) {
+      return;
+    }
+    if (entity.type !== MediaType.MANGA) {
+      return;
+    }
+
+    const requestRepo = getRepository(MediaRequest);
+    const fullRequest = await requestRepo.findOne({
+      where: { id: entity.id },
+      relations: ['mangaMedia'],
+    });
+    const media = fullRequest?.mangaMedia;
+    if (!media) {
+      return;
+    }
+
+    // Already dispatched — no point re-submitting on every approval
+    // toggle.
+    if (media.downloadManagerExternalId) {
+      return;
+    }
+
+    const result = await submitToSuwayomi(media);
+    if (result.success) {
+      const { MangaMedia } = await import('@server/entity/MangaMedia');
+      await getRepository(MangaMedia).save(media);
+    } else if (!result.noInstance) {
+      logger.warn('Suwayomi dispatch did not succeed', {
+        label: 'Media Request',
+        requestId: entity.id,
+        message: result.message,
+      });
+    }
+  }
+
   public async afterUpdate(event: UpdateEvent<MediaRequest>): Promise<void> {
     if (!event.entity) {
       return;
@@ -1200,6 +1243,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToSonarr(event.entity as MediaRequest);
       await this.sendToBindery(event.entity as MediaRequest);
       await this.sendToBookshelf(event.entity as MediaRequest);
+      await this.sendToSuwayomi(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterUpdate subscriber', {
         label: 'Media Request',
@@ -1241,6 +1285,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToSonarr(event.entity as MediaRequest);
       await this.sendToBindery(event.entity as MediaRequest);
       await this.sendToBookshelf(event.entity as MediaRequest);
+      await this.sendToSuwayomi(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterInsert subscriber', {
         label: 'Media Request',

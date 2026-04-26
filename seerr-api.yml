@@ -5369,6 +5369,79 @@ paths:
                 properties:
                   success: { type: boolean }
                   message: { type: string }
+  /settings/manga/suwayomi:
+    get:
+      summary: Get Suwayomi (manga download manager) config
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string }
+                  publicUrl: { type: string }
+                  apiKey: { type: string }
+                  username: { type: string }
+                  password: { type: string }
+                  pollIntervalMinutes: { type: number }
+                  enabled: { type: boolean }
+    put:
+      summary: Update Suwayomi config
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string }
+                publicUrl: { type: string }
+                apiKey: { type: string }
+                username: { type: string }
+                password: { type: string }
+                pollIntervalMinutes: { type: number }
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/manga/suwayomi/test:
+    post:
+      summary: Probe a Suwayomi instance for reachability
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string }
+                apiKey: { type: string }
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Test complete (see success flag)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  version: { type: string }
   /settings/book/download-managers:
     get:
       summary: Get book download manager instances
