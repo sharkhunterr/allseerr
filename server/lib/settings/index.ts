@@ -567,6 +567,25 @@ export interface OidcSettings {
   groupMappings: OidcGroupMapping[];
 }
 
+/**
+ * Master on/off switches for each non-TMDB media type. When a
+ * type is OFF:
+ *  - it disappears from the search tabs (xxxEnabled in
+ *    fullPublicSettings ANDs with these flags)
+ *  - the search / detail / request routes for that type return 503
+ *  - the request modal can't be opened (the detail page returns 404)
+ *
+ * Defaults to true for every type to preserve existing behaviour
+ * for upgrading installs — admins explicitly opt OUT.
+ */
+export interface MediaTypeToggles {
+  book: boolean;
+  audiobook: boolean;
+  game: boolean;
+  manga: boolean;
+  comic: boolean;
+}
+
 export interface AllSettings {
   clientId: string;
   sessionSecret?: string;
@@ -590,6 +609,7 @@ export interface AllSettings {
   audiobook: AudiobookSettings;
   manga: MangaSettings;
   comic: ComicSettings;
+  mediaTypes: MediaTypeToggles;
   oidc: OidcSettings;
   migrations: string[];
 }
@@ -950,6 +970,13 @@ class Settings {
           enabled: false,
         },
       },
+      mediaTypes: {
+        book: true,
+        audiobook: true,
+        game: true,
+        manga: true,
+        comic: true,
+      },
       oidc: {
         enabled: false,
         issuerUrl: '',
@@ -1083,6 +1110,23 @@ class Settings {
     this.data.comic = mergeSettings(this.data.comic, data);
   }
 
+  get mediaTypes(): MediaTypeToggles {
+    // Default-true fallback so older settings.json files (written
+    // before this block existed) still get the right shape on read.
+    const stored = this.data.mediaTypes;
+    return {
+      book: stored?.book ?? true,
+      audiobook: stored?.audiobook ?? true,
+      game: stored?.game ?? true,
+      manga: stored?.manga ?? true,
+      comic: stored?.comic ?? true,
+    };
+  }
+
+  set mediaTypes(data: MediaTypeToggles) {
+    this.data.mediaTypes = { ...this.mediaTypes, ...data };
+  }
+
   get oidc(): OidcSettings {
     return this.data.oidc;
   }
@@ -1100,6 +1144,11 @@ class Settings {
   }
 
   get fullPublicSettings(): FullPublicSettings {
+    // Master toggles short-circuit every per-type Enabled flag below.
+    // When a media type is OFF in admin, its tab disappears from
+    // search and request endpoints return 503 — without us having to
+    // touch the per-provider config.
+    const types = this.mediaTypes;
     return {
       ...this.data.public,
       applicationTitle: this.data.main.applicationTitle,
@@ -1138,43 +1187,47 @@ class Settings {
         !!this.data.oidc.clientId,
       oidcProviderName: this.data.oidc.displayName || 'OIDC',
       bookEnabled:
-        (this.data.book.komga.enabled && !!this.data.book.komga.url) ||
-        (this.data.book.grimmory.enabled && !!this.data.book.grimmory.url) ||
-        (this.data.book.audiobookshelf.enabled &&
-          !!this.data.book.audiobookshelf.url &&
-          this.data.book.audiobookshelf.libraries.some(
-            (l) => l.mediaType === 'book'
-          )) ||
-        this.data.bindery.some(
-          (b) => b.mediaType === 'book' && !!b.hostname
-        ) ||
-        this.data.bookshelf.some(
-          (b) => b.mediaType === 'book' && !!b.hostname
-        ),
+        types.book &&
+        ((this.data.book.komga.enabled && !!this.data.book.komga.url) ||
+          (this.data.book.grimmory.enabled &&
+            !!this.data.book.grimmory.url) ||
+          (this.data.book.audiobookshelf.enabled &&
+            !!this.data.book.audiobookshelf.url &&
+            this.data.book.audiobookshelf.libraries.some(
+              (l) => l.mediaType === 'book'
+            )) ||
+          this.data.bindery.some(
+            (b) => b.mediaType === 'book' && !!b.hostname
+          ) ||
+          this.data.bookshelf.some(
+            (b) => b.mediaType === 'book' && !!b.hostname
+          )),
       audiobookEnabled:
-        (this.data.book.audiobookshelf.enabled &&
+        types.audiobook &&
+        ((this.data.book.audiobookshelf.enabled &&
           !!this.data.book.audiobookshelf.url &&
           this.data.book.audiobookshelf.libraries.some(
             (l) => l.mediaType === 'audiobook'
           )) ||
-        this.data.bindery.some(
-          (b) => b.mediaType === 'audiobook' && !!b.hostname
-        ) ||
-        this.data.bookshelf.some(
-          (b) => b.mediaType === 'audiobook' && !!b.hostname
-        ),
+          this.data.bindery.some(
+            (b) => b.mediaType === 'audiobook' && !!b.hostname
+          ) ||
+          this.data.bookshelf.some(
+            (b) => b.mediaType === 'audiobook' && !!b.hostname
+          )),
       gameEnabled:
-        this.data.game.romm.enabled && !!this.data.game.romm.url,
+        types.game && this.data.game.romm.enabled && !!this.data.game.romm.url,
       mangaEnabled:
         // Manga search needs a metadata source; Suwayomi (download
         // manager) is optional. The tab is visible as long as the
         // user has AniList enabled in Settings → Metadata Providers
         // → Manga.
-        !!this.data.manga?.metadataProviders?.anilist,
+        types.manga && !!this.data.manga?.metadataProviders?.anilist,
       comicEnabled:
         // Comics search needs an API key (ComicVine is keyed); Mylar3
         // is optional. The tab is visible as long as ComicVine is
         // enabled AND has a key set.
+        types.comic &&
         !!this.data.comic?.metadataProviders?.comicvine &&
         !!this.data.comic?.metadataProviders?.apiKey,
     };

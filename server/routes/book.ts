@@ -23,6 +23,7 @@ import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { isMediaTypeEnabled } from '@server/middleware/mediaTypeGuard';
 import { Router } from 'express';
 
 const bookRoutes = Router();
@@ -136,6 +137,17 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
   const type = (req.query.type as string) || 'book';
   const page = parseInt((req.query.page as string) || '1', 10);
   const limit = parseInt((req.query.limit as string) || '20', 10);
+
+  // Master toggle short-circuit. /book/search is shared between book
+  // and audiobook (driven by ?type=) so we can't use the route-level
+  // requireMediaType middleware — check inline.
+  const subtype = type === 'audiobook' ? 'audiobook' : 'book';
+  if (!isMediaTypeEnabled(subtype)) {
+    return res.status(503).json({
+      status: 503,
+      message: `${subtype} requests are disabled by the administrator.`,
+    });
+  }
 
   if (!query || query.trim().length === 0) {
     return res.status(400).json({
@@ -2315,6 +2327,17 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
     narratorName?: string;
     userId?: number;
   };
+
+  // Master toggle short-circuit. The mediaType in the body decides
+  // which toggle applies — book vs audiobook can be turned off
+  // independently.
+  const subtype = body.mediaType === MediaType.AUDIOBOOK ? 'audiobook' : 'book';
+  if (!isMediaTypeEnabled(subtype)) {
+    return res.status(503).json({
+      status: 503,
+      message: `${subtype} requests are disabled by the administrator.`,
+    });
+  }
 
   if (
     !body.mediaType ||

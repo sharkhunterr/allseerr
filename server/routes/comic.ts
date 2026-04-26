@@ -14,6 +14,7 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { hasPermission, Permission } from '@server/lib/permissions';
 import { isAuthenticated } from '@server/middleware/auth';
+import { requireMediaType } from '@server/middleware/mediaTypeGuard';
 import logger from '@server/logger';
 import { Router } from 'express';
 
@@ -66,7 +67,7 @@ function getApiKey(): string | null {
  * Free-text volume search via ComicVine. Mirrors /manga/search shape
  * so the existing Search component can render the results.
  */
-comicRoutes.get('/search', isAuthenticated(), async (req, res) => {
+comicRoutes.get('/search', isAuthenticated(), requireMediaType('comic'), async (req, res) => {
   const query = req.query.query as string;
   const limit = parseInt((req.query.limit as string) || '20', 10);
 
@@ -130,7 +131,7 @@ comicRoutes.get('/search', isAuthenticated(), async (req, res) => {
  * MUST be registered before /:id so the literal segment "person" isn't
  * caught by the catch-all id route.
  */
-comicRoutes.get('/person/:id', isAuthenticated(), async (req, res) => {
+comicRoutes.get('/person/:id', isAuthenticated(), requireMediaType('comic'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     return res
@@ -199,7 +200,7 @@ comicRoutes.get('/person/:id', isAuthenticated(), async (req, res) => {
  * record including issue list + creator credits + characters so the
  * detail page can render without follow-up calls.
  */
-comicRoutes.get('/:id', isAuthenticated(), async (req, res) => {
+comicRoutes.get('/:id', isAuthenticated(), requireMediaType('comic'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     return res
@@ -307,7 +308,7 @@ comicRoutes.get('/:id', isAuthenticated(), async (req, res) => {
  * level and that matches user mental model. No download manager wired
  * here yet; Phase 7 (Mylar3) plugs in after.
  */
-comicRoutes.post('/request', isAuthenticated(), async (req, res) => {
+comicRoutes.post('/request', isAuthenticated(), requireMediaType('comic'), async (req, res) => {
   const body = req.body as {
     comicVineId: number;
     title: string;

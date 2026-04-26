@@ -5651,6 +5651,53 @@ paths:
             application/json:
               schema:
                 type: object
+  /settings/media-types:
+    get:
+      summary: Get the master on/off toggles for non-TMDB media types
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  book: { type: boolean }
+                  audiobook: { type: boolean }
+                  game: { type: boolean }
+                  manga: { type: boolean }
+                  comic: { type: boolean }
+    put:
+      summary: Update the master on/off toggles for non-TMDB media types
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                book: { type: boolean }
+                audiobook: { type: boolean }
+                game: { type: boolean }
+                manga: { type: boolean }
+                comic: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  book: { type: boolean }
+                  audiobook: { type: boolean }
+                  game: { type: boolean }
+                  manga: { type: boolean }
+                  comic: { type: boolean }
   /settings/comic/mylar/test:
     post:
       summary: Probe a Mylar3 instance for reachability

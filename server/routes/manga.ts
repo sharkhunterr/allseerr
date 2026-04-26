@@ -13,6 +13,7 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { hasPermission, Permission } from '@server/lib/permissions';
 import { isAuthenticated } from '@server/middleware/auth';
+import { requireMediaType } from '@server/middleware/mediaTypeGuard';
 import logger from '@server/logger';
 import { Router } from 'express';
 import { getRepository } from '@server/datasource';
@@ -51,7 +52,7 @@ function applyLanguageFilter<T extends { countryOfOrigin?: string | null }>(
  * the existing Search component can render the results with minimal
  * adaptation.
  */
-mangaRoutes.get('/search', isAuthenticated(), async (req, res) => {
+mangaRoutes.get('/search', isAuthenticated(), requireMediaType('manga'), async (req, res) => {
   const query = req.query.query as string;
   const limit = parseInt((req.query.limit as string) || '20', 10);
 
@@ -132,7 +133,7 @@ mangaRoutes.get('/search', isAuthenticated(), async (req, res) => {
  * MUST be registered before /:id so the literal segment "staff" isn't
  * caught by the catch-all id route.
  */
-mangaRoutes.get('/staff/:id', isAuthenticated(), async (req, res) => {
+mangaRoutes.get('/staff/:id', isAuthenticated(), requireMediaType('manga'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     return res.status(400).json({ status: 400, message: 'Invalid staff id.' });
@@ -207,7 +208,7 @@ mangaRoutes.get('/staff/:id', isAuthenticated(), async (req, res) => {
  * including relations (PREQUEL / SEQUEL / SIDE_STORY / SPIN_OFF) which
  * the frontend renders as the "series" cluster.
  */
-mangaRoutes.get('/:id', isAuthenticated(), async (req, res) => {
+mangaRoutes.get('/:id', isAuthenticated(), requireMediaType('manga'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     return res.status(400).json({ status: 400, message: 'Invalid manga id.' });
@@ -340,7 +341,7 @@ mangaRoutes.get('/:id', isAuthenticated(), async (req, res) => {
  * Suwayomi) picks it up later. Manual workflow when no DM is
  * configured, mirroring the game flow.
  */
-mangaRoutes.post('/request', isAuthenticated(), async (req, res) => {
+mangaRoutes.post('/request', isAuthenticated(), requireMediaType('manga'), async (req, res) => {
   const body = req.body as {
     anilistId: number;
     malId?: number;

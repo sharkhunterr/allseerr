@@ -13,6 +13,7 @@ import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { requireMediaType } from '@server/middleware/mediaTypeGuard';
 import { Router } from 'express';
 
 const gameRoutes = Router();
@@ -38,7 +39,7 @@ const remapRommPublicUrl = (
  * GET /api/v1/game/search
  * Search for games via IGDB.
  */
-gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
+gameRoutes.get('/search', isAuthenticated(), requireMediaType('game'), async (req, res) => {
   const query = req.query.query as string;
   const platformId = req.query.platformId
     ? parseInt(req.query.platformId as string, 10)
@@ -210,7 +211,7 @@ gameRoutes.get('/search', isAuthenticated(), async (req, res) => {
  * POST /api/v1/game/request
  * Submit a game request. No download manager — manual workflow.
  */
-gameRoutes.post('/request', isAuthenticated(), async (req, res) => {
+gameRoutes.post('/request', isAuthenticated(), requireMediaType('game'), async (req, res) => {
   const body = req.body as {
     igdbId: number;
     platformIgdbId: number;
