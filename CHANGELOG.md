@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.1](https://github.com/seerr-team/seerr/-/compare/v0.2.0...v0.2.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* **release:** skip husky on standard-version commit so commitizen prompt doesn't hang ([f6b8cc0](https://github.com/seerr-team/seerr/-/commit/f6b8cc09edc9d238f0eb780cfdc9a3e88137b360))
+
 ## [0.2.0](https://github.com/seerr-team/seerr/-/compare/v1.3.0...v0.2.0) (2026-04-26)
 
 

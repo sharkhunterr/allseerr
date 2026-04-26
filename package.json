@@ -1,7 +1,7 @@
 {
   "name": "allseerr",
   "description": "Unified media request manager — movies, TV, books, audiobooks, games & music",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "packageManager": "pnpm@10.24.0",
   "scripts": {
