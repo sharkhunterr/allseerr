@@ -101,15 +101,22 @@ test:build:
     NODE_OPTIONS: "--max-old-space-size=4096"
   script:
     - pnpm build
+    # Drop webpack's incremental cache (~1.4 GB) before artifact
+    # upload — it's only useful for the next *local* build, not
+    # for any downstream CI job. Without this the artifacts step
+    # blows past GitLab's archive size limit ("fatal: too large").
+    - rm -rf .next/cache
     # Surface what was produced so a missing artifacts directory
     # shows up clearly in the job log instead of as a silent
     # "no such file" on artifact upload.
-    - ls -la .next/ dist/ 2>&1 || true
+    - du -sh .next/ dist/ 2>&1 || true
   artifacts:
     when: always
     paths:
       - .next/
       - dist/
+    exclude:
+      - .next/cache/**
     expire_in: 1 week
   rules:
     - if: '$ENABLE_FRONTEND_TESTS == "true"'
