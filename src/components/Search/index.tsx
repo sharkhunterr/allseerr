@@ -561,18 +561,19 @@ const Search = () => {
         <Header>{intl.formatMessage(messages.searchresults)}</Header>
       </div>
 
-      {/* Media Type Tabs — horizontal scroll on narrow viewports so 6+
-          tabs (All / Books / Audiobooks / Games / Manga / Comics) don't
-          overflow the right edge. flex-shrink-0 on each button keeps
-          labels readable instead of compressing. */}
-      <div className="mb-6 flex overflow-x-auto whitespace-nowrap border-b border-gray-600 hide-scrollbar">
+      {/* Media Type Tabs — chip-style so 6+ tabs (All / Books /
+          Audiobooks / Games / Manga / Comics) wrap to a second row on
+          mobile instead of overflowing or scrolling off-screen.
+          Self-contained pills mean every count stays visible at a
+          glance; no underline weirdness across rows. */}
+      <div className="mb-6 flex flex-wrap gap-2">
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            className={`flex flex-shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium transition ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
               activeTab === tab.key
-                ? 'border-b-2 border-indigo-500 text-indigo-400'
-                : 'text-gray-400 hover:text-gray-300'
+                ? 'bg-indigo-500/20 text-indigo-300 ring-1 ring-inset ring-indigo-500/40'
+                : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
             }`}
             onClick={() => setActiveTab(tab.key)}
           >
@@ -581,8 +582,8 @@ const Search = () => {
               <span
                 className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${
                   activeTab === tab.key
-                    ? 'bg-indigo-500/30 text-indigo-300'
-                    : 'bg-gray-700 text-gray-400'
+                    ? 'bg-indigo-500/30 text-indigo-200'
+                    : 'bg-gray-700/80 text-gray-300'
                 }`}
               >
                 {tab.count}
