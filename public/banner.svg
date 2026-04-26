@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" fill="none">
+  <!-- README banner — dark backdrop + the multi-source icon + wordmark
+       on the left, faint media-type dots scattered as background motif
+       on the right echoing the icon's satellite palette. -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0" x2="1280" y1="0" y2="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#131928"/>
+    </linearGradient>
+    <linearGradient id="hubGradient" x1="200" x2="200" y1="100" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C395FC"/>
+      <stop offset="1" stop-color="#4F65F5"/>
+    </linearGradient>
+    <linearGradient id="hubInner" x1="180" x2="180" y1="140" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="prefixGradient" x1="320" x2="430" y1="180" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C395FC"/>
+      <stop offset="1" stop-color="#4F65F5"/>
+    </linearGradient>
+    <radialGradient id="vignette" cx="640" cy="160" r="700" gradientUnits="userSpaceOnUse">
+      <stop offset="0.5" stop-color="#0F172A" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".5"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Backdrop -->
+  <rect width="1280" height="320" fill="url(#bgGradient)"/>
+
+  <!-- Background motif: media-type dots scattered on the right side at low opacity,
+       suggesting orbits / a constellation of providers. -->
+  <g opacity="0.18">
+    <circle cx="900" cy="60" r="10" fill="#EF4444"/>
+    <circle cx="1020" cy="100" r="14" fill="#F59E0B"/>
+    <circle cx="1170" cy="80" r="8" fill="#10B981"/>
+    <circle cx="1080" cy="220" r="12" fill="#EC4899"/>
+    <circle cx="970" cy="260" r="9" fill="#F97316"/>
+    <circle cx="1200" cy="220" r="11" fill="#6366F1"/>
+    <circle cx="850" cy="200" r="6" fill="#fff"/>
+    <circle cx="1130" cy="160" r="7" fill="#fff"/>
+    <!-- Faint orbit rings -->
+    <circle cx="1040" cy="160" r="100" stroke="#374151" stroke-width="1" stroke-dasharray="3 6" fill="none"/>
+    <circle cx="1040" cy="160" r="160" stroke="#374151" stroke-width="1" stroke-dasharray="3 6" fill="none"/>
+  </g>
+
+  <!-- Vignette pulls focus to the left where the wordmark sits -->
+  <rect width="1280" height="320" fill="url(#vignette)"/>
+
+  <!-- Icon — bigger version of os_icon.svg, centred at (200, 160) -->
+  <g transform="translate(120, 80)">
+    <circle cx="80" cy="80" r="60" stroke="#374151" stroke-width="1.5" stroke-dasharray="3 5" opacity="0.5"/>
+    <circle cx="80" cy="20" r="11" fill="#EF4444"/>
+    <circle cx="131.96" cy="50" r="11" fill="#F59E0B"/>
+    <circle cx="131.96" cy="110" r="11" fill="#10B981"/>
+    <circle cx="80" cy="140" r="11" fill="#EC4899"/>
+    <circle cx="28.04" cy="110" r="11" fill="#F97316"/>
+    <circle cx="28.04" cy="50" r="11" fill="#6366F1"/>
+    <circle cx="80" cy="80" r="36" fill="url(#hubGradient)"/>
+    <circle cx="80" cy="80" r="22" fill="#131928"/>
+    <circle cx="73" cy="73" r="9" fill="#fff" opacity="0.85"/>
+    <path d="M 60 80 a 20 20 0 0 1 20 -20" stroke="url(#hubInner)" stroke-width="3" fill="none" opacity="0.6"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="320" y="190"
+        font-family="'Inter', 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+        font-size="96" font-weight="800" letter-spacing="-3">
+    <tspan fill="url(#prefixGradient)">all</tspan><tspan fill="#fff">seerr</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text x="324" y="232"
+        font-family="'Inter', 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+        font-size="20" font-weight="500" fill="#94A3B8" letter-spacing="0.5">
+    Unified media request manager
+  </text>
+  <text x="324" y="260"
+        font-family="'Inter', 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+        font-size="16" font-weight="400" fill="#64748B" letter-spacing="0.3">
+    Movies · TV · Books · Audiobooks · Games · Manga · Comics
+  </text>
+</svg>

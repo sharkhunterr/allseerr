@@ -1,5 +1,5 @@
 <p align="center">
-<img src="./public/logo_full.svg" alt="Allseerr" style="margin: 20px 0;">
+<img src="./public/banner.svg" alt="Allseerr — Unified media request manager">
 </p>
 
 <p align="center">
@@ -8,8 +8,6 @@
 </p>
 
 > **Allseerr** is a unified media request manager for movies, TV, **books, audiobooks, video games, manga & comics** — all behind a single Plex / Jellyfin / Emby login. Built as a friendly fork of [Seerr](https://github.com/seerr-team/seerr) (itself a fork of [Jellyseerr](https://github.com/Fallenbagel/jellyseerr) / [Overseerr](https://github.com/sct/overseerr)) extending the model beyond movies + TV to every kind of media a self-hosted library cares about.
->
-> 🎨 The branding (logo, banner, screenshots) inherits the Seerr assets for now and is being redesigned for Allseerr — see [`todo_release.md`](./todo_release.md).
 
 ## What's different from Seerr / Jellyseerr / Overseerr?
 
