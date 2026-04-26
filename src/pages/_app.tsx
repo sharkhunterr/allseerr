@@ -7,6 +7,7 @@ import Toast from '@app/components/Toast';
 import ToastContainer from '@app/components/ToastContainer';
 import { InteractionProvider } from '@app/context/InteractionContext';
 import { LanguageContext } from '@app/context/LanguageContext';
+import { SearchLoadingProvider } from '@app/context/SearchLoadingContext';
 import { SettingsProvider } from '@app/context/SettingsContext';
 import { UserContext } from '@app/context/UserContext';
 import type { User } from '@app/hooks/useUser';
@@ -207,21 +208,23 @@ const CoreApp: Omit<NextAppComponentType, 'origGetInitialProps'> = ({
           <LoadingBar />
           <SettingsProvider currentSettings={currentSettings}>
             <InteractionProvider>
-              <ToastProvider components={{ Toast, ToastContainer }}>
-                <Head>
-                  <title>{currentSettings.applicationTitle}</title>
-                  <meta
-                    name="viewport"
-                    content="initial-scale=1, viewport-fit=cover, width=device-width"
-                  />
-                  <PWAHeader
-                    applicationTitle={currentSettings.applicationTitle}
-                  />
-                </Head>
-                <StatusChecker />
-                <ServiceWorkerSetup />
-                <UserContext initialUser={user}>{component}</UserContext>
-              </ToastProvider>
+              <SearchLoadingProvider>
+                <ToastProvider components={{ Toast, ToastContainer }}>
+                  <Head>
+                    <title>{currentSettings.applicationTitle}</title>
+                    <meta
+                      name="viewport"
+                      content="initial-scale=1, viewport-fit=cover, width=device-width"
+                    />
+                    <PWAHeader
+                      applicationTitle={currentSettings.applicationTitle}
+                    />
+                  </Head>
+                  <StatusChecker />
+                  <ServiceWorkerSetup />
+                  <UserContext initialUser={user}>{component}</UserContext>
+                </ToastProvider>
+              </SearchLoadingProvider>
             </InteractionProvider>
           </SettingsProvider>
         </IntlProvider>

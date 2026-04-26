@@ -1,7 +1,9 @@
+import { SearchLoadingContext } from '@app/context/SearchLoadingContext';
 import useSearchInput from '@app/hooks/useSearchInput';
 import defineMessages from '@app/utils/defineMessages';
 import { XCircleIcon } from '@heroicons/react/24/outline';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/solid';
+import { useContext } from 'react';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Layout.SearchInput', {
@@ -11,6 +13,7 @@ const messages = defineMessages('components.Layout.SearchInput', {
 const SearchInput = () => {
   const intl = useIntl();
   const { searchValue, setSearchValue, setIsOpen, clear } = useSearchInput();
+  const { isSearching } = useContext(SearchLoadingContext);
   return (
     <div className="flex flex-1">
       <div className="flex w-full">
@@ -19,7 +22,33 @@ const SearchInput = () => {
         </label>
         <div className="relative flex w-full items-center text-white focus-within:text-gray-200">
           <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center">
-            <MagnifyingGlassIcon className="h-5 w-5" />
+            {isSearching ? (
+              // Tailwind animate-spin on an SVG ring — same dimensions
+              // as the magnifying-glass so the input doesn't reflow.
+              <svg
+                className="h-5 w-5 animate-spin text-indigo-400"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+            ) : (
+              <MagnifyingGlassIcon className="h-5 w-5" />
+            )}
           </div>
           <input
             id="search_field"

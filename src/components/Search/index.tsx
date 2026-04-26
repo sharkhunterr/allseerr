@@ -8,6 +8,7 @@ import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import ComicCard from '@app/components/ComicCard';
 import GameCard from '@app/components/GameCard';
 import MangaCard from '@app/components/MangaCard';
+import { SearchLoadingContext } from '@app/context/SearchLoadingContext';
 import useDiscover from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
 import ErrorPage from '@app/pages/_error';
@@ -22,7 +23,7 @@ import type {
 } from '@server/models/Search';
 import axios from 'axios';
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Search', {
@@ -343,6 +344,7 @@ const Search = () => {
   const intl = useIntl();
   const router = useRouter();
   const { currentSettings } = useSettings();
+  const { setIsSearching } = useContext(SearchLoadingContext);
   const bookEnabled = currentSettings.bookEnabled;
   const audiobookEnabled = currentSettings.audiobookEnabled;
   const gameEnabled = currentSettings.gameEnabled;
@@ -485,6 +487,27 @@ const Search = () => {
     mangaEnabled,
     comicEnabled,
   ]);
+
+  // Publish a combined "any active fetch" boolean to SearchLoadingContext
+  // so the global SearchInput in the layout can swap its magnifying-glass
+  // for a spinner. We only count the per-type queries that are actually
+  // enabled — a disabled type never fetches and never blocks the spinner
+  // from clearing. Movies/TV (useDiscover) is always counted because the
+  // /api/v1/search endpoint runs regardless of type toggles.
+  const isAnySearching =
+    !!query &&
+    (isLoadingInitialData ||
+      (bookEnabled && isLoadingBooks) ||
+      (audiobookEnabled && isLoadingAudiobooks) ||
+      (gameEnabled && isLoadingGames) ||
+      (mangaEnabled && isLoadingManga) ||
+      (comicEnabled && isLoadingComics));
+  useEffect(() => {
+    setIsSearching(isAnySearching);
+    // Reset on unmount so navigating away from /search doesn't strand
+    // the spinner on.
+    return () => setIsSearching(false);
+  }, [isAnySearching, setIsSearching]);
 
   if (error && activeTab === 'all') {
     return <ErrorPage statusCode={500} />;
