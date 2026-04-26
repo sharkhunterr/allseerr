@@ -94,8 +94,17 @@ validate:typecheck:
 test:build:
   stage: test
   <<: *node_template
+  variables:
+    # Next.js dev/build accumulates memory across compiled routes;
+    # the 2 GB default OOMs once the app has grown a bit. Same value
+    # dev.sh exports locally.
+    NODE_OPTIONS: "--max-old-space-size=4096"
   script:
     - pnpm build
+    # Surface what was produced so a missing artifacts directory
+    # shows up clearly in the job log instead of as a silent
+    # "no such file" on artifact upload.
+    - ls -la .next/ dist/ 2>&1 || true
   artifacts:
     when: always
     paths:
