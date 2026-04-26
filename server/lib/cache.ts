@@ -21,7 +21,8 @@ export type AvailableCacheIds =
   | 'googlebooks'
   | 'hardcover'
   | 'audible'
-  | 'anilist';
+  | 'anilist'
+  | 'comicvine';
 
 const DEFAULT_TTL = 300;
 const DEFAULT_CHECK_PERIOD = 120;
@@ -90,6 +91,13 @@ class CacheManager {
       // count change at a slow drip); 12h is plenty. Free-text search
       // is rate-limited (90 req/min) so caching is mostly to absorb
       // the same query landing again from search-as-you-type.
+      stdTtl: 12 * 3600,
+      checkPeriod: 60 * 30,
+    }),
+    comicvine: new Cache('comicvine', 'ComicVine API', {
+      // ComicVine throttles per-resource at 200/h. Volume / publisher
+      // / person data is very stable so a 12h TTL keeps repeat detail-
+      // page hits off the wire entirely.
       stdTtl: 12 * 3600,
       checkPeriod: 60 * 30,
     }),
