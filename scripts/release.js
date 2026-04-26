@@ -41,14 +41,18 @@ function getRemoteUrl(remote) {
   }
 }
 
-function exec(command, description) {
+function exec(command, description, opts = {}) {
   console.log(`\n📦 ${description}...`);
   if (options.dryRun) {
     console.log(`   [DRY RUN] ${command}`);
     return '';
   }
   try {
-    return execSync(command, { encoding: 'utf8', stdio: 'inherit' });
+    return execSync(command, {
+      encoding: 'utf8',
+      stdio: 'inherit',
+      env: { ...process.env, ...(opts.env ?? {}) },
+    });
   } catch {
     console.error(`❌ Failed: ${description}`);
     process.exit(1);
@@ -106,10 +110,15 @@ async function main() {
   }
 
   // standard-version handles bump + CHANGELOG + commit + tag.
+  // The release commit is already conventional (chore(release): vX.Y.Z)
+  // so we skip the husky prepare-commit-msg hook that otherwise launches
+  // commitizen's interactive prompt and blocks the script forever.
   let versionCmd = 'npx standard-version';
   if (options.releaseType) versionCmd += ` --release-as ${options.releaseType}`;
   if (options.dryRun) versionCmd += ' --dry-run';
-  exec(versionCmd, 'Bumping version with standard-version');
+  exec(versionCmd, 'Bumping version with standard-version', {
+    env: { HUSKY: '0' },
+  });
 
   if (options.dryRun) {
     console.log('\n✅ Dry run completed. No changes made.');
