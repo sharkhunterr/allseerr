@@ -1,13 +1,14 @@
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import MangaRequestModal from '@app/components/RequestModal/MangaRequestModal';
+import Slider from '@app/components/Slider';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
 import type { NextPage } from 'next';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useIntl } from 'react-intl';
 import useSWR from 'swr';
 
@@ -29,9 +30,7 @@ const messages = defineMessages('pages.MangaDetail', {
   genres: 'Genres',
   tags: 'Tags',
   characters: 'Characters',
-  externalLinks: 'External links',
   aboutAuthor: 'About the author',
-  related: 'Related works',
   popularityCountFmt: '{count, plural, one {# user} other {# users}}',
   request: 'Request',
 });
@@ -44,12 +43,6 @@ interface MangaRelation {
   year?: number;
   format?: string;
   status?: string;
-}
-
-interface MangaExternalLink {
-  site: string;
-  url: string;
-  type?: string;
 }
 
 interface MangaDetailData {
@@ -81,7 +74,6 @@ interface MangaDetailData {
   genres?: string[];
   tags?: string[];
   characters?: string[];
-  externalLinks?: MangaExternalLink[];
   authorName?: string;
   authorKey?: number;
   authorPhotoUrl?: string;
@@ -104,6 +96,34 @@ const MangaDetailPage: NextPage = () => {
     [Permission.REQUEST, Permission.REQUEST_MANGA],
     { type: 'or' }
   );
+
+  // Group relations by their AniList relationType so we can render one
+  // horizontal slider per type (PREQUEL / SEQUEL / SIDE_STORY /
+  // SPIN_OFF / ALTERNATIVE / ADAPTATION / …) the way movies render
+  // recommendations and similar. Order is preserved: each type appears
+  // in the order its first item showed up in the relations array, which
+  // already follows AniList's relevance ranking.
+  const relationGroups = useMemo(() => {
+    const grouped = new Map<string, MangaRelation[]>();
+    for (const rel of data?.relations ?? []) {
+      const key = rel.relationType ?? 'OTHER';
+      const bucket = grouped.get(key);
+      if (bucket) {
+        bucket.push(rel);
+      } else {
+        grouped.set(key, [rel]);
+      }
+    }
+    return Array.from(grouped.entries());
+  }, [data?.relations]);
+
+  // Humanise the AniList relation enum: SIDE_STORY → "Side Story".
+  const relationLabel = (raw: string) =>
+    raw
+      .toLowerCase()
+      .split('_')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
 
   if (!data && !error) return <LoadingSpinner />;
   if (error || !data) {
@@ -199,67 +219,21 @@ const MangaDetailPage: NextPage = () => {
               intl.formatMessage(messages.overviewunavailable)}
           </p>
 
-          {data.tags && data.tags.length > 0 && (
+          {data.genres && data.genres.length > 0 && (
             <div className="mt-6">
               <h3 className="mb-2 text-lg font-bold text-gray-100">
-                {intl.formatMessage(messages.tags)}
+                {intl.formatMessage(messages.genres)}
               </h3>
               <div className="flex flex-wrap gap-2">
-                {data.tags.map((t) => (
+                {data.genres.map((g) => (
                   <span
-                    key={t}
+                    key={g}
                     className="rounded-full border border-gray-600 bg-gray-800/80 px-2 py-0.5 text-xs text-gray-200"
                   >
-                    {t}
+                    {g}
                   </span>
                 ))}
               </div>
-            </div>
-          )}
-
-          {data.relations && data.relations.length > 0 && (
-            <div className="mt-8">
-              <h3 className="mb-3 text-lg font-bold text-gray-100">
-                {intl.formatMessage(messages.related)}
-              </h3>
-              <ul className="cards-vertical">
-                {data.relations.map((r) => (
-                  <li key={r.anilistId}>
-                    <Link href={`/manga/${r.anilistId}`}>
-                      <div className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg bg-gray-800 shadow-md ring-1 ring-gray-700 transition duration-200 hover:ring-indigo-500">
-                        <div className="relative aspect-[2/3] w-full overflow-hidden bg-gray-700">
-                          {r.coverUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={r.coverUrl}
-                              alt={r.title}
-                              className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center">
-                              <BookOpenIcon className="h-12 w-12 text-gray-500" />
-                            </div>
-                          )}
-                          {r.relationType && (
-                            <div className="absolute left-2 top-2 z-40 rounded-full border border-fuchsia-500 bg-fuchsia-600/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white shadow-md">
-                              {r.relationType.replace(/_/g, ' ')}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-1 flex-col p-3">
-                          <h3 className="truncate text-sm font-semibold text-white">
-                            {r.title}
-                          </h3>
-                          <div className="mt-1 text-xs text-gray-500">
-                            {r.year}
-                            {r.format && ` · ${r.format.replace(/_/g, ' ')}`}
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
             </div>
           )}
         </div>
@@ -382,49 +356,87 @@ const MangaDetailPage: NextPage = () => {
                 </span>
               </div>
             )}
-          </div>
-
-          {data.genres && data.genres.length > 0 && (
-            <div className="mt-6">
-              <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
-                {intl.formatMessage(messages.genres)}
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {data.genres.map((g) => (
-                  <span
-                    key={g}
-                    className="rounded-full border border-fuchsia-500 bg-fuchsia-600/30 px-2 py-0.5 text-xs text-fuchsia-200"
-                  >
-                    {g}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {data.externalLinks && data.externalLinks.length > 0 && (
-            <div className="mt-6">
-              <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
-                {intl.formatMessage(messages.externalLinks)}
-              </h3>
-              <ul className="space-y-1">
-                {data.externalLinks.map((l) => (
-                  <li key={l.url}>
-                    <a
-                      href={l.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-indigo-400 hover:text-indigo-300"
+            {data.tags && data.tags.length > 0 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.tags)}</span>
+                <span className="media-fact-value flex flex-wrap gap-1">
+                  {data.tags.map((t) => (
+                    <span
+                      key={`tag-${t}`}
+                      className="rounded-full bg-fuchsia-900/40 px-2 py-0.5 text-xs text-fuchsia-200"
                     >
-                      {l.site}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                      {t}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
+            {data.characters && data.characters.length > 0 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.characters)}</span>
+                <span className="media-fact-value">
+                  {data.characters.join(', ')}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Related works — one horizontal Slider per relation type
+          (PREQUEL / SEQUEL / SIDE_STORY / SPIN_OFF / ALTERNATIVE /
+          ADAPTATION / …). Mirrors the way movie pages stack
+          recommendations + similar at the bottom. Order follows
+          AniList's relevance ranking inside each group. */}
+      {relationGroups.map(([type, items]) => (
+        <div key={`relations-${type}`}>
+          <div className="slider-header">
+            <div className="slider-title">
+              <span>{relationLabel(type)}</span>
+            </div>
+          </div>
+          <Slider
+            sliderKey={`manga-relations-${type}`}
+            isLoading={false}
+            isEmpty={items.length === 0}
+            items={items.map((r) => (
+              <Link
+                key={`relation-${r.anilistId}`}
+                href={`/manga/${r.anilistId}`}
+              >
+                <div className="group relative flex w-36 cursor-pointer flex-col overflow-hidden rounded-lg bg-gray-800 shadow-md ring-1 ring-gray-700 transition duration-200 hover:ring-fuchsia-500 sm:w-40">
+                  <div className="relative aspect-[2/3] w-full overflow-hidden bg-gray-700">
+                    {r.coverUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={r.coverUrl}
+                        alt={r.title}
+                        className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <BookOpenIcon className="h-12 w-12 text-gray-500" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-1 flex-col p-2">
+                    <h3 className="truncate text-sm font-semibold text-white">
+                      {r.title}
+                    </h3>
+                    {(r.year || r.format) && (
+                      <div className="mt-0.5 truncate text-xs text-gray-500">
+                        {r.year}
+                        {r.format && ` · ${r.format.replace(/_/g, ' ')}`}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          />
+        </div>
+      ))}
+
       <div className="extra-bottom-space relative" />
 
       <MangaRequestModal
