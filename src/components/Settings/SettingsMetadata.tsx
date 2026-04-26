@@ -6,6 +6,7 @@ import SubTabs from '@app/components/Common/SubTabs';
 import SettingsAudiobookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsAudiobookMetadata';
 import SettingsBookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsBookMetadata';
 import SettingsIgdb from '@app/components/Settings/Games/SettingsIgdb';
+import SettingsMangaMetadata from '@app/components/Settings/MangaComics/SettingsMangaMetadata';
 import MetadataSelector, {
   MetadataProviderType,
 } from '@app/components/MetadataSelector';
@@ -473,7 +474,7 @@ const MoviesAndTVMetadata = () => {
 const SettingsMetadata = () => {
   const intl = useIntl();
   const [activeTab, setActiveTab] = useState<
-    'movies-tv' | 'books' | 'audiobooks' | 'games'
+    'movies-tv' | 'books' | 'audiobooks' | 'games' | 'manga'
   >('movies-tv');
 
   const tabs: { key: typeof activeTab; label: string }[] = [
@@ -484,6 +485,7 @@ const SettingsMetadata = () => {
     { key: 'books', label: intl.formatMessage(globalMessages.book) },
     { key: 'audiobooks', label: intl.formatMessage(globalMessages.audiobook) },
     { key: 'games', label: intl.formatMessage(globalMessages.game) },
+    { key: 'manga', label: intl.formatMessage(globalMessages.manga) },
   ];
 
   return (
@@ -504,6 +506,7 @@ const SettingsMetadata = () => {
       {activeTab === 'books' && <SettingsBookMetadata />}
       {activeTab === 'audiobooks' && <SettingsAudiobookMetadata />}
       {activeTab === 'games' && <SettingsIgdb />}
+      {activeTab === 'manga' && <SettingsMangaMetadata />}
     </>
   );
 };

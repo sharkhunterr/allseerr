@@ -5175,6 +5175,91 @@ paths:
                 properties:
                   success: { type: boolean }
                   message: { type: string }
+  /settings/manga/metadata-providers:
+    get:
+      summary: Get manga metadata provider config
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  primarySource:
+                    type: string
+                    enum: [anilist]
+                  anilist:
+                    type: boolean
+                  jikan:
+                    type: boolean
+                  preferredLanguage:
+                    type: string
+                  languagePolicy:
+                    type: string
+                    enum: [prefer, strict]
+                  hideAdult:
+                    type: boolean
+    put:
+      summary: Update manga metadata provider config
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                primarySource:
+                  type: string
+                  enum: [anilist]
+                anilist:
+                  type: boolean
+                jikan:
+                  type: boolean
+                preferredLanguage:
+                  type: string
+                languagePolicy:
+                  type: string
+                  enum: [prefer, strict]
+                hideAdult:
+                  type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/manga/metadata-providers/test:
+    post:
+      summary: Test a manga metadata provider's reachability
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  enum: [anilist, jikan]
+              required: [provider]
+      responses:
+        '200':
+          description: Test complete (see success flag in body)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
   /settings/book/download-managers:
     get:
       summary: Get book download manager instances
