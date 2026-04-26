@@ -128,7 +128,14 @@ export class BookAvailabilityScanner {
           media.status = MediaStatus.AVAILABLE;
           media.libraryServerId = instance.id;
           media.libraryServerUrl = match.foreignBookId;
-          await mediaRepo.save(media as BookMedia & AudiobookMedia);
+          // mediaRepo is `Repository<BookMedia> | Repository<AudiobookMedia>`
+          // and TS can't pick a save() overload off a union of
+          // generic repos. The repo selection above already picked
+          // the right branch at runtime; cast the call site to bypass
+          // TS rather than restructuring the whole branch.
+          await (
+            mediaRepo as unknown as { save: (m: unknown) => Promise<unknown> }
+          ).save(media);
 
           // Update associated requests
           const requests = await requestRepo.find({
@@ -148,9 +155,17 @@ export class BookAvailabilityScanner {
 
               notificationManager.sendNotification(
                 Notification.MEDIA_AVAILABLE,
+                // NotificationPayload requires notifySystem +
+                // notifyAdmin + a fully-shaped Media entity. For
+                // non-TMDB book/audiobook notifications we don't
+                // have a Media row at all — cast the whole payload
+                // through unknown. Agents that read these fields
+                // gate on `media.tmdbId !== 0` first.
                 {
                   subject: `Available: ${media.title}`,
                   message: `"${media.title}" is now available in your library`,
+                  notifyAdmin: true,
+                  notifySystem: true,
                   media: {
                     mediaType,
                     tmdbId: 0,
@@ -159,7 +174,9 @@ export class BookAvailabilityScanner {
                     status4k: MediaStatus.UNKNOWN,
                   },
                   request,
-                }
+                } as unknown as Parameters<
+                  typeof notificationManager.sendNotification
+                >[1]
               );
             }
           }
