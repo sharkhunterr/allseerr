@@ -5,6 +5,7 @@ import ListView from '@app/components/Common/ListView';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
+import ComicCard from '@app/components/ComicCard';
 import GameCard from '@app/components/GameCard';
 import MangaCard from '@app/components/MangaCard';
 import useDiscover from '@app/hooks/useDiscover';
@@ -32,6 +33,7 @@ const messages = defineMessages('components.Search', {
   tabAudiobooks: 'Audiobooks',
   tabGames: 'Games',
   tabManga: 'Manga',
+  tabComics: 'Comics',
   noResults: 'No results found.',
   bookBadge: 'Book',
   seriesBadge: 'Series',
@@ -43,7 +45,13 @@ const messages = defineMessages('components.Search', {
   collectionCountFmt: '{count, plural, one {# game} other {# games}}',
 });
 
-type MediaTab = 'all' | 'books' | 'audiobooks' | 'games' | 'manga';
+type MediaTab =
+  | 'all'
+  | 'books'
+  | 'audiobooks'
+  | 'games'
+  | 'manga'
+  | 'comics';
 
 interface MangaResult {
   anilistId: number;
@@ -63,6 +71,22 @@ interface MangaResult {
 
 interface MangaSearchResponse {
   results: MangaResult[];
+  totalResults: number;
+}
+
+interface ComicResult {
+  comicVineId: number;
+  title: string;
+  year?: number;
+  coverUrl?: string;
+  issueCount?: number;
+  publisher?: string;
+  deck?: string;
+  mediaType: 'comic';
+}
+
+interface ComicSearchResponse {
+  results: ComicResult[];
   totalResults: number;
 }
 
@@ -323,6 +347,7 @@ const Search = () => {
   const audiobookEnabled = currentSettings.audiobookEnabled;
   const gameEnabled = currentSettings.gameEnabled;
   const mangaEnabled = currentSettings.mangaEnabled;
+  const comicEnabled = currentSettings.comicEnabled;
   const [activeTab, setActiveTab] = useState<MediaTab>('all');
   const [bookResults, setBookResults] = useState<BookOrSeriesResult[]>([]);
   const [audiobookResults, setAudiobookResults] = useState<
@@ -330,10 +355,12 @@ const Search = () => {
   >([]);
   const [gameResults, setGameResults] = useState<GameOrCollectionResult[]>([]);
   const [mangaResults, setMangaResults] = useState<MangaResult[]>([]);
+  const [comicResults, setComicResults] = useState<ComicResult[]>([]);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
   const [isLoadingManga, setIsLoadingManga] = useState(false);
+  const [isLoadingComics, setIsLoadingComics] = useState(false);
 
   const query = (router.query.query as string) ?? '';
 
@@ -359,6 +386,7 @@ const Search = () => {
       setAudiobookResults([]);
       setGameResults([]);
       setMangaResults([]);
+      setComicResults([]);
       return;
     }
 
@@ -435,7 +463,28 @@ const Search = () => {
     } else {
       setMangaResults([]);
     }
-  }, [query, bookEnabled, audiobookEnabled, gameEnabled, mangaEnabled]);
+
+    if (comicEnabled) {
+      setIsLoadingComics(true);
+      axios
+        .get<ComicSearchResponse>('/api/v1/comic/search', {
+          params: { query, limit: 40 },
+          paramsSerializer,
+        })
+        .then((res) => setComicResults(res.data.results))
+        .catch(() => setComicResults([]))
+        .finally(() => setIsLoadingComics(false));
+    } else {
+      setComicResults([]);
+    }
+  }, [
+    query,
+    bookEnabled,
+    audiobookEnabled,
+    gameEnabled,
+    mangaEnabled,
+    comicEnabled,
+  ]);
 
   if (error && activeTab === 'all') {
     return <ErrorPage statusCode={500} />;
@@ -490,6 +539,16 @@ const Search = () => {
             label: intl.formatMessage(messages.tabManga),
             count: isLoadingManga ? null : mangaResults.length,
             loading: isLoadingManga,
+          },
+        ]
+      : []),
+    ...(comicEnabled
+      ? [
+          {
+            key: 'comics' as MediaTab,
+            label: intl.formatMessage(messages.tabComics),
+            count: isLoadingComics ? null : comicResults.length,
+            loading: isLoadingComics,
           },
         ]
       : []),
@@ -696,6 +755,35 @@ const Search = () => {
                     volumes={m.volumes}
                     averageScore={m.averageScore}
                     countryOfOrigin={m.countryOfOrigin}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Comics */}
+      {activeTab === 'comics' && (
+        <div>
+          {isLoadingComics ? (
+            <LoadingSpinner />
+          ) : comicResults.length === 0 ? (
+            <p className="py-8 text-center text-gray-400">
+              {intl.formatMessage(messages.noResults)}
+            </p>
+          ) : (
+            <ul className="cards-vertical">
+              {comicResults.map((c) => (
+                <li key={c.comicVineId}>
+                  <ComicCard
+                    comicVineId={c.comicVineId}
+                    title={c.title}
+                    coverUrl={c.coverUrl}
+                    year={c.year}
+                    issueCount={c.issueCount}
+                    publisher={c.publisher}
+                    deck={c.deck}
                   />
                 </li>
               ))}
