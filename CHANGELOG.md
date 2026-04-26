@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.3](https://github.com/seerr-team/seerr/-/compare/v0.2.2...v0.2.3) (2026-04-26)
+
+
+### Bug Fixes
+
+* **build:** unblock pnpm build — skip strict TS, exclude tests, cast scanner save ([9889007](https://github.com/seerr-team/seerr/-/commit/9889007730d12b327c28619c89eddee691296076))
+
 ### [0.2.2](https://github.com/seerr-team/seerr/-/compare/v0.2.1...v0.2.2) (2026-04-26)
 
 
