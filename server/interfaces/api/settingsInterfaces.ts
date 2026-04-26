@@ -54,6 +54,7 @@ export interface PublicSettingsResponse {
   bookEnabled: boolean;
   audiobookEnabled: boolean;
   gameEnabled: boolean;
+  mangaEnabled: boolean;
 }
 
 export interface CacheItem {

@@ -6,6 +6,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import GameCard from '@app/components/GameCard';
+import MangaCard from '@app/components/MangaCard';
 import useDiscover from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
 import ErrorPage from '@app/pages/_error';
@@ -30,6 +31,7 @@ const messages = defineMessages('components.Search', {
   tabBooks: 'Books',
   tabAudiobooks: 'Audiobooks',
   tabGames: 'Games',
+  tabManga: 'Manga',
   noResults: 'No results found.',
   bookBadge: 'Book',
   seriesBadge: 'Series',
@@ -41,7 +43,28 @@ const messages = defineMessages('components.Search', {
   collectionCountFmt: '{count, plural, one {# game} other {# games}}',
 });
 
-type MediaTab = 'all' | 'books' | 'audiobooks' | 'games';
+type MediaTab = 'all' | 'books' | 'audiobooks' | 'games' | 'manga';
+
+interface MangaResult {
+  anilistId: number;
+  title: string;
+  titleNative?: string;
+  coverUrl?: string;
+  year?: number;
+  status?: string;
+  format?: string;
+  chapters?: number;
+  volumes?: number;
+  averageScore?: number;
+  countryOfOrigin?: string;
+  isAdult?: boolean;
+  mediaType: 'manga';
+}
+
+interface MangaSearchResponse {
+  results: MangaResult[];
+  totalResults: number;
+}
 
 const AuthorSearchCard = ({
   result,
@@ -299,15 +322,18 @@ const Search = () => {
   const bookEnabled = currentSettings.bookEnabled;
   const audiobookEnabled = currentSettings.audiobookEnabled;
   const gameEnabled = currentSettings.gameEnabled;
+  const mangaEnabled = currentSettings.mangaEnabled;
   const [activeTab, setActiveTab] = useState<MediaTab>('all');
   const [bookResults, setBookResults] = useState<BookOrSeriesResult[]>([]);
   const [audiobookResults, setAudiobookResults] = useState<
     (BookResult | AuthorSearchResult)[]
   >([]);
   const [gameResults, setGameResults] = useState<GameOrCollectionResult[]>([]);
+  const [mangaResults, setMangaResults] = useState<MangaResult[]>([]);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
+  const [isLoadingManga, setIsLoadingManga] = useState(false);
 
   const query = (router.query.query as string) ?? '';
 
@@ -332,6 +358,7 @@ const Search = () => {
       setBookResults([]);
       setAudiobookResults([]);
       setGameResults([]);
+      setMangaResults([]);
       return;
     }
 
@@ -394,7 +421,21 @@ const Search = () => {
     } else {
       setGameResults([]);
     }
-  }, [query, bookEnabled, audiobookEnabled, gameEnabled]);
+
+    if (mangaEnabled) {
+      setIsLoadingManga(true);
+      axios
+        .get<MangaSearchResponse>('/api/v1/manga/search', {
+          params: { query, limit: 40 },
+          paramsSerializer,
+        })
+        .then((res) => setMangaResults(res.data.results))
+        .catch(() => setMangaResults([]))
+        .finally(() => setIsLoadingManga(false));
+    } else {
+      setMangaResults([]);
+    }
+  }, [query, bookEnabled, audiobookEnabled, gameEnabled, mangaEnabled]);
 
   if (error && activeTab === 'all') {
     return <ErrorPage statusCode={500} />;
@@ -439,6 +480,16 @@ const Search = () => {
             label: intl.formatMessage(messages.tabGames),
             count: isLoadingGames ? null : gameResults.length,
             loading: isLoadingGames,
+          },
+        ]
+      : []),
+    ...(mangaEnabled
+      ? [
+          {
+            key: 'manga' as MediaTab,
+            label: intl.formatMessage(messages.tabManga),
+            count: isLoadingManga ? null : mangaResults.length,
+            loading: isLoadingManga,
           },
         ]
       : []),
@@ -615,6 +666,39 @@ const Search = () => {
                   </li>
                 );
               })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Manga */}
+      {activeTab === 'manga' && (
+        <div>
+          {isLoadingManga ? (
+            <LoadingSpinner />
+          ) : mangaResults.length === 0 ? (
+            <p className="py-8 text-center text-gray-400">
+              {intl.formatMessage(messages.noResults)}
+            </p>
+          ) : (
+            <ul className="cards-vertical">
+              {mangaResults.map((m) => (
+                <li key={m.anilistId}>
+                  <MangaCard
+                    anilistId={m.anilistId}
+                    title={m.title}
+                    titleNative={m.titleNative}
+                    coverUrl={m.coverUrl}
+                    year={m.year}
+                    status={m.status}
+                    format={m.format}
+                    chapters={m.chapters}
+                    volumes={m.volumes}
+                    averageScore={m.averageScore}
+                    countryOfOrigin={m.countryOfOrigin}
+                  />
+                </li>
+              ))}
             </ul>
           )}
         </div>

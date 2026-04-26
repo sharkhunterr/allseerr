@@ -232,6 +232,7 @@ interface FullPublicSettings extends PublicSettings {
   bookEnabled: boolean;
   audiobookEnabled: boolean;
   gameEnabled: boolean;
+  mangaEnabled: boolean;
 }
 
 export interface NotificationAgentConfig {
@@ -1109,6 +1110,12 @@ class Settings {
         ),
       gameEnabled:
         this.data.game.romm.enabled && !!this.data.game.romm.url,
+      mangaEnabled:
+        // Manga search needs a metadata source; Suwayomi (download
+        // manager) is optional. The tab is visible as long as the
+        // user has AniList enabled in Settings → Metadata Providers
+        // → Manga.
+        !!this.data.manga?.metadataProviders?.anilist,
     };
   }
 
