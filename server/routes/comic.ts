@@ -149,22 +149,29 @@ comicRoutes.get('/person/:id', isAuthenticated(), requireMediaType('comic'), asy
 
   try {
     const cv = new ComicVineAPI({ apiKey });
-    const person = await cv.getPerson(id);
+    // Person record + their full bibliography in parallel — the
+    // /person endpoint's `created_volumes` field only ships sparse
+    // references (id + name), so we hit /volumes?filter=people:<id>
+    // for the data the works grid actually needs (covers, years,
+    // publishers).
+    const [person, volumes] = await Promise.all([
+      cv.getPerson(id),
+      cv.getVolumesByPerson(id, 60),
+    ]);
     if (!person) {
       return res
         .status(404)
         .json({ status: 404, message: 'Creator not found.' });
     }
 
-    const works =
-      person.created_volumes?.map((v) => ({
-        comicVineId: v.id,
-        title: v.name,
-        year: comicVineYear(v.start_year),
-        coverUrl: comicVineCoverUrl(v.image),
-        issueCount: v.count_of_issues,
-        publisher: v.publisher?.name,
-      })) ?? [];
+    const works = volumes.map((v) => ({
+      comicVineId: v.id,
+      title: v.name,
+      year: comicVineYear(v.start_year),
+      coverUrl: comicVineCoverUrl(v.image),
+      issueCount: v.count_of_issues,
+      publisher: v.publisher?.name,
+    }));
 
     return res.status(200).json({
       key: id,
@@ -235,6 +242,26 @@ comicRoutes.get('/:id', isAuthenticated(), requireMediaType('comic'), async (req
 
     const primaryCreator = pickPrimaryCreator(volume.people);
 
+    // /volume's `people` array doesn't carry images. Fire one extra
+    // /person/<id> for the primary creator so the author block on
+    // the detail page can render their photo. Cached at 12h on
+    // ComicVine's side (see api/comicvine), so this is effectively
+    // free after the first hit and not worth blocking on for
+    // failures.
+    let creatorPhotoUrl: string | undefined;
+    if (primaryCreator?.id) {
+      try {
+        const fullCreator = await cv.getPerson(primaryCreator.id);
+        creatorPhotoUrl = comicVineCoverUrl(fullCreator?.image);
+      } catch (e) {
+        logger.debug('Comic primary-creator photo lookup skipped', {
+          label: 'comic',
+          personId: primaryCreator.id,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
     const issues = (volume.issues ?? []).slice(0, 50).map((i) => ({
       comicVineId: i.id,
       name: i.name ?? undefined,
@@ -279,6 +306,7 @@ comicRoutes.get('/:id', isAuthenticated(), requireMediaType('comic'), async (req
       creatorName: primaryCreator?.name,
       creatorKey: primaryCreator?.id,
       creatorRole: primaryCreator?.role ?? undefined,
+      creatorPhotoUrl,
       // Full credit list (de-duplicated by id) for the credits panel.
       credits:
         volume.people?.map((p) => ({

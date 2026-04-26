@@ -254,6 +254,39 @@ class ComicVineAPI {
   }
 
   /**
+   * Fetch every volume credited to a creator with full metadata
+   * (covers, years, publishers). The `created_volumes` array on
+   * `/person/<id>` only ships sparse references (`id` + `name` +
+   * `api_detail_url`); using the `/volumes?filter=people:<id>`
+   * endpoint gets us the full records in a single query so the
+   * creator-detail page can render proper ComicCards instead of
+   * empty-cover placeholders.
+   */
+  async getVolumesByPerson(
+    personId: number,
+    limit = 50
+  ): Promise<ComicVineVolumeSummary[]> {
+    const key = `volumes:byPerson:${personId}:${limit}`;
+    return cached(
+      key,
+      async () => {
+        const results = await this.get<ComicVineVolumeSummary[]>('/volumes/', {
+          filter: `people:${personId}`,
+          limit,
+          // Same field_list shape as searchVolumes so the caller
+          // can rely on the same fields being present.
+          field_list:
+            'id,name,start_year,count_of_issues,publisher,image,deck,description,api_detail_url,site_detail_url,resource_type',
+        });
+        return results ?? [];
+      },
+      // 6h TTL — a creator's bibliography rarely changes mid-day,
+      // and this is a heavier query than a single-volume fetch.
+      6 * 3600
+    );
+  }
+
+  /**
    * Fetch a creator (writer / artist / cover artist) by id, including
    * the volumes they're credited on. Used for the comic creator detail
    * page (parallel to the manga staff page).

@@ -59,6 +59,7 @@ interface ComicDetailData {
   creatorName?: string;
   creatorKey?: number;
   creatorRole?: string;
+  creatorPhotoUrl?: string;
   credits?: ComicCredit[];
 }
 
@@ -161,24 +162,6 @@ const ComicDetailPage: NextPage = () => {
               intl.formatMessage(messages.overviewunavailable)}
           </p>
 
-          {data.characters && data.characters.length > 0 && (
-            <div className="mt-6">
-              <h3 className="mb-2 text-lg font-bold text-gray-100">
-                {intl.formatMessage(messages.characters)}
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {data.characters.map((c) => (
-                  <span
-                    key={c}
-                    className="rounded-full border border-gray-600 bg-gray-800/80 px-2 py-0.5 text-xs text-gray-200"
-                  >
-                    {c}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
           {data.issues && data.issues.length > 0 && (
             <div className="mt-8">
               <h3 className="mb-3 text-lg font-bold text-gray-100">
@@ -224,8 +207,19 @@ const ComicDetailPage: NextPage = () => {
               className="group mb-6 block w-full cursor-pointer overflow-hidden rounded-lg bg-gray-800 text-left shadow-md ring-1 ring-gray-700 transition hover:ring-amber-400 disabled:cursor-default disabled:hover:ring-gray-700"
             >
               <div className="flex items-start gap-4 p-4">
-                <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-full bg-gray-700 text-2xl font-semibold text-gray-300 ring-2 ring-amber-500/40">
-                  {data.creatorName[0]?.toUpperCase() ?? '?'}
+                <div className="flex-shrink-0">
+                  {data.creatorPhotoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={data.creatorPhotoUrl}
+                      alt={data.creatorName}
+                      className="h-20 w-20 rounded-full object-cover ring-2 ring-amber-500/40"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-700 text-2xl font-semibold text-gray-300 ring-2 ring-amber-500/40">
+                      {data.creatorName[0]?.toUpperCase() ?? '?'}
+                    </div>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs uppercase tracking-wide text-gray-400">
@@ -264,6 +258,14 @@ const ComicDetailPage: NextPage = () => {
                 <span>{intl.formatMessage(messages.lastIssue)}</span>
                 <span className="media-fact-value">
                   {data.lastIssue.coverDate ?? data.lastIssue.issueNumber}
+                </span>
+              </div>
+            )}
+            {data.characters && data.characters.length > 0 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.characters)}</span>
+                <span className="media-fact-value">
+                  {data.characters.join(', ')}
                 </span>
               </div>
             )}
