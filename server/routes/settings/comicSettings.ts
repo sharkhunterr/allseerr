@@ -1,4 +1,5 @@
 import ComicVineAPI from '@server/api/comicvine';
+import MylarAPI from '@server/api/mylar';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { Router } from 'express';
@@ -96,6 +97,101 @@ comicSettingsRoutes.post('/metadata-providers/test', async (req, res) => {
     logger.error('Comic metadata provider test crashed', {
       label: 'comic-settings',
       provider: body.provider,
+      error: message,
+    });
+    return res.status(200).json({ success: false, message });
+  }
+});
+
+/**
+ * Mylar3 — optional download manager. Same read / write / test
+ * triplet as the Suwayomi endpoints; not configured = manual
+ * workflow.
+ */
+comicSettingsRoutes.get('/mylar', (_req, res) => {
+  try {
+    const settings = getSettings();
+    const mylar = settings.comic?.mylar ?? {
+      url: '',
+      publicUrl: '',
+      apiKey: '',
+      pollIntervalMinutes: 15,
+      enabled: false,
+    };
+    return res.status(200).json({ ...mylar, apiKey: '' });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    logger.error('Failed to read Mylar settings', {
+      label: 'comic-settings',
+      error: message,
+    });
+    return res.status(500).json({ status: 500, message });
+  }
+});
+
+comicSettingsRoutes.put('/mylar', async (req, res) => {
+  try {
+    const settings = getSettings();
+    const body = req.body as Partial<typeof settings.comic.mylar>;
+    const current = settings.comic?.mylar ?? {
+      url: '',
+      publicUrl: '',
+      apiKey: '',
+      pollIntervalMinutes: 15,
+      enabled: false,
+    };
+
+    settings.comic = {
+      ...settings.comic,
+      mylar: {
+        url: typeof body.url === 'string' ? body.url.trim() : current.url,
+        publicUrl:
+          typeof body.publicUrl === 'string'
+            ? body.publicUrl.trim()
+            : current.publicUrl,
+        apiKey:
+          typeof body.apiKey === 'string' && body.apiKey.length > 0
+            ? body.apiKey
+            : current.apiKey,
+        pollIntervalMinutes:
+          typeof body.pollIntervalMinutes === 'number' &&
+          body.pollIntervalMinutes > 0
+            ? body.pollIntervalMinutes
+            : current.pollIntervalMinutes,
+        enabled:
+          typeof body.enabled === 'boolean' ? body.enabled : current.enabled,
+      },
+    };
+
+    await settings.save();
+    return res.status(200).json({ ...settings.comic.mylar, apiKey: '' });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    logger.error('Failed to save Mylar settings', {
+      label: 'comic-settings',
+      error: message,
+    });
+    return res.status(500).json({ status: 500, message });
+  }
+});
+
+comicSettingsRoutes.post('/mylar/test', async (req, res) => {
+  const body = req.body as { url?: string; apiKey?: string };
+  if (!body.url || !body.apiKey) {
+    return res.status(400).json({
+      success: false,
+      message: 'url and apiKey are required for the test',
+    });
+  }
+
+  try {
+    const api = new MylarAPI({ url: body.url, apiKey: body.apiKey });
+    const result = await api.testConnection();
+    return res.status(200).json(result);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    logger.error('Mylar test crashed', {
+      label: 'comic-settings',
       error: message,
     });
     return res.status(200).json({ success: false, message });

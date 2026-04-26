@@ -23,6 +23,7 @@ import SeasonRequest from '@server/entity/SeasonRequest';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { submitToBindery } from '@server/lib/services/binderyDispatcher';
 import { submitToBookshelf } from '@server/lib/services/bookshelfDispatcher';
+import { submitToMylar } from '@server/lib/services/mylarDispatcher';
 import { submitToSuwayomi } from '@server/lib/services/suwayomiDispatcher';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -1210,6 +1211,46 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
   }
 
   /**
+   * Dispatches comic requests to a configured Mylar3 instance on
+   * approval. Skips silently when Mylar isn't enabled — manual
+   * workflow (parallel to Suwayomi-for-manga / ROMM-for-games).
+   */
+  public async sendToMylar(entity: MediaRequest): Promise<void> {
+    if (entity.status !== MediaRequestStatus.APPROVED) {
+      return;
+    }
+    if (entity.type !== MediaType.COMIC) {
+      return;
+    }
+
+    const requestRepo = getRepository(MediaRequest);
+    const fullRequest = await requestRepo.findOne({
+      where: { id: entity.id },
+      relations: ['comicMedia'],
+    });
+    const media = fullRequest?.comicMedia;
+    if (!media) {
+      return;
+    }
+
+    if (media.downloadManagerExternalId) {
+      return;
+    }
+
+    const result = await submitToMylar(media);
+    if (result.success) {
+      const { ComicMedia } = await import('@server/entity/ComicMedia');
+      await getRepository(ComicMedia).save(media);
+    } else if (!result.noInstance) {
+      logger.warn('Mylar dispatch did not succeed', {
+        label: 'Media Request',
+        requestId: entity.id,
+        message: result.message,
+      });
+    }
+  }
+
+  /**
    * Dispatches manga requests to a configured Suwayomi (Tachidesk)
    * instance on approval. Skips silently when Suwayomi is not enabled
    * — that's the manual-workflow case (parallel to ROMM for games).
@@ -1262,6 +1303,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToBindery(event.entity as MediaRequest);
       await this.sendToBookshelf(event.entity as MediaRequest);
       await this.sendToSuwayomi(event.entity as MediaRequest);
+      await this.sendToMylar(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterUpdate subscriber', {
         label: 'Media Request',
@@ -1304,6 +1346,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToBindery(event.entity as MediaRequest);
       await this.sendToBookshelf(event.entity as MediaRequest);
       await this.sendToSuwayomi(event.entity as MediaRequest);
+      await this.sendToMylar(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterInsert subscriber', {
         label: 'Media Request',

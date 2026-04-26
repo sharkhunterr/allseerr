@@ -5610,6 +5610,72 @@ paths:
                 properties:
                   success: { type: boolean }
                   message: { type: string }
+  /settings/comic/mylar:
+    get:
+      summary: Get Mylar3 (comic download manager) config
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string }
+                  publicUrl: { type: string }
+                  apiKey: { type: string }
+                  pollIntervalMinutes: { type: number }
+                  enabled: { type: boolean }
+    put:
+      summary: Update Mylar3 config
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string }
+                publicUrl: { type: string }
+                apiKey: { type: string }
+                pollIntervalMinutes: { type: number }
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/comic/mylar/test:
+    post:
+      summary: Probe a Mylar3 instance for reachability
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, apiKey]
+              properties:
+                url: { type: string }
+                apiKey: { type: string }
+      responses:
+        '200':
+          description: Test complete (see success flag)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
   /settings/book/download-managers:
     get:
       summary: Get book download manager instances
