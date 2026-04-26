@@ -20,7 +20,8 @@ export type AvailableCacheIds =
   | 'openlibrary'
   | 'googlebooks'
   | 'hardcover'
-  | 'audible';
+  | 'audible'
+  | 'anilist';
 
 const DEFAULT_TTL = 300;
 const DEFAULT_CHECK_PERIOD = 120;
@@ -83,6 +84,14 @@ class CacheManager {
     audible: new Cache('audible', 'Audible API', {
       stdTtl: 86400,
       checkPeriod: 60 * 60,
+    }),
+    anilist: new Cache('anilist', 'AniList API', {
+      // Manga records are extremely stable (covers, status, chapter
+      // count change at a slow drip); 12h is plenty. Free-text search
+      // is rate-limited (90 req/min) so caching is mostly to absorb
+      // the same query landing again from search-as-you-type.
+      stdTtl: 12 * 3600,
+      checkPeriod: 60 * 30,
     }),
     rt: new Cache('rt', 'Rotten Tomatoes API', {
       stdTtl: 43200,
