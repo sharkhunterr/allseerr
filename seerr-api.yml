@@ -4409,6 +4409,71 @@ paths:
             application/json:
               schema:
                 type: object
+  /comic/search:
+    get:
+      summary: Search comic volumes
+      description: Free-text search of ComicVine volumes (series).
+      tags:
+        - comic
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                  totalResults: { type: number }
+  /comic/{id}:
+    get:
+      summary: Get comic volume details
+      tags:
+        - comic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Volume details returned
+          content:
+            application/json:
+              schema:
+                type: object
+  /comic/person/{id}:
+    get:
+      summary: Get comic creator details by ComicVine id
+      tags:
+        - comic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Creator details + credited volumes
+          content:
+            application/json:
+              schema:
+                type: object
   /manga/request:
     post:
       summary: Submit a manga request

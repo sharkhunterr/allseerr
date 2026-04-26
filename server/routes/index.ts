@@ -39,6 +39,7 @@ import movieRoutes from './movie';
 import bookRoutes from './book';
 import gameRoutes from './game';
 import mangaRoutes from './manga';
+import comicRoutes from './comic';
 import { getMusicRoutes } from './music';
 import personRoutes from './person';
 import requestRoutes from './request';
@@ -179,6 +180,7 @@ router.use('/auth', authRoutes);
 router.use('/book', bookRoutes);
 router.use('/game', gameRoutes);
 router.use('/manga', mangaRoutes);
+router.use('/comic', comicRoutes);
 
 // Music routes: conditionally registered based on ENABLE_MUSIC flag (FR-014)
 const musicRouter = getMusicRoutes();
