@@ -254,36 +254,29 @@ class ComicVineAPI {
   }
 
   /**
-   * Fetch every volume credited to a creator with full metadata
-   * (covers, years, publishers). The `created_volumes` array on
-   * `/person/<id>` only ships sparse references (`id` + `name` +
-   * `api_detail_url`); using the `/volumes?filter=people:<id>`
-   * endpoint gets us the full records in a single query so the
-   * creator-detail page can render proper ComicCards instead of
-   * empty-cover placeholders.
+   * Enrich a list of volume ids into full volume records by fanning
+   * out parallel /volume/4050-<id> calls. Used by the creator
+   * detail page to turn /person/<id>'s sparse `created_volumes`
+   * references (only `{id, name}`) into proper ComicCards with
+   * covers, years and publishers.
+   *
+   * NB: the `/volumes?filter=people:<id>` endpoint is NOT a viable
+   * shortcut — `/volumes` filter only supports id / name /
+   * count_of_issues / date_*. Passing `filter=people:…` is
+   * silently ignored, returning the default (unrelated) volume
+   * list. So the per-id fan-out is the only accurate path.
+   *
+   * Per-volume responses are cached at 12h, so this is effectively
+   * free after the first hit — but we still keep the input list
+   * bounded by the caller (default 12) to avoid burning the 200/h
+   * per-resource ComicVine quota on cold-cache page views.
    */
-  async getVolumesByPerson(
-    personId: number,
-    limit = 50
-  ): Promise<ComicVineVolumeSummary[]> {
-    const key = `volumes:byPerson:${personId}:${limit}`;
-    return cached(
-      key,
-      async () => {
-        const results = await this.get<ComicVineVolumeSummary[]>('/volumes/', {
-          filter: `people:${personId}`,
-          limit,
-          // Same field_list shape as searchVolumes so the caller
-          // can rely on the same fields being present.
-          field_list:
-            'id,name,start_year,count_of_issues,publisher,image,deck,description,api_detail_url,site_detail_url,resource_type',
-        });
-        return results ?? [];
-      },
-      // 6h TTL — a creator's bibliography rarely changes mid-day,
-      // and this is a heavier query than a single-volume fetch.
-      6 * 3600
+  async getVolumesByIds(ids: number[]): Promise<ComicVineVolume[]> {
+    if (ids.length === 0) return [];
+    const settled = await Promise.all(
+      ids.map((id) => this.getVolume(id).catch(() => null))
     );
+    return settled.filter((v): v is ComicVineVolume => v !== null);
   }
 
   /**

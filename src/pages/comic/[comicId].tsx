@@ -20,7 +20,6 @@ const messages = defineMessages('pages.ComicDetail', {
   lastIssue: 'Last issue',
   characters: 'Characters',
   creator: 'About the creator',
-  credits: 'Credits',
   issues: 'Issues',
   issueLabel: '#{number}',
   request: 'Request',
@@ -32,12 +31,6 @@ interface ComicIssue {
   name?: string;
   issueNumber?: string;
   coverDate?: string;
-}
-
-interface ComicCredit {
-  id: number;
-  name: string;
-  role?: string;
 }
 
 interface ComicDetailData {
@@ -60,7 +53,6 @@ interface ComicDetailData {
   creatorKey?: number;
   creatorRole?: string;
   creatorPhotoUrl?: string;
-  credits?: ComicCredit[];
 }
 
 const ComicDetailPage: NextPage = () => {
@@ -271,30 +263,6 @@ const ComicDetailPage: NextPage = () => {
             )}
           </div>
 
-          {data.credits && data.credits.length > 0 && (
-            <div className="mt-6">
-              <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-400">
-                {intl.formatMessage(messages.credits)}
-              </h3>
-              <ul className="space-y-1 text-sm text-gray-200">
-                {data.credits.slice(0, 12).map((p) => (
-                  <li key={p.id} className="flex justify-between">
-                    <span
-                      className="cursor-pointer hover:text-amber-300"
-                      onClick={() => router.push(`/comic/person/${p.id}`)}
-                    >
-                      {p.name}
-                    </span>
-                    {p.role && (
-                      <span className="text-xs italic text-gray-500">
-                        {p.role}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       </div>
       <div className="extra-bottom-space relative" />

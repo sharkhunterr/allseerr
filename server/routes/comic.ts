@@ -149,22 +149,27 @@ comicRoutes.get('/person/:id', isAuthenticated(), requireMediaType('comic'), asy
 
   try {
     const cv = new ComicVineAPI({ apiKey });
-    // Person record + their full bibliography in parallel — the
-    // /person endpoint's `created_volumes` field only ships sparse
-    // references (id + name), so we hit /volumes?filter=people:<id>
-    // for the data the works grid actually needs (covers, years,
-    // publishers).
-    const [person, volumes] = await Promise.all([
-      cv.getPerson(id),
-      cv.getVolumesByPerson(id, 60),
-    ]);
+    const person = await cv.getPerson(id);
     if (!person) {
       return res
         .status(404)
         .json({ status: 404, message: 'Creator not found.' });
     }
 
-    const works = volumes.map((v) => ({
+    // /person ships `created_volumes` as sparse references (just id
+    // + name). Take the first 12 and fan out to /volume/<id> in
+    // parallel to enrich them with covers, years, publishers. We
+    // cap at 12 because each call counts towards ComicVine's 200/h
+    // per-resource budget — and the creator detail page is rarely
+    // dense enough to justify more without pagination.
+    const ENRICH_LIMIT = 12;
+    const refIds = (person.created_volumes ?? [])
+      .map((v) => v.id)
+      .filter((id): id is number => typeof id === 'number')
+      .slice(0, ENRICH_LIMIT);
+    const enriched = await cv.getVolumesByIds(refIds);
+
+    const works = enriched.map((v) => ({
       comicVineId: v.id,
       title: v.name,
       year: comicVineYear(v.start_year),
@@ -185,7 +190,10 @@ comicRoutes.get('/person/:id', isAuthenticated(), requireMediaType('comic'), asy
       country: person.country ?? undefined,
       issueAppearances: person.count_of_issue_appearances ?? undefined,
       siteDetailUrl: person.site_detail_url ?? undefined,
-      totalWorks: works.length,
+      // Real count comes from the full reference list, not the
+      // enriched slice — so the header reads "57 volumes" even
+      // when only the top 12 are rendered with covers.
+      totalWorks: person.created_volumes?.length ?? works.length,
       works,
     });
   } catch (e) {
