@@ -1,77 +1,111 @@
 <p align="center">
-<img src="./public/logo_full.svg" alt="Seerr" style="margin: 20px 0;">
+<img src="./public/logo_full.svg" alt="Allseerr" style="margin: 20px 0;">
 </p>
+
 <p align="center">
-<img src="https://github.com/seerr-team/seerr/actions/workflows/release.yml/badge.svg" alt="Seerr Release" />
-<img src="https://github.com/seerr-team/seerr/actions/workflows/ci.yml/badge.svg" alt="Seerr CI">
+<a href="https://hub.docker.com/r/allseerr/allseerr"><img src="https://img.shields.io/docker/pulls/allseerr/allseerr?label=docker%20pulls" alt="Docker pulls"></a>
+<a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/allseerr/allseerr"></a>
 </p>
-<p align="center">
-<a href="https://discord.gg/seerr"><img src="https://img.shields.io/discord/783137440809746482" alt="Discord"></a>
-<a href="https://hub.docker.com/r/seerr/seerr"><img src="https://img.shields.io/docker/pulls/seerr/seerr" alt="Docker pulls"></a>
-<a href="https://translate.seerr.dev/engage/seerr/"><img src="https://translate.seerr.dev/widget/seerr/svg-badge.svg" alt="Translation status" /></a>
-<a href="https://github.com/seerr-team/seerr/blob/develop/LICENSE"><img alt="GitHub" src="https://img.shields.io/github/license/seerr-team/seerr"></a>
 
-**Allseerr** is a free and open source unified media request manager — movies, TV, books, audiobooks, games & music. It integrates with the media server of your choice: [Jellyfin](https://jellyfin.org), [Plex](https://plex.tv), and [Emby](https://emby.media/). In addition, it integrates with your existing services, such as **[Sonarr](https://sonarr.tv/)**, **[Radarr](https://radarr.video/)**.
+> **Allseerr** is a unified media request manager for movies, TV, **books, audiobooks, video games, manga & comics** — all behind a single Plex / Jellyfin / Emby login. Built as a friendly fork of [Seerr](https://github.com/seerr-team/seerr) (itself a fork of [Jellyseerr](https://github.com/Fallenbagel/jellyseerr) / [Overseerr](https://github.com/sct/overseerr)) extending the model beyond movies + TV to every kind of media a self-hosted library cares about.
+>
+> 🎨 The branding (logo, banner, screenshots) inherits the Seerr assets for now and is being redesigned for Allseerr — see [`todo_release.md`](./todo_release.md).
 
-## Current Features
+## What's different from Seerr / Jellyseerr / Overseerr?
 
-- Full Jellyfin/Emby/Plex integration including authentication with user import & management.
-- Support for **PostgreSQL** and **SQLite** databases.
-- Supports Movies, Shows and Mixed Libraries.
-- Ability to change email addresses for SMTP purposes.
-- Easy integration with your existing services. Currently, Seerr supports Sonarr and Radarr. More to come!
-- Jellyfin/Emby/Plex library scan, to keep track of the titles which are already available.
-- Customizable request system, which allows users to request individual seasons or movies in a friendly, easy-to-use interface.
-- Incredibly simple request management UI. Don't dig through the app to simply approve recent requests!
-- Granular permission system.
-- Support for various notification agents.
-- Mobile-friendly design, for when you need to approve requests on the go!
-- Support for watchlisting & blocklisting media.
+Everything Overseerr does, plus:
 
-With more features on the way! Check out our [issue tracker](/../../issues) to see the features which have already been requested.
+| Domain | Source(s) | Library / Download targets |
+|---|---|---|
+| **Books** | OpenLibrary, Hardcover (multi-edition + per-language) | Bookshelf (Readarr-fork), Bindery, Audiobookshelf, Komga, Grimmory |
+| **Audiobooks** | Audible (multi-region), Hardcover audio editions | Bookshelf (audiobook profile), Audiobookshelf |
+| **Video games** | IGDB, ROMM | ROMM (with collection groupings + virtual collections like franchises) |
+| **Manga & comics** | _planned_ — AniList / ComicVine / Komga | Komga, Mylar, Suwayomi |
+| **Per-type quotas + auto-approve** | — | First-class permissions per media type |
 
-## Getting Started
+The classic flow (Plex/Jellyfin login, Sonarr / Radarr request approval, watchlist, blocklist, notifications) is unchanged — it's just had four more media types bolted on.
 
-Check out our documentation for instructions on how to install and run Seerr:
+## Quick start
 
-https://docs.seerr.dev/getting-started/
+```bash
+docker run -d \
+  --name allseerr \
+  -e LOG_LEVEL=info \
+  -e TZ=Europe/Paris \
+  -p 5055:5055 \
+  -v ${PWD}/config:/app/config \
+  --restart unless-stopped \
+  allseerr/allseerr:latest
+```
 
-## Preview
+Then open <http://localhost:5055> and follow the setup wizard (Plex / Jellyfin / Emby pick → libraries → Sonarr / Radarr → optional book / audiobook / game providers).
 
-<img src="./public/preview.jpg" alt="Seerr application preview" />
+For Docker Compose / Kubernetes / source builds, see [`docs/`](./docs/).
 
-## Migrating from Overseerr/Jellyseerr to Seerr
+## Origins & relationship to Seerr
 
-Read our [release announcement](https://docs.seerr.dev/blog/seerr-release) to learn what Seerr means for Jellyseerr and Overseerr users.
+Allseerr is a **fork of [Seerr](https://github.com/seerr-team/seerr)**. Seerr itself forks the well-known Overseerr → Jellyseerr lineage. The whole stack (Next.js custom server, TypeORM, the metadata-provider abstraction) is unchanged at its core; Allseerr's contribution is everything below the Movies/TV line.
 
-Please follow our [migration guide](https://docs.seerr.dev/migration-guide) for detailed instructions on migrating from Overseerr or Jellyseerr.
+We track upstream Seerr releases and pull bug fixes / feature work back when relevant. Anything not specifically about non-video media (books, audiobooks, games, manga, comics) belongs upstream — please open issues there first.
+
+## Releases & deployment
+
+Allseerr's release tooling is adapted from [sharkhunterr/ghostarr](https://github.com/sharkhunterr/ghostarr):
+
+- [`scripts/release.js`](./scripts/release.js) — `npm run release[:patch|:minor|:major|:github|:deploy|:full]`
+- [`scripts/push.js`](./scripts/push.js) — push current branch / tags to GitLab + GitHub mirrors
+- [`scripts/docker-deploy.js`](./scripts/docker-deploy.js) — local Docker builds (CI handles production publishes)
+- [`.gitlab-ci.yml`](./.gitlab-ci.yml) — pipeline that builds, tests, mirrors to GitHub, publishes to Docker Hub, and creates GitLab + GitHub release pages on tag push
+
+See [`scripts/README.md`](./scripts/README.md) for required CI variables (`DOCKER_HUB_USER`, `DOCKER_HUB_TOKEN`, `GITHUB_TOKEN`, `GITHUB_REPO`) and the full release workflow.
+
+## Configuration
+
+Most options are set in the **Settings** UI after first launch. Notable allseerr-specific tabs:
+
+- **Settings → Metadata Providers** — Books / Audiobooks tabs let you pick a primary source (OpenLibrary or Hardcover; Audible or Hardcover for audiobooks), enable/test secondary providers, and pin a preferred language.
+- **Settings → Services** — separate sub-tabs for Movies & TV (Sonarr/Radarr), Books, Audiobooks (Bookshelf instances per `mediaType`), Games (ROMM + IGDB).
+- **Settings → Jobs & Cache** — schedules per integration (e.g. ROMM Library Scan every 15 min, ROMM Collections Scan weekly).
+- **Settings → Users → Quotas / Permissions** — per-type quotas and auto-approve flags (book / audiobook / game) on top of the existing movie / TV ones.
+
+Config + SQLite live under `./config` (mounted volume). PostgreSQL is supported.
+
+## Roadmap
+
+See [`todo_release.md`](./todo_release.md) for the working list:
+
+1. **Manga + comics** as new media types (AniList, ComicVine, Komga shared)
+2. **Per-type trending sliders** on the home page
+3. **Smart "All" search** that aggregates every enabled provider into a single grid
+4. **Nav bar redesign** to scale past the Movies / TV pair
+5. **Allseerr-branded visual identity** (logo, banner, screenshots — currently inherited from Seerr)
+
+## Migrating from Seerr / Jellyseerr / Overseerr
+
+The database schema is a strict superset — Allseerr will read an existing Seerr / Jellyseerr / Overseerr config + DB and migrate it on first launch. Always back up `config/db/db.sqlite3` (or your Postgres dump) before upgrading.
 
 ## Support
 
-- Check out the [Seerr Documentation](https://docs.seerr.dev) before asking for help. Your question might already be in the docs!
-- You can get support on [Discord](https://discord.gg/seerr).
-- You can ask questions in the Help category of our [GitHub Discussions](/../../discussions).
-- Bug reports and feature requests can be submitted via [GitHub Issues](/../../issues).
+This is a small fork. Before asking here:
 
-## API Documentation
+1. Check if it's an upstream issue → ask on [Seerr](https://github.com/seerr-team/seerr) or [Jellyseerr](https://github.com/Fallenbagel/jellyseerr).
+2. Otherwise file [an Allseerr issue](/../../issues) with logs (`./config/logs/`) and your media-provider config.
 
-You can access the API documentation from your local Seerr install at http://localhost:5055/api-docs
+## API docs
 
-## Community
-
-You can ask questions, share ideas, and more in [GitHub Discussions](/../../discussions).
-
-If you would like to chat with other members of our growing community, [join the Seerr Discord server](https://discord.gg/seerr)!
-
-Our [Code of Conduct](./CODE_OF_CONDUCT.md) applies to all Seerr community channels.
+Available at <http://localhost:5055/api-docs> on a running instance (Swagger UI backed by [`seerr-api.yml`](./seerr-api.yml)).
 
 ## Contributing
 
-You can help improve Seerr too! Check out our [Contribution Guide](./CONTRIBUTING.md) to get started.
+The contribution guide and code of conduct from upstream still apply: [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md). When opening a PR specifically against allseerr extensions (books / audiobooks / games / manga / comics), label it accordingly so it doesn't get bounced upstream.
 
-## Contributors ✨
+## License
 
-[![Contributors](https://opencollective.com/seerr/contributors.svg?width=890)](https://opencollective.com/seerr/#backers)
+MIT, same as Overseerr / Jellyseerr / Seerr. See [`LICENSE`](./LICENSE).
 
-[![Become a Backer](https://opencollective.com/seerr/backers.svg)](https://opencollective.com/seerr/#backers)
-[![Become a Sponsor](https://opencollective.com/seerr/sponsors.svg)](https://opencollective.com/seerr/#sponsors)
+## Acknowledgments
+
+- [**Overseerr**](https://github.com/sct/overseerr) — original
+- [**Jellyseerr**](https://github.com/Fallenbagel/jellyseerr) — Jellyfin/Emby fork
+- [**Seerr**](https://github.com/seerr-team/seerr) — direct upstream
+- [**ghostarr**](https://github.com/sharkhunterr/ghostarr) — release tooling pattern (`scripts/` + `.gitlab-ci.yml`)

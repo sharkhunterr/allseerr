@@ -1,0 +1,344 @@
+# GitLab CI/CD Pipeline — Allseerr
+# Adapted from sharkhunterr/ghostarr's pipeline. Node-only build
+# (no Python), Dockerfile at the repo root, image published as
+# ${DOCKER_HUB_USER}/${CI_PROJECT_NAME} on tag push.
+
+variables:
+  PROJECT_TYPE: "fullstack"
+  NODE_VERSION: "22"
+
+  ENABLE_FRONTEND_TESTS: "true"
+  ENABLE_DOCKER_BUILD: "true"
+  ENABLE_GITLAB_REGISTRY: "false"
+
+  # Toggles for the deploy job — flip to "false" to skip a target.
+  DOCKER_HUB_ENABLED: "true"     # Publish to Docker Hub on tag
+  GITHUB_DEPLOY_ENABLED: "true"  # Mirror to GitHub on tag
+
+  DOCKER_IMAGE: $CI_PROJECT_NAME
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: tcp://docker:2375
+
+# Avoid double-pipelines on the release commit standard-version creates.
+workflow:
+  rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_MESSAGE =~ /^chore\(release\)/'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+stages:
+  - validate
+  - test
+  - build
+  - publish
+  - deploy
+  - release
+  - verify
+
+# =============================================================================
+# Reusable templates
+# =============================================================================
+.node_template: &node_template
+  image: node:${NODE_VERSION}
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-pnpm
+    paths:
+      - .pnpm-store/
+      - node_modules/
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.24.0 --activate
+    - pnpm config set store-dir .pnpm-store
+    - pnpm install --frozen-lockfile
+
+.docker_template: &docker_template
+  image: docker:24-cli
+  services:
+    - name: docker:24-dind
+      alias: docker
+      command: ["--tls=false"]
+  before_script:
+    - until docker info; do sleep 1; done
+
+# =============================================================================
+# Validate
+# =============================================================================
+validate:lint:
+  stage: validate
+  <<: *node_template
+  script:
+    - pnpm lint
+  allow_failure: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
+validate:typecheck:
+  stage: validate
+  <<: *node_template
+  script:
+    - pnpm typecheck
+  allow_failure: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+
+# =============================================================================
+# Test (build = smoke test the Next.js + server compile)
+# =============================================================================
+test:build:
+  stage: test
+  <<: *node_template
+  script:
+    - pnpm build
+  artifacts:
+    when: always
+    paths:
+      - .next/
+      - dist/
+    expire_in: 1 week
+  rules:
+    - if: '$ENABLE_FRONTEND_TESTS == "true"'
+
+# =============================================================================
+# Build Docker image (tag-only, the deploy job rebuilds for push)
+# =============================================================================
+build:docker:
+  stage: build
+  <<: *docker_template
+  variables:
+    DOCKER_BUILDKIT: 1
+  script:
+    - |
+      docker build \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        --build-arg VCS_REF=${CI_COMMIT_SHA} \
+        --build-arg VERSION=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA} \
+        --tag ${DOCKER_IMAGE}:${CI_COMMIT_SHA} \
+        --tag ${DOCKER_IMAGE}:${CI_COMMIT_REF_SLUG} \
+        --file Dockerfile \
+        .
+  rules:
+    - if: '$CI_COMMIT_TAG && $ENABLE_DOCKER_BUILD == "true"'
+
+# =============================================================================
+# Publish to GitLab registry (off by default; flip ENABLE_GITLAB_REGISTRY)
+# =============================================================================
+publish:gitlab-registry:
+  stage: publish
+  <<: *docker_template
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - |
+      docker build \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        --build-arg VCS_REF=${CI_COMMIT_SHA} \
+        --build-arg VERSION=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA} \
+        --tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA} \
+        --tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG} \
+        --file Dockerfile \
+        .
+    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}
+    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA} ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG}
+        docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA} ${CI_REGISTRY_IMAGE}:latest
+        docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG}
+        docker push ${CI_REGISTRY_IMAGE}:latest
+      fi
+  rules:
+    - if: '$ENABLE_GITLAB_REGISTRY == "true" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$ENABLE_GITLAB_REGISTRY == "true" && $CI_COMMIT_TAG'
+
+# =============================================================================
+# Deploy: Docker Hub publish + GitHub mirror
+# =============================================================================
+deploy:
+  stage: deploy
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_BUILDKIT: 1
+    GIT_DEPTH: 0  # Full clone needed for the GitHub force-push.
+  before_script:
+    - apk add --no-cache git curl jq
+    - git fetch --unshallow || true
+    - until docker info; do sleep 1; done
+  script:
+    # Docker Hub publish
+    - |
+      if [ "$DOCKER_HUB_ENABLED" = "true" ]; then
+        echo "Building Docker image..."
+        docker build \
+          --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+          --build-arg VCS_REF=${CI_COMMIT_SHA} \
+          --build-arg VERSION=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA} \
+          --tag ${DOCKER_IMAGE}:${CI_COMMIT_SHA} \
+          --file Dockerfile \
+          .
+        echo "Publishing to Docker Hub..."
+        echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USER" --password-stdin
+
+        DOCKER_HUB_IMAGE="${DOCKER_HUB_USER}/${CI_PROJECT_NAME}"
+        docker tag ${DOCKER_IMAGE}:${CI_COMMIT_SHA} ${DOCKER_HUB_IMAGE}:${CI_COMMIT_TAG:-latest}
+        docker push ${DOCKER_HUB_IMAGE}:${CI_COMMIT_TAG:-latest}
+
+        if [ -n "$CI_COMMIT_TAG" ]; then
+          docker tag ${DOCKER_IMAGE}:${CI_COMMIT_SHA} ${DOCKER_HUB_IMAGE}:latest
+          docker push ${DOCKER_HUB_IMAGE}:latest
+        fi
+
+        # Optional: push the Docker Hub README via docker-pushrm.
+        if [ -f "DOCKERHUB.md" ]; then
+          wget -q https://github.com/christian-korneck/docker-pushrm/releases/download/v1.9.0/docker-pushrm_linux_amd64 -O /usr/local/bin/docker-pushrm
+          chmod +x /usr/local/bin/docker-pushrm
+          docker-pushrm --file DOCKERHUB.md --short "$CI_PROJECT_TITLE" "${DOCKER_HUB_IMAGE}" || echo "⚠️ docker-pushrm update failed"
+        fi
+      fi
+    # GitHub mirror
+    - |
+      if [ "$GITHUB_DEPLOY_ENABLED" = "true" ]; then
+        echo "Mirroring to GitHub..."
+        git remote add github https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git || true
+        if [ -n "$CI_COMMIT_TAG" ]; then
+          git push github HEAD:refs/heads/${CI_DEFAULT_BRANCH} --force
+          git push github refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG} --force
+        else
+          git push github HEAD:refs/heads/${CI_COMMIT_REF_NAME} --force
+        fi
+      fi
+  rules:
+    - if: '$CI_COMMIT_TAG && $DEPLOY == "true"'
+
+# =============================================================================
+# Release: GitLab + GitHub release pages
+# =============================================================================
+release:gitlab:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  before_script:
+    - apk add --no-cache sed gawk
+  script:
+    - |
+      if [ -f GITHUB_RELEASES.md ]; then
+        NOTES=$(awk '/^## /{if(found==0){found=1; p=1; next}} /^# v[0-9]/{if(found==1 && p==1){exit}} p{print}' GITHUB_RELEASES.md | sed 's/^---$//' | sed '/^$/N;/^\n$/D')
+        if [ -z "$NOTES" ]; then
+          VERSION="${CI_COMMIT_TAG#v}"
+          NOTES=$(awk "/^## \\[${VERSION}\\]/{flag=1; next} /^## \\[/{flag=0} flag" CHANGELOG.md)
+          [ -z "$NOTES" ] && NOTES="Release ${CI_COMMIT_TAG}"
+        fi
+      else
+        VERSION="${CI_COMMIT_TAG#v}"
+        if [ -f CHANGELOG.md ]; then
+          NOTES=$(awk "/^## \\[${VERSION}\\]/{flag=1; next} /^## \\[/{flag=0} flag" CHANGELOG.md)
+          [ -z "$NOTES" ] && NOTES="Release ${CI_COMMIT_TAG}"
+        else
+          NOTES="Release ${CI_COMMIT_TAG}"
+        fi
+      fi
+      echo "$NOTES" > /tmp/release_notes.txt
+      echo "" >> /tmp/release_notes.txt
+      echo "---" >> /tmp/release_notes.txt
+      echo "[Full CHANGELOG](${CI_PROJECT_URL}/-/blob/${CI_COMMIT_TAG}/CHANGELOG.md)" >> /tmp/release_notes.txt
+      release-cli create \
+        --name "Release ${CI_COMMIT_TAG}" \
+        --tag-name "${CI_COMMIT_TAG}" \
+        --description "$(cat /tmp/release_notes.txt)"
+  rules:
+    - if: '$CI_COMMIT_TAG'
+
+release:github:
+  stage: release
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - |
+      if [ -f GITHUB_RELEASES.md ]; then
+        NOTES=$(awk '/^## /{if(found==0){found=1; p=1; next}} /^# v[0-9]/{if(found==1 && p==1){exit}} p{print}' GITHUB_RELEASES.md | sed 's/^---$//' | sed '/^$/N;/^\n$/D')
+        if [ -z "$NOTES" ]; then
+          VERSION="${CI_COMMIT_TAG#v}"
+          NOTES=$(awk "/^## \\[${VERSION}\\]/{flag=1; next} /^## \\[/{flag=0} flag" CHANGELOG.md)
+          [ -z "$NOTES" ] && NOTES="Release ${CI_COMMIT_TAG}"
+        fi
+      else
+        VERSION="${CI_COMMIT_TAG#v}"
+        NOTES=$(awk "/^## \\[${VERSION}\\]/{flag=1; next} /^## \\[/{flag=0} flag" CHANGELOG.md)
+        [ -z "$NOTES" ] && NOTES="Release ${CI_COMMIT_TAG}"
+      fi
+
+      RESPONSE=$(curl -X POST \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        -H "Content-Type: application/json" \
+        -s -w "\n%{http_code}" \
+        "https://api.github.com/repos/${GITHUB_REPO}/releases" \
+        -d "$(jq -n \
+          --arg tag "${CI_COMMIT_TAG}" \
+          --arg name "Release ${CI_COMMIT_TAG}" \
+          --arg body "$NOTES" \
+          '{tag_name: $tag, name: $name, body: $body, draft: false, prerelease: false}')")
+
+      HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+      BODY=$(echo "$RESPONSE" | sed '$d')
+
+      if [ "$HTTP_CODE" -eq 201 ]; then
+        echo "✅ GitHub release created"
+        echo "$BODY" | jq -r '.html_url'
+      else
+        echo "❌ GitHub release creation failed (HTTP $HTTP_CODE)"
+        echo "$BODY" | jq '.' || echo "$BODY"
+        exit 1
+      fi
+  rules:
+    - if: '$CI_COMMIT_TAG && $DEPLOY == "true" && $GITHUB_DEPLOY_ENABLED == "true"'
+
+# =============================================================================
+# Verify: confirm the new tag landed on Docker Hub + GitHub
+# =============================================================================
+verify:
+  stage: verify
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - |
+      if [ "$DOCKER_HUB_ENABLED" = "true" ] && [ "$DEPLOY" = "true" ]; then
+        DOCKER_HUB_IMAGE="${DOCKER_HUB_USER}/${CI_PROJECT_NAME}"
+        TAG="${CI_COMMIT_TAG:-latest}"
+        if curl -s "https://hub.docker.com/v2/repositories/${DOCKER_HUB_IMAGE}/tags/${TAG}" | jq -e '.name' > /dev/null 2>&1; then
+          echo "✅ Docker Hub: ${DOCKER_HUB_IMAGE}:${TAG} found"
+        else
+          echo "❌ Docker Hub: ${DOCKER_HUB_IMAGE}:${TAG} not found"
+          exit 1
+        fi
+      fi
+    - |
+      if [ "$GITHUB_DEPLOY_ENABLED" = "true" ] && [ "$DEPLOY" = "true" ]; then
+        if curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPO}/git/refs/tags/${CI_COMMIT_TAG}" \
+            | jq -e '.ref' > /dev/null 2>&1; then
+          echo "✅ GitHub tag ${CI_COMMIT_TAG} found"
+        else
+          echo "❌ GitHub tag ${CI_COMMIT_TAG} not found"
+          exit 1
+        fi
+        if RESPONSE=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${CI_COMMIT_TAG}") \
+            && echo "$RESPONSE" | jq -e '.id' > /dev/null 2>&1; then
+          echo "✅ GitHub release: $(echo "$RESPONSE" | jq -r '.html_url')"
+        else
+          echo "⚠️ GitHub release ${CI_COMMIT_TAG} not visible yet (eventual consistency)"
+        fi
+      fi
+  rules:
+    - if: '$CI_COMMIT_TAG && $DEPLOY == "true"'

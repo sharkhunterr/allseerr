@@ -27,7 +27,23 @@
     "prepare": "node bin/prepare.js",
     "cypress:open": "cypress open",
     "cypress:prepare": "ts-node -r tsconfig-paths/register --files --project server/tsconfig.json server/scripts/prepareTestDb.ts",
-    "cypress:build": "pnpm build && pnpm cypress:prepare"
+    "cypress:build": "pnpm build && pnpm cypress:prepare",
+    "release": "node scripts/release.js",
+    "release:patch": "node scripts/release.js patch",
+    "release:minor": "node scripts/release.js minor",
+    "release:major": "node scripts/release.js major",
+    "release:github": "node scripts/release.js --github",
+    "release:deploy": "node scripts/release.js --deploy",
+    "release:full": "node scripts/release.js --github --deploy",
+    "release:dry": "node scripts/release.js --dry-run",
+    "push": "node scripts/push.js",
+    "push:github": "node scripts/push.js --github",
+    "push:all": "node scripts/push.js --all",
+    "push:tags": "node scripts/push.js --tags-only",
+    "push:notags": "node scripts/push.js --no-tags",
+    "docker:build": "node scripts/docker-deploy.js",
+    "docker:deploy": "node scripts/docker-deploy.js --push",
+    "docker:deploy:multi": "node scripts/docker-deploy.js --push --multi-platform"
   },
   "repository": {
     "type": "git",
@@ -175,6 +191,7 @@
     "prettier": "3.8.1",
     "prettier-plugin-organize-imports": "4.3.0",
     "prettier-plugin-tailwindcss": "0.6.14",
+    "standard-version": "9.5.0",
     "supertest": "^7.2.2",
     "tailwindcss": "3.4.19",
     "ts-node": "10.9.2",
@@ -190,7 +207,9 @@
   "config": {
     "commitizen": {
       "path": "./node_modules/cz-conventional-changelog"
-    }
+    },
+    "dockerImage": "allseerr/allseerr",
+    "dockerRegistry": "docker.io"
   },
   "lint-staged": {
     "**/*.{ts,tsx,js}": [
