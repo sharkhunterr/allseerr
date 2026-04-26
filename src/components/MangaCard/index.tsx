@@ -31,9 +31,12 @@ interface MangaCardProps {
 const badgeForCountry = (
   country?: string
 ): { label: 'Manga' | 'Manhwa' | 'Manhua'; classes: string } => {
-  // Indigo for manga (matches the satellite colour in the new
-  // brand icon), purple for manhwa, teal for manhua so the three
-  // origin sources read distinctly on the grid.
+  // Fuchsia for manga (distinct from the indigo "Requested" /
+  // movie badges used elsewhere), purple for manhwa, teal for
+  // manhua so the three origin sources read distinctly on the
+  // grid. NB: teal also doubles as the game badge — acceptable
+  // since manhua results never sit on the same card grid as
+  // games.
   switch ((country ?? 'jp').toLowerCase()) {
     case 'kr':
       return {
@@ -45,7 +48,7 @@ const badgeForCountry = (
     default:
       return {
         label: 'Manga',
-        classes: 'border-indigo-500 bg-indigo-600/80',
+        classes: 'border-fuchsia-500 bg-fuchsia-600/80',
       };
   }
 };

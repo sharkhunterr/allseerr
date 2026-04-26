@@ -657,7 +657,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                       : request.type === MediaType.AUDIOBOOK
                         ? 'border-pink-500 bg-pink-600/80'
                         : request.type === MediaType.MANGA
-                          ? 'border-indigo-500 bg-indigo-600/80'
+                          ? 'border-fuchsia-500 bg-fuchsia-600/80'
                           : request.type === MediaType.COMIC
                             ? 'border-amber-500 bg-amber-600/80'
                             : 'border-orange-500 bg-orange-600/80'

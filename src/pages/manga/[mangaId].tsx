@@ -149,7 +149,7 @@ const MangaDetailPage: NextPage = () => {
         </div>
         <div className="media-title">
           <div className="media-status">
-            <span className="rounded-full border border-indigo-500 bg-indigo-600/80 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-md">
+            <span className="rounded-full border border-fuchsia-500 bg-fuchsia-600/80 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-md">
               {(data.countryOfOrigin ?? 'jp').toUpperCase() === 'KR'
                 ? 'Manhwa'
                 : (data.countryOfOrigin ?? 'jp').toUpperCase() === 'CN'
@@ -241,7 +241,7 @@ const MangaDetailPage: NextPage = () => {
                             </div>
                           )}
                           {r.relationType && (
-                            <div className="absolute left-2 top-2 z-40 rounded-full border border-indigo-500 bg-indigo-600/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white shadow-md">
+                            <div className="absolute left-2 top-2 z-40 rounded-full border border-fuchsia-500 bg-fuchsia-600/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-white shadow-md">
                               {r.relationType.replace(/_/g, ' ')}
                             </div>
                           )}
@@ -393,7 +393,7 @@ const MangaDetailPage: NextPage = () => {
                 {data.genres.map((g) => (
                   <span
                     key={g}
-                    className="rounded-full border border-indigo-500 bg-indigo-600/30 px-2 py-0.5 text-xs text-indigo-200"
+                    className="rounded-full border border-fuchsia-500 bg-fuchsia-600/30 px-2 py-0.5 text-xs text-fuchsia-200"
                   >
                     {g}
                   </span>
