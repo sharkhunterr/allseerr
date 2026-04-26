@@ -835,12 +835,18 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         entity.status === MediaRequestStatus.APPROVED &&
         (entity.type === MediaType.BOOK ||
           entity.type === MediaType.AUDIOBOOK ||
-          entity.type === MediaType.GAME)
+          entity.type === MediaType.GAME ||
+          entity.type === MediaType.MANGA)
       ) {
         const requestRepository = getRepository(MediaRequest);
         const fullRequest = await requestRepository.findOne({
           where: { id: entity.id },
-          relations: ['bookMedia', 'audiobookMedia', 'gameMedia'],
+          relations: [
+            'bookMedia',
+            'audiobookMedia',
+            'gameMedia',
+            'mangaMedia',
+          ],
         });
         if (fullRequest?.bookMedia) {
           if (fullRequest.bookMedia.status !== MediaStatus.AVAILABLE) {
@@ -861,6 +867,12 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             await getRepository(GameMedia).save(
               fullRequest.gameMedia as GameMediaType
             );
+          }
+        } else if (fullRequest?.mangaMedia) {
+          if (fullRequest.mangaMedia.status !== MediaStatus.AVAILABLE) {
+            const { MangaMedia } = await import('@server/entity/MangaMedia');
+            fullRequest.mangaMedia.status = MediaStatus.PROCESSING;
+            await getRepository(MangaMedia).save(fullRequest.mangaMedia);
           }
         }
       }
@@ -1028,6 +1040,16 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         if (am && am.status !== MediaStatus.AVAILABLE) {
           am.status = MediaStatus.UNKNOWN;
           await manager.save(am);
+        }
+      }
+      if (entity.mangaMedia) {
+        const { MangaMedia } = await import('@server/entity/MangaMedia');
+        const mm = await manager.findOne(MangaMedia, {
+          where: { id: entity.mangaMedia.id },
+        });
+        if (mm && mm.status !== MediaStatus.AVAILABLE) {
+          mm.status = MediaStatus.UNKNOWN;
+          await manager.save(mm);
         }
       }
       return;

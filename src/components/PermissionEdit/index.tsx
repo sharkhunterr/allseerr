@@ -32,6 +32,8 @@ export const messages = defineMessages('components.PermissionEdit', {
     'Grant permission to submit audiobook requests.',
   requestGame: 'Request Games',
   requestGameDescription: 'Grant permission to submit game requests.',
+  requestManga: 'Request Manga',
+  requestMangaDescription: 'Grant permission to submit manga requests.',
   autoapprove: 'Auto-Approve',
   autoapproveDescription:
     'Grant automatic approval for all non-4K media requests.',
@@ -48,6 +50,8 @@ export const messages = defineMessages('components.PermissionEdit', {
     'Grant automatic approval for audiobook requests.',
   autoapproveGame: 'Auto-Approve Games',
   autoapproveGameDescription: 'Grant automatic approval for game requests.',
+  autoapproveManga: 'Auto-Approve Manga',
+  autoapproveMangaDescription: 'Grant automatic approval for manga requests.',
   autoapprove4k: 'Auto-Approve 4K',
   autoapprove4kDescription:
     'Grant automatic approval for all 4K media requests.',
@@ -214,6 +218,12 @@ export const PermissionEdit = ({
           description: intl.formatMessage(messages.requestGameDescription),
           permission: Permission.REQUEST_GAME,
         },
+        {
+          id: 'request-manga',
+          name: intl.formatMessage(messages.requestManga),
+          description: intl.formatMessage(messages.requestMangaDescription),
+          permission: Permission.REQUEST_MANGA,
+        },
       ],
     },
     {
@@ -289,6 +299,20 @@ export const PermissionEdit = ({
           requires: [
             {
               permissions: [Permission.REQUEST, Permission.REQUEST_GAME],
+              type: 'or',
+            },
+          ],
+        },
+        {
+          id: 'autoapprovemanga',
+          name: intl.formatMessage(messages.autoapproveManga),
+          description: intl.formatMessage(
+            messages.autoapproveMangaDescription
+          ),
+          permission: Permission.AUTO_APPROVE_MANGA,
+          requires: [
+            {
+              permissions: [Permission.REQUEST, Permission.REQUEST_MANGA],
               type: 'or',
             },
           ],

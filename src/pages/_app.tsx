@@ -259,6 +259,10 @@ CoreApp.getInitialProps = async (initialProps) => {
     plexClientIdentifier: '',
     oidcEnabled: false,
     oidcProviderName: 'OIDC',
+    bookEnabled: false,
+    audiobookEnabled: false,
+    gameEnabled: false,
+    mangaEnabled: false,
   };
 
   if (ctx.res) {

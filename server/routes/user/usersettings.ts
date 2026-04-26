@@ -63,6 +63,8 @@ userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
         audiobookQuotaDays: user.audiobookQuotaDays,
         gameQuotaLimit: user.gameQuotaLimit,
         gameQuotaDays: user.gameQuotaDays,
+        mangaQuotaLimit: user.mangaQuotaLimit,
+        mangaQuotaDays: user.mangaQuotaDays,
         globalMovieQuotaDays: defaultQuotas.movie.quotaDays,
         globalMovieQuotaLimit: defaultQuotas.movie.quotaLimit,
         globalTvQuotaDays: defaultQuotas.tv.quotaDays,
@@ -73,6 +75,8 @@ userSettingsRoutes.get<{ id: string }, UserSettingsGeneralResponse>(
         globalAudiobookQuotaLimit: defaultQuotas.audiobook?.quotaLimit,
         globalGameQuotaDays: defaultQuotas.game?.quotaDays,
         globalGameQuotaLimit: defaultQuotas.game?.quotaLimit,
+        globalMangaQuotaDays: defaultQuotas.manga?.quotaDays,
+        globalMangaQuotaLimit: defaultQuotas.manga?.quotaLimit,
         watchlistSyncMovies: user.settings?.watchlistSyncMovies,
         watchlistSyncTv: user.settings?.watchlistSyncTv,
       });
@@ -135,6 +139,8 @@ userSettingsRoutes.post<
       user.audiobookQuotaLimit = req.body.audiobookQuotaLimit;
       user.gameQuotaDays = req.body.gameQuotaDays;
       user.gameQuotaLimit = req.body.gameQuotaLimit;
+      user.mangaQuotaDays = req.body.mangaQuotaDays;
+      user.mangaQuotaLimit = req.body.mangaQuotaLimit;
     }
 
     if (!user.settings) {

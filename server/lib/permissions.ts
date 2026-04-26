@@ -39,6 +39,8 @@ export enum Permission {
   AUTO_APPROVE_BOOK = 8589934592,
   AUTO_APPROVE_AUDIOBOOK = 17179869184,
   AUTO_APPROVE_GAME = 34359738368,
+  REQUEST_MANGA = 68719476736,
+  AUTO_APPROVE_MANGA = 137438953472,
 }
 
 export interface PermissionCheckOptions {
@@ -51,9 +53,9 @@ export interface PermissionCheckOptions {
  * the admin permission, true will always be returned from this check!
  *
  * All arithmetic runs via BigInt so permissions past bit 31
- * (REQUEST_GAME and the new AUTO_APPROVE_* entries for books /
- * audiobooks / games) are honoured — JS's `&` / `|` operators cast
- * to int32 and silently drop bits 32+.
+ * (REQUEST_GAME, AUTO_APPROVE_* for books / audiobooks / games, and
+ * REQUEST_MANGA / AUTO_APPROVE_MANGA) are honoured — JS's `&` / `|`
+ * operators cast to int32 and silently drop bits 32+.
  *
  * @param permissions Single permission or array of permissions
  * @param value users current permission value

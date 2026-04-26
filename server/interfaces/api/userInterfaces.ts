@@ -25,6 +25,7 @@ export interface QuotaResponse {
   book: QuotaStatus;
   audiobook: QuotaStatus;
   game: QuotaStatus;
+  manga: QuotaStatus;
 }
 
 export interface UserWatchDataResponse {
