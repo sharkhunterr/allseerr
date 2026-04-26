@@ -6,6 +6,7 @@ import SubTabs from '@app/components/Common/SubTabs';
 import SettingsAudiobookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsAudiobookMetadata';
 import SettingsBookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsBookMetadata';
 import SettingsIgdb from '@app/components/Settings/Games/SettingsIgdb';
+import SettingsComicMetadata from '@app/components/Settings/MangaComics/SettingsComicMetadata';
 import SettingsMangaMetadata from '@app/components/Settings/MangaComics/SettingsMangaMetadata';
 import SettingsSuwayomi from '@app/components/Settings/MangaComics/SettingsSuwayomi';
 import MetadataSelector, {
@@ -475,7 +476,7 @@ const MoviesAndTVMetadata = () => {
 const SettingsMetadata = () => {
   const intl = useIntl();
   const [activeTab, setActiveTab] = useState<
-    'movies-tv' | 'books' | 'audiobooks' | 'games' | 'manga'
+    'movies-tv' | 'books' | 'audiobooks' | 'games' | 'manga' | 'comics'
   >('movies-tv');
 
   const tabs: { key: typeof activeTab; label: string }[] = [
@@ -487,6 +488,7 @@ const SettingsMetadata = () => {
     { key: 'audiobooks', label: intl.formatMessage(globalMessages.audiobook) },
     { key: 'games', label: intl.formatMessage(globalMessages.game) },
     { key: 'manga', label: intl.formatMessage(globalMessages.manga) },
+    { key: 'comics', label: intl.formatMessage(globalMessages.comic) },
   ];
 
   return (
@@ -513,6 +515,7 @@ const SettingsMetadata = () => {
           <SettingsSuwayomi />
         </>
       )}
+      {activeTab === 'comics' && <SettingsComicMetadata />}
     </>
   );
 };

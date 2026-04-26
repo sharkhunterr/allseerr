@@ -5442,6 +5442,76 @@ paths:
                   success: { type: boolean }
                   message: { type: string }
                   version: { type: string }
+  /settings/comic/metadata-providers:
+    get:
+      summary: Get comic metadata provider config
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  primarySource:
+                    type: string
+                    enum: [comicvine]
+                  comicvine: { type: boolean }
+                  apiKey: { type: string }
+                  hideAdult: { type: boolean }
+    put:
+      summary: Update comic metadata provider config
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                primarySource:
+                  type: string
+                  enum: [comicvine]
+                comicvine: { type: boolean }
+                apiKey: { type: string }
+                hideAdult: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/comic/metadata-providers/test:
+    post:
+      summary: Test the comic metadata provider's reachability
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              properties:
+                provider:
+                  type: string
+                  enum: [comicvine]
+                apiKey: { type: string }
+      responses:
+        '200':
+          description: Test complete (see success flag)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
   /settings/book/download-managers:
     get:
       summary: Get book download manager instances
