@@ -475,6 +475,40 @@ export interface AudiobookSettings {
   };
 }
 
+export interface MangaSettings {
+  metadataProviders: {
+    // Sole source today (AniList GraphQL, free, no API key). The
+    // shape mirrors book.metadataProviders so the UI tab can reuse
+    // the primarySource select / enrichment toggle pattern, but
+    // currently AniList is the only viable free metadata source
+    // for manga at scale.
+    primarySource: 'anilist';
+    anilist: boolean;
+    // Optional Jikan (MyAnimeList REST proxy) enrichment — disabled
+    // by default because AniList already carries score / tags /
+    // characters and Jikan adds latency without much new content.
+    jikan: boolean;
+    preferredLanguage: string;
+    languagePolicy: 'prefer' | 'strict';
+    // Hide adult-tagged manga from search + detail responses.
+    // AniList exposes `isAdult` and `tags[].isAdult` flags we
+    // honour when this is on.
+    hideAdult: boolean;
+  };
+  // Optional Suwayomi (a.k.a. Tachidesk) download-manager. Behaves
+  // like ROMM for games — when not configured, requests fall back
+  // to a manual workflow (admin marks AVAILABLE by hand).
+  suwayomi: {
+    url: string;
+    publicUrl: string;
+    apiKey: string;
+    username: string;
+    password: string;
+    pollIntervalMinutes: number;
+    enabled: boolean;
+  };
+}
+
 export interface GameSettings {
   igdb: {
     clientId: string;
@@ -524,6 +558,7 @@ export interface AllSettings {
   game: GameSettings;
   book: BookSettings;
   audiobook: AudiobookSettings;
+  manga: MangaSettings;
   oidc: OidcSettings;
   migrations: string[];
 }
@@ -848,6 +883,25 @@ class Settings {
           languagePolicy: 'prefer',
         },
       },
+      manga: {
+        metadataProviders: {
+          primarySource: 'anilist',
+          anilist: true,
+          jikan: false,
+          preferredLanguage: '',
+          languagePolicy: 'prefer',
+          hideAdult: true,
+        },
+        suwayomi: {
+          url: '',
+          publicUrl: '',
+          apiKey: '',
+          username: '',
+          password: '',
+          pollIntervalMinutes: 15,
+          enabled: false,
+        },
+      },
       oidc: {
         enabled: false,
         issuerUrl: '',
@@ -963,6 +1017,14 @@ class Settings {
 
   set audiobook(data: AudiobookSettings) {
     this.data.audiobook = mergeSettings(this.data.audiobook, data);
+  }
+
+  get manga(): MangaSettings {
+    return this.data.manga;
+  }
+
+  set manga(data: MangaSettings) {
+    this.data.manga = mergeSettings(this.data.manga, data);
   }
 
   get oidc(): OidcSettings {
