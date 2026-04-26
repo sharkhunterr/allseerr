@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.4](https://github.com/seerr-team/seerr/-/compare/v0.2.3...v0.2.4) (2026-04-26)
+
+
+### Bug Fixes
+
+* **ci:** drop .next/cache before artifact upload — 1.4 GB → 85 MB ([c574fce](https://github.com/seerr-team/seerr/-/commit/c574fced6495c84d0e39ac4f4902e784b2f2bd74))
+
 ### [0.2.3](https://github.com/seerr-team/seerr/-/compare/v0.2.2...v0.2.3) (2026-04-26)
 
 
