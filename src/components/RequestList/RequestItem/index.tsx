@@ -62,7 +62,9 @@ const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
 const isNonTmdbType = (type: string) =>
   type === MediaType.GAME ||
   type === MediaType.BOOK ||
-  type === MediaType.AUDIOBOOK;
+  type === MediaType.AUDIOBOOK ||
+  type === MediaType.MANGA ||
+  type === MediaType.COMIC;
 
 interface RequestItemErrorProps {
   requestData?: NonFunctionProperties<MediaRequest>;
@@ -203,6 +205,23 @@ const getNonTmdbInfo = (
         status?: MediaStatus | null;
       }
     | undefined;
+  const mm = request.mangaMedia as
+    | {
+        title: string;
+        coverUrl?: string;
+        anilistId: number;
+        status?: MediaStatus | null;
+      }
+    | undefined;
+  const cm = request.comicMedia as
+    | {
+        title: string;
+        coverUrl?: string;
+        comicVineId: number;
+        publisher?: string;
+        status?: MediaStatus | null;
+      }
+    | undefined;
 
   if (request.type === MediaType.GAME && gm) {
     return {
@@ -237,6 +256,23 @@ const getNonTmdbInfo = (
           : undefined),
       href: `/book/${bookId}`,
       typeLabel: 'Audiobook',
+    };
+  }
+  if (request.type === MediaType.MANGA && mm) {
+    return {
+      title: mm.title,
+      coverUrl: mm.coverUrl,
+      href: `/manga/${mm.anilistId}`,
+      typeLabel: 'Manga',
+    };
+  }
+  if (request.type === MediaType.COMIC && cm) {
+    return {
+      title: cm.title,
+      coverUrl: cm.coverUrl,
+      href: `/comic/${cm.comicVineId}`,
+      typeLabel: 'Comic',
+      platform: cm.publisher,
     };
   }
   return { title: 'Unknown', href: '#', typeLabel: request.type };
@@ -570,7 +606,9 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
     // that aren't reflected on the media (DECLINED, FAILED).
     const mediaWithStatus = (request.bookMedia ??
       request.audiobookMedia ??
-      request.gameMedia) as { status?: MediaStatus | null } | undefined;
+      request.gameMedia ??
+      request.mangaMedia ??
+      request.comicMedia) as { status?: MediaStatus | null } | undefined;
     const mediaStatus = mediaWithStatus?.status ?? null;
     const requestStatus = requestData?.status ?? request.status;
     const showRequestBadge =
@@ -602,7 +640,11 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                     ? '🎮'
                     : request.type === MediaType.AUDIOBOOK
                       ? '🎧'
-                      : '📖'}
+                      : request.type === MediaType.MANGA
+                        ? '📚'
+                        : request.type === MediaType.COMIC
+                          ? '💥'
+                          : '📖'}
                 </div>
               )}
             </Link>
@@ -614,7 +656,11 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                       ? 'border-teal-500 bg-teal-600/80'
                       : request.type === MediaType.AUDIOBOOK
                         ? 'border-pink-500 bg-pink-600/80'
-                        : 'border-orange-500 bg-orange-600/80'
+                        : request.type === MediaType.MANGA
+                          ? 'border-indigo-500 bg-indigo-600/80'
+                          : request.type === MediaType.COMIC
+                            ? 'border-amber-500 bg-amber-600/80'
+                            : 'border-orange-500 bg-orange-600/80'
                   }`}
                 >
                   {info.typeLabel}
