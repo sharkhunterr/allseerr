@@ -234,6 +234,7 @@ interface FullPublicSettings extends PublicSettings {
   audiobookEnabled: boolean;
   gameEnabled: boolean;
   mangaEnabled: boolean;
+  comicEnabled: boolean;
 }
 
 export interface NotificationAgentConfig {
@@ -527,6 +528,32 @@ export interface GameSettings {
   };
 }
 
+export interface ComicSettings {
+  metadataProviders: {
+    // ComicVine is the only viable free comics metadata source today
+    // (League of Comic Geeks needs a paid partner key, Marvel's API
+    // is per-character only). Shape mirrors manga.metadataProviders
+    // so the UI tab can reuse the same primarySource select.
+    primarySource: 'comicvine';
+    comicvine: boolean;
+    apiKey: string;
+    // Hide adult / mature-flagged volumes from search + detail.
+    // ComicVine doesn't expose a dedicated isAdult flag, so we
+    // filter on tags / publisher heuristics inside the route layer.
+    hideAdult: boolean;
+  };
+  // Optional Mylar3 download manager. Behaves like Suwayomi for
+  // manga / ROMM for games — when not configured, comic requests
+  // fall back to the manual workflow.
+  mylar: {
+    url: string;
+    publicUrl: string;
+    apiKey: string;
+    pollIntervalMinutes: number;
+    enabled: boolean;
+  };
+}
+
 export interface OidcSettings {
   enabled: boolean;
   issuerUrl: string;
@@ -561,6 +588,7 @@ export interface AllSettings {
   book: BookSettings;
   audiobook: AudiobookSettings;
   manga: MangaSettings;
+  comic: ComicSettings;
   oidc: OidcSettings;
   migrations: string[];
 }
@@ -905,6 +933,21 @@ class Settings {
           enabled: false,
         },
       },
+      comic: {
+        metadataProviders: {
+          primarySource: 'comicvine',
+          comicvine: false,
+          apiKey: '',
+          hideAdult: true,
+        },
+        mylar: {
+          url: '',
+          publicUrl: '',
+          apiKey: '',
+          pollIntervalMinutes: 15,
+          enabled: false,
+        },
+      },
       oidc: {
         enabled: false,
         issuerUrl: '',
@@ -1030,6 +1073,14 @@ class Settings {
     this.data.manga = mergeSettings(this.data.manga, data);
   }
 
+  get comic(): ComicSettings {
+    return this.data.comic;
+  }
+
+  set comic(data: ComicSettings) {
+    this.data.comic = mergeSettings(this.data.comic, data);
+  }
+
   get oidc(): OidcSettings {
     return this.data.oidc;
   }
@@ -1118,6 +1169,12 @@ class Settings {
         // user has AniList enabled in Settings → Metadata Providers
         // → Manga.
         !!this.data.manga?.metadataProviders?.anilist,
+      comicEnabled:
+        // Comics search needs an API key (ComicVine is keyed); Mylar3
+        // is optional. The tab is visible as long as ComicVine is
+        // enabled AND has a key set.
+        !!this.data.comic?.metadataProviders?.comicvine &&
+        !!this.data.comic?.metadataProviders?.apiKey,
     };
   }
 

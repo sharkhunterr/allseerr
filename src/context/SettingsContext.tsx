@@ -38,6 +38,7 @@ const defaultSettings = {
   audiobookEnabled: false,
   gameEnabled: false,
   mangaEnabled: false,
+  comicEnabled: false,
 };
 
 export const SettingsContext = React.createContext<SettingsContextProps>({

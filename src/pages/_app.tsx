@@ -263,6 +263,7 @@ CoreApp.getInitialProps = async (initialProps) => {
     audiobookEnabled: false,
     gameEnabled: false,
     mangaEnabled: false,
+    comicEnabled: false,
   };
 
   if (ctx.res) {
