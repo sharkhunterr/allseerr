@@ -1,3 +1,4 @@
+import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import ComicRequestModal from '@app/components/RequestModal/ComicRequestModal';
@@ -210,14 +211,13 @@ const ComicDetailPage: NextPage = () => {
           </span>
           {canRequest && (
             <div className="media-actions mt-4">
-              <button
-                type="button"
+              <Button
+                buttonType="primary"
                 onClick={() => setShowRequestModal(true)}
-                className="inline-flex items-center rounded-md border border-transparent bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
               >
-                <BookOpenIcon className="mr-2 h-5 w-5" />
-                {intl.formatMessage(messages.request)}
-              </button>
+                <BookOpenIcon />
+                <span>{intl.formatMessage(messages.request)}</span>
+              </Button>
             </div>
           )}
         </div>
@@ -365,6 +365,7 @@ const ComicDetailPage: NextPage = () => {
         publisherId={data.publisherId}
         creatorName={data.creatorName}
         creatorKey={data.creatorKey}
+        issues={data.issues}
         onCancel={() => setShowRequestModal(false)}
         onComplete={() => {
           setShowRequestModal(false);

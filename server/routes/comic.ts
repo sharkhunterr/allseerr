@@ -359,6 +359,13 @@ comicRoutes.post('/request', isAuthenticated(), requireMediaType('comic'), async
     creatorName?: string;
     creatorKey?: number;
     userId?: number;
+    // Optional per-issue selection captured by the request modal.
+    // Absent / empty / "every issue" → treat as "request the whole
+    // series". Mylar3 manages subscriptions at the series level so
+    // dispatch behaviour is unchanged for now; we record the
+    // selection in logs for traceability and as a stepping stone for
+    // future per-issue downloading.
+    selectedIssueNumbers?: string[];
   };
 
   if (!body.comicVineId || !body.title) {
@@ -490,11 +497,16 @@ comicRoutes.post('/request', isAuthenticated(), requireMediaType('comic'), async
       await requestRepo.save(request);
     }
 
+    const selection =
+      body.selectedIssueNumbers && body.selectedIssueNumbers.length > 0
+        ? `${body.selectedIssueNumbers.length} selected issue(s)`
+        : 'whole series';
     logger.info(
-      `Comic request created: ${body.title} (comicvine:${body.comicVineId})`,
+      `Comic request created: ${body.title} (comicvine:${body.comicVineId}) — ${selection}`,
       {
         label: 'comic',
         requestId: request.id,
+        selectedIssueNumbers: body.selectedIssueNumbers,
       }
     );
 

@@ -4500,6 +4500,9 @@ paths:
                 creatorName: { type: string }
                 creatorKey: { type: number }
                 userId: { type: number }
+                selectedIssueNumbers:
+                  type: array
+                  items: { type: string }
       responses:
         '201':
           description: Comic request created
