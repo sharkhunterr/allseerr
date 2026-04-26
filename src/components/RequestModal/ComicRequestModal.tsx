@@ -23,6 +23,7 @@ const messages = defineMessages('components.RequestModal.ComicRequestModal', {
     'Mylar3 subscribes to the entire series. Per-issue selection is recorded for traceability — every selected (or all when none are deselected) issue will be picked up by Mylar as it monitors the series.',
   selectIssues: 'Select issues',
   selectAll: 'Select all',
+  issue: 'Issue',
   selectedCount:
     '{selected, plural, =0 {No issues selected} one {# issue selected} other {# issues selected}}',
   truncationNote:
@@ -216,19 +217,6 @@ const ComicRequestModal = ({
 
         {selectable.length > 0 ? (
           <div className="mt-6 flex flex-col">
-            <div className="flex items-center justify-between pb-3">
-              <span className="text-sm font-semibold text-gray-100">
-                {intl.formatMessage(messages.selectIssues)}
-              </span>
-              <button
-                type="button"
-                onClick={toggleAll}
-                className="text-xs font-medium text-indigo-400 hover:text-indigo-300 focus:outline-none"
-              >
-                {intl.formatMessage(messages.selectAll)}
-              </button>
-            </div>
-
             {truncated && (
               <div className="pb-2">
                 <Alert
@@ -241,56 +229,132 @@ const ComicRequestModal = ({
               </div>
             )}
 
-            {/* Issue chip grid — same 2/3/4-col responsive layout as
-                the issues panel on the detail page. Each chip is a
-                selectable button: filled indigo when picked, ghost
-                gray otherwise. Compact + scannable for series with
-                many issues, no dead space on narrow viewports. */}
-            <div
-              role="group"
-              aria-label={intl.formatMessage(messages.selectIssues)}
-              className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto rounded-md border border-gray-700 bg-gray-800/40 p-2 sm:grid-cols-4 md:grid-cols-5"
-            >
-              {(issues ?? [])
-                .filter(
-                  (i): i is ComicIssueOption & { issueNumber: string } =>
-                    !!i.issueNumber
-                )
-                .map((i) => {
-                  const checked = selectedIssues.includes(i.issueNumber);
-                  return (
-                    <button
-                      type="button"
-                      key={`issue-${i.comicVineId ?? i.id ?? i.issueNumber}`}
-                      role="checkbox"
-                      aria-checked={checked}
-                      onClick={() => toggleIssue(i.issueNumber)}
-                      title={
-                        i.name
-                          ? `#${i.issueNumber} — ${i.name}`
-                          : `#${i.issueNumber}`
-                      }
-                      className={`group flex flex-col items-start rounded-md border px-2 py-1.5 text-left transition focus:outline-none focus:ring-2 focus:ring-indigo-500/40 ${
-                        checked
-                          ? 'border-indigo-500 bg-indigo-500/20 text-indigo-100'
-                          : 'border-gray-700 bg-gray-800/60 text-gray-300 hover:border-gray-500 hover:bg-gray-700/60'
-                      }`}
-                    >
-                      <span
-                        className={`font-mono text-sm font-semibold ${
-                          checked ? 'text-indigo-200' : 'text-amber-300'
-                        }`}
-                      >
-                        #{i.issueNumber}
-                      </span>
-                      {(i.name || i.coverDate) && (
-                        <span className="mt-0.5 w-full truncate text-[11px] text-gray-400">
-                          {i.name ?? i.coverDate}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+            {/* Same toggle-row pattern as the TV season picker, but
+                collapsed to two columns (toggle + content) so the
+                table never has hidden / empty columns at narrow
+                widths. Title and cover date stack as small subtext
+                inside the content cell when present. */}
+            <div className="-mx-4 max-h-80 overflow-y-auto sm:mx-0">
+              <div className="inline-block min-w-full py-2 align-middle">
+                <div className="overflow-hidden border border-gray-700 shadow backdrop-blur sm:rounded-lg">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr>
+                        <th className="w-16 bg-gray-700/80 px-4 py-3">
+                          <span
+                            role="checkbox"
+                            tabIndex={0}
+                            aria-checked={allSelected}
+                            aria-label={intl.formatMessage(messages.selectAll)}
+                            onClick={toggleAll}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                toggleAll();
+                              }
+                            }}
+                            className="relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer items-center justify-center pt-2 focus:outline-none"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`${
+                                allSelected ? 'bg-indigo-500' : 'bg-gray-800'
+                              } absolute mx-auto h-4 w-9 rounded-full transition-colors duration-200 ease-in-out`}
+                            />
+                            <span
+                              aria-hidden="true"
+                              className={`${
+                                allSelected ? 'translate-x-5' : 'translate-x-0'
+                              } absolute left-0 inline-block h-5 w-5 rounded-full border border-gray-200 bg-white shadow transition-transform duration-200 ease-in-out`}
+                            />
+                          </span>
+                        </th>
+                        <th className="bg-gray-700/80 px-4 py-3 text-left text-xs font-medium uppercase leading-4 tracking-wider text-gray-200">
+                          {intl.formatMessage(messages.issue)}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700">
+                      {(issues ?? [])
+                        .filter(
+                          (i): i is ComicIssueOption & { issueNumber: string } =>
+                            !!i.issueNumber
+                        )
+                        .map((i) => {
+                          const checked = selectedIssues.includes(
+                            i.issueNumber
+                          );
+                          return (
+                            <tr
+                              key={`issue-row-${i.comicVineId ?? i.id ?? i.issueNumber}`}
+                              className={`cursor-pointer ${
+                                checked
+                                  ? 'bg-gray-700/40'
+                                  : 'hover:bg-gray-700/20'
+                              }`}
+                              onClick={() => toggleIssue(i.issueNumber)}
+                            >
+                              <td className="w-16 whitespace-nowrap px-4 py-3 align-top">
+                                <span
+                                  role="checkbox"
+                                  tabIndex={0}
+                                  aria-checked={checked}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleIssue(i.issueNumber);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      toggleIssue(i.issueNumber);
+                                    }
+                                  }}
+                                  className="relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer items-center justify-center pt-2 focus:outline-none"
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className={`${
+                                      checked
+                                        ? 'bg-indigo-500'
+                                        : 'bg-gray-800'
+                                    } absolute mx-auto h-4 w-9 rounded-full transition-colors duration-200 ease-in-out`}
+                                  />
+                                  <span
+                                    aria-hidden="true"
+                                    className={`${
+                                      checked
+                                        ? 'translate-x-5'
+                                        : 'translate-x-0'
+                                    } absolute left-0 inline-block h-5 w-5 rounded-full border border-gray-200 bg-white shadow transition-transform duration-200 ease-in-out`}
+                                  />
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="font-mono text-sm font-semibold text-amber-300">
+                                  #{i.issueNumber}
+                                </div>
+                                {(i.name || i.coverDate) && (
+                                  <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-xs text-gray-400">
+                                    {i.name && (
+                                      <span className="truncate text-gray-200">
+                                        {i.name}
+                                      </span>
+                                    )}
+                                    {i.coverDate && (
+                                      <span className="text-gray-500">
+                                        {i.coverDate}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
 
             <p className="mt-2 text-xs text-gray-400">
