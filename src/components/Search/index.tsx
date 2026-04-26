@@ -561,12 +561,15 @@ const Search = () => {
         <Header>{intl.formatMessage(messages.searchresults)}</Header>
       </div>
 
-      {/* Media Type Tabs */}
-      <div className="mb-6 flex border-b border-gray-600">
+      {/* Media Type Tabs — horizontal scroll on narrow viewports so 6+
+          tabs (All / Books / Audiobooks / Games / Manga / Comics) don't
+          overflow the right edge. flex-shrink-0 on each button keeps
+          labels readable instead of compressing. */}
+      <div className="mb-6 flex overflow-x-auto whitespace-nowrap border-b border-gray-600 hide-scrollbar">
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition ${
+            className={`flex flex-shrink-0 items-center gap-1.5 px-4 py-2 text-sm font-medium transition ${
               activeTab === tab.key
                 ? 'border-b-2 border-indigo-500 text-indigo-400'
                 : 'text-gray-400 hover:text-gray-300'

@@ -11,6 +11,9 @@ import BinderyModal from '@app/components/Settings/BinderyModal';
 import BookshelfModal from '@app/components/Settings/BookshelfModal';
 import DownloadManagerSettings from '@app/components/Settings/BooksAudiobooks/DownloadManagerSettings';
 import LibraryServerSettings from '@app/components/Settings/BooksAudiobooks/LibraryServerSettings';
+import SettingsMylar from '@app/components/Settings/MangaComics/SettingsMylar';
+import SettingsSuwayomi from '@app/components/Settings/MangaComics/SettingsSuwayomi';
+import useSettings from '@app/hooks/useSettings';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
 import OverrideRuleTiles from '@app/components/Settings/OverrideRule/OverrideRuleTiles';
 import RadarrModal from '@app/components/Settings/RadarrModal';
@@ -865,14 +868,29 @@ const BookshelfServices = ({ mediaType }: BookshelfServicesProps) => {
 
 const SettingsServices = () => {
   const intl = useIntl();
+  const { currentSettings } = useSettings();
   const [activeTab, setActiveTab] = useState<
-    'movies-tv' | 'books' | 'audiobooks'
+    'movies-tv' | 'books' | 'audiobooks' | 'manga' | 'comics'
   >('movies-tv');
 
+  // Per-type tabs only show when their master toggle is on. Suwayomi
+  // (manga) and Mylar3 (comic) live as the download-manager half of
+  // their respective types, mirroring the existing books / audiobooks
+  // tabs that host Bindery / Bookshelf / DownloadManager / Library
+  // panels.
   const tabs: { key: typeof activeTab; label: string }[] = [
-    { key: 'movies-tv', label: `${intl.formatMessage(globalMessages.movies)} & ${intl.formatMessage(globalMessages.tvshows)}` },
+    {
+      key: 'movies-tv',
+      label: `${intl.formatMessage(globalMessages.movies)} & ${intl.formatMessage(globalMessages.tvshows)}`,
+    },
     { key: 'books', label: intl.formatMessage(globalMessages.book) },
     { key: 'audiobooks', label: intl.formatMessage(globalMessages.audiobook) },
+    ...(currentSettings.mangaEnabled
+      ? [{ key: 'manga' as const, label: intl.formatMessage(globalMessages.manga) }]
+      : []),
+    ...(currentSettings.comicEnabled
+      ? [{ key: 'comics' as const, label: intl.formatMessage(globalMessages.comic) }]
+      : []),
   ];
 
   return (
@@ -906,6 +924,8 @@ const SettingsServices = () => {
           <LibraryServerSettings mediaTypeFilter="audiobook" />
         </div>
       )}
+      {activeTab === 'manga' && <SettingsSuwayomi />}
+      {activeTab === 'comics' && <SettingsMylar />}
     </>
   );
 };
