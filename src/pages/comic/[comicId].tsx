@@ -1,5 +1,6 @@
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import ComicRequestModal from '@app/components/RequestModal/ComicRequestModal';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
@@ -66,16 +67,14 @@ const ComicDetailPage: NextPage = () => {
   const intl = useIntl();
   const { comicId } = router.query;
   const { hasPermission } = useUser();
-  // Comic request modal lands in Phase 6; the button stays inert
-  // until then.
-  const [, setShowRequestModal] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
-  const { data, error } = useSWR<ComicDetailData>(
+  const { data, error, mutate } = useSWR<ComicDetailData>(
     comicId ? `/api/v1/comic/${comicId}` : null
   );
 
   const canRequest = hasPermission(
-    [Permission.REQUEST, Permission.REQUEST],
+    [Permission.REQUEST, Permission.REQUEST_COMIC],
     { type: 'or' }
   );
 
@@ -144,9 +143,7 @@ const ComicDetailPage: NextPage = () => {
               <button
                 type="button"
                 onClick={() => setShowRequestModal(true)}
-                disabled
-                title="Comic requests land in Phase 6"
-                className="inline-flex items-center rounded-md border border-transparent bg-amber-600 px-4 py-2 text-sm font-medium text-white opacity-60 shadow-sm"
+                className="inline-flex items-center rounded-md border border-transparent bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
               >
                 <BookOpenIcon className="mr-2 h-5 w-5" />
                 {intl.formatMessage(messages.request)}
@@ -299,6 +296,24 @@ const ComicDetailPage: NextPage = () => {
         </div>
       </div>
       <div className="extra-bottom-space relative" />
+
+      <ComicRequestModal
+        show={showRequestModal}
+        comicVineId={data.comicVineId}
+        title={data.title}
+        coverUrl={data.coverUrl}
+        year={data.year}
+        issueCount={data.issueCount}
+        publisher={data.publisher}
+        publisherId={data.publisherId}
+        creatorName={data.creatorName}
+        creatorKey={data.creatorKey}
+        onCancel={() => setShowRequestModal(false)}
+        onComplete={() => {
+          setShowRequestModal(false);
+          mutate();
+        }}
+      />
     </div>
   );
 };

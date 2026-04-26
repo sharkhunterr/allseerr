@@ -34,6 +34,8 @@ export const messages = defineMessages('components.PermissionEdit', {
   requestGameDescription: 'Grant permission to submit game requests.',
   requestManga: 'Request Manga',
   requestMangaDescription: 'Grant permission to submit manga requests.',
+  requestComic: 'Request Comics',
+  requestComicDescription: 'Grant permission to submit comic requests.',
   autoapprove: 'Auto-Approve',
   autoapproveDescription:
     'Grant automatic approval for all non-4K media requests.',
@@ -52,6 +54,8 @@ export const messages = defineMessages('components.PermissionEdit', {
   autoapproveGameDescription: 'Grant automatic approval for game requests.',
   autoapproveManga: 'Auto-Approve Manga',
   autoapproveMangaDescription: 'Grant automatic approval for manga requests.',
+  autoapproveComic: 'Auto-Approve Comics',
+  autoapproveComicDescription: 'Grant automatic approval for comic requests.',
   autoapprove4k: 'Auto-Approve 4K',
   autoapprove4kDescription:
     'Grant automatic approval for all 4K media requests.',
@@ -224,6 +228,12 @@ export const PermissionEdit = ({
           description: intl.formatMessage(messages.requestMangaDescription),
           permission: Permission.REQUEST_MANGA,
         },
+        {
+          id: 'request-comic',
+          name: intl.formatMessage(messages.requestComic),
+          description: intl.formatMessage(messages.requestComicDescription),
+          permission: Permission.REQUEST_COMIC,
+        },
       ],
     },
     {
@@ -313,6 +323,20 @@ export const PermissionEdit = ({
           requires: [
             {
               permissions: [Permission.REQUEST, Permission.REQUEST_MANGA],
+              type: 'or',
+            },
+          ],
+        },
+        {
+          id: 'autoapprovecomic',
+          name: intl.formatMessage(messages.autoapproveComic),
+          description: intl.formatMessage(
+            messages.autoapproveComicDescription
+          ),
+          permission: Permission.AUTO_APPROVE_COMIC,
+          requires: [
+            {
+              permissions: [Permission.REQUEST, Permission.REQUEST_COMIC],
               type: 'or',
             },
           ],

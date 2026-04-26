@@ -151,6 +151,7 @@ export interface MainSettings {
     audiobook: Quota;
     game: Quota;
     manga: Quota;
+    comic: Quota;
   };
   hideAvailable: boolean;
   hideBlocklisted: boolean;
@@ -620,6 +621,7 @@ class Settings {
           audiobook: {},
           game: {},
           manga: {},
+          comic: {},
         },
         hideAvailable: false,
         hideBlocklisted: false,

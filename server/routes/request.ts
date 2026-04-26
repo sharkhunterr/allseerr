@@ -132,6 +132,7 @@ requestRoutes.get<Record<string, unknown>, RequestResultsResponse>(
         .leftJoinAndSelect('request.bookMedia', 'bookMedia')
         .leftJoinAndSelect('request.audiobookMedia', 'audiobookMedia')
         .leftJoinAndSelect('request.mangaMedia', 'mangaMedia')
+        .leftJoinAndSelect('request.comicMedia', 'comicMedia')
         .where('request.status IN (:...requestStatus)', {
           requestStatus: statusFilter,
         })
@@ -465,6 +466,7 @@ requestRoutes.get('/:requestId', async (req, res, next) => {
         bookMedia: true,
         audiobookMedia: true,
         mangaMedia: true,
+        comicMedia: true,
       },
     });
 

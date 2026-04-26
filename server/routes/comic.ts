@@ -3,7 +3,16 @@ import ComicVineAPI, {
   comicVineYear,
   type ComicVinePersonCredit,
 } from '@server/api/comicvine';
-import { MediaType } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
+import { getRepository } from '@server/datasource';
+import { ComicMedia } from '@server/entity/ComicMedia';
+import { MediaRequest } from '@server/entity/MediaRequest';
+import { User } from '@server/entity/User';
+import { hasPermission, Permission } from '@server/lib/permissions';
 import { isAuthenticated } from '@server/middleware/auth';
 import logger from '@server/logger';
 import { Router } from 'express';
@@ -287,6 +296,180 @@ comicRoutes.get('/:id', isAuthenticated(), async (req, res) => {
     return res.status(500).json({
       status: 500,
       message: 'Failed to fetch comic details.',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/comic/request
+ * Submit a comic request. The request unit is the *volume* (a series),
+ * not a single issue — Mylar3 manages subscriptions at the series
+ * level and that matches user mental model. No download manager wired
+ * here yet; Phase 7 (Mylar3) plugs in after.
+ */
+comicRoutes.post('/request', isAuthenticated(), async (req, res) => {
+  const body = req.body as {
+    comicVineId: number;
+    title: string;
+    year?: number;
+    coverUrl?: string;
+    issueCount?: number;
+    publisher?: string;
+    publisherId?: number;
+    creatorName?: string;
+    creatorKey?: number;
+    userId?: number;
+  };
+
+  if (!body.comicVineId || !body.title) {
+    return res.status(400).json({
+      status: 400,
+      message: 'comicVineId and title are required.',
+    });
+  }
+
+  if (
+    !hasPermission(
+      [Permission.REQUEST, Permission.REQUEST_COMIC],
+      req.user?.permissions ?? 0,
+      { type: 'or' }
+    )
+  ) {
+    return res.status(403).json({
+      status: 403,
+      message: 'You do not have permission to request comics.',
+    });
+  }
+
+  const comicMediaRepo = getRepository(ComicMedia);
+  const requestRepo = getRepository(MediaRequest);
+  const userRepo = getRepository(User);
+
+  // Admin "Request As" — same shape as the manga / game / book routes.
+  let requestUser = req.user!;
+  if (
+    body.userId &&
+    body.userId !== req.user?.id &&
+    hasPermission(
+      [Permission.MANAGE_USERS, Permission.MANAGE_REQUESTS],
+      req.user?.permissions ?? 0,
+      { type: 'or' }
+    )
+  ) {
+    const target = await userRepo.findOne({ where: { id: body.userId } });
+    if (target) {
+      requestUser = target;
+    }
+  }
+
+  // Duplicate detection — one row per ComicVine volume id (the unique
+  // constraint on ComicMedia). Active duplicates return 409; declined
+  // ones can be re-requested.
+  const existing = await comicMediaRepo.findOne({
+    where: { comicVineId: body.comicVineId },
+  });
+
+  if (existing) {
+    const existingRequest = await requestRepo.findOne({
+      where: { comicMedia: { id: existing.id } },
+    });
+    if (
+      existingRequest &&
+      existingRequest.status !== MediaRequestStatus.DECLINED
+    ) {
+      return res.status(409).json({
+        status: 409,
+        message: 'This comic has already been requested.',
+        existingRequestId: existingRequest.id,
+        existingStatus: existingRequest.status,
+      });
+    }
+  }
+
+  // Quota check — MANAGE_USERS bypass is handled inside getQuota().
+  try {
+    const quotas = await requestUser.getQuota();
+    if (quotas.comic.restricted) {
+      return res.status(403).json({
+        status: 403,
+        message: 'Comic quota exceeded.',
+        quota: quotas.comic,
+      });
+    }
+  } catch (e) {
+    logger.warn('Quota check failed (proceeding without enforcement)', {
+      label: 'comic',
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  try {
+    let comicMedia = existing;
+    if (!comicMedia) {
+      comicMedia = new ComicMedia({
+        title: body.title,
+        comicVineId: body.comicVineId,
+        year: body.year ?? null,
+        coverUrl: body.coverUrl ?? null,
+        issueCount: body.issueCount ?? null,
+        publisher: body.publisher ?? null,
+        publisherId: body.publisherId ?? null,
+        creatorName: body.creatorName ?? null,
+        creatorKey: body.creatorKey ?? null,
+        status: MediaStatus.PENDING,
+      });
+      await comicMediaRepo.save(comicMedia);
+    } else if (comicMedia.status !== MediaStatus.AVAILABLE) {
+      comicMedia.status = MediaStatus.PENDING;
+      await comicMediaRepo.save(comicMedia);
+    }
+
+    const request = new MediaRequest();
+    request.status = MediaRequestStatus.PENDING;
+    request.type = MediaType.COMIC;
+    request.requestedBy = requestUser;
+    request.comicMedia = comicMedia;
+
+    await requestRepo.save(request);
+
+    if (
+      req.user &&
+      hasPermission(
+        [
+          Permission.MANAGE_REQUESTS,
+          Permission.AUTO_APPROVE,
+          Permission.AUTO_APPROVE_COMIC,
+        ],
+        req.user.permissions,
+        { type: 'or' }
+      )
+    ) {
+      comicMedia.status = MediaStatus.PROCESSING;
+      await comicMediaRepo.save(comicMedia);
+      request.status = MediaRequestStatus.APPROVED;
+      await requestRepo.save(request);
+    }
+
+    logger.info(
+      `Comic request created: ${body.title} (comicvine:${body.comicVineId})`,
+      {
+        label: 'comic',
+        requestId: request.id,
+      }
+    );
+
+    return res.status(201).json({
+      ...request,
+      comicMedia,
+    });
+  } catch (e) {
+    logger.error('Comic request creation failed', {
+      label: 'comic',
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(500).json({
+      status: 500,
+      message: 'Comic request creation failed. Please try again.',
     });
   }
 });

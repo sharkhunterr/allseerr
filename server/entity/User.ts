@@ -180,6 +180,12 @@ export class User {
   @Column({ nullable: true })
   public mangaQuotaDays?: number;
 
+  @Column({ nullable: true })
+  public comicQuotaLimit?: number;
+
+  @Column({ nullable: true })
+  public comicQuotaDays?: number;
+
   @OneToOne(() => UserSettings, (settings) => settings.user, {
     cascade: true,
     eager: true,
@@ -454,6 +460,17 @@ export class User {
       mangaQuotaDays
     );
 
+    const comicQuotaLimit = !canBypass
+      ? (this.comicQuotaLimit ?? defaultQuotas.comic?.quotaLimit ?? 0)
+      : 0;
+    const comicQuotaDays =
+      this.comicQuotaDays ?? defaultQuotas.comic?.quotaDays ?? 0;
+    const comicQuotaUsed = await countSimpleQuota(
+      MediaType.COMIC,
+      comicQuotaLimit,
+      comicQuotaDays
+    );
+
     return {
       movie: {
         days: movieQuotaDays,
@@ -512,6 +529,15 @@ export class User {
           ? Math.max(0, mangaQuotaLimit - mangaQuotaUsed)
           : undefined,
         restricted: !!(mangaQuotaLimit && mangaQuotaLimit - mangaQuotaUsed <= 0),
+      },
+      comic: {
+        days: comicQuotaDays,
+        limit: comicQuotaLimit,
+        used: comicQuotaUsed,
+        remaining: comicQuotaLimit
+          ? Math.max(0, comicQuotaLimit - comicQuotaUsed)
+          : undefined,
+        restricted: !!(comicQuotaLimit && comicQuotaLimit - comicQuotaUsed <= 0),
       },
     };
   }

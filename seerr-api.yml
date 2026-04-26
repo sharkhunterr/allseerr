@@ -4474,6 +4474,39 @@ paths:
             application/json:
               schema:
                 type: object
+  /comic/request:
+    post:
+      summary: Submit a comic request
+      description: Creates a new comic request from a ComicVine volume.
+      tags:
+        - comic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - comicVineId
+                - title
+              properties:
+                comicVineId: { type: number }
+                title: { type: string }
+                year: { type: number }
+                coverUrl: { type: string }
+                issueCount: { type: number }
+                publisher: { type: string }
+                publisherId: { type: number }
+                creatorName: { type: string }
+                creatorKey: { type: number }
+                userId: { type: number }
+      responses:
+        '201':
+          description: Comic request created
+          content:
+            application/json:
+              schema:
+                type: object
   /manga/request:
     post:
       summary: Submit a manga request

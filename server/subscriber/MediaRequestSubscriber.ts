@@ -837,7 +837,8 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         (entity.type === MediaType.BOOK ||
           entity.type === MediaType.AUDIOBOOK ||
           entity.type === MediaType.GAME ||
-          entity.type === MediaType.MANGA)
+          entity.type === MediaType.MANGA ||
+          entity.type === MediaType.COMIC)
       ) {
         const requestRepository = getRepository(MediaRequest);
         const fullRequest = await requestRepository.findOne({
@@ -847,6 +848,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             'audiobookMedia',
             'gameMedia',
             'mangaMedia',
+            'comicMedia',
           ],
         });
         if (fullRequest?.bookMedia) {
@@ -874,6 +876,12 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             const { MangaMedia } = await import('@server/entity/MangaMedia');
             fullRequest.mangaMedia.status = MediaStatus.PROCESSING;
             await getRepository(MangaMedia).save(fullRequest.mangaMedia);
+          }
+        } else if (fullRequest?.comicMedia) {
+          if (fullRequest.comicMedia.status !== MediaStatus.AVAILABLE) {
+            const { ComicMedia } = await import('@server/entity/ComicMedia');
+            fullRequest.comicMedia.status = MediaStatus.PROCESSING;
+            await getRepository(ComicMedia).save(fullRequest.comicMedia);
           }
         }
       }
@@ -1051,6 +1059,16 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         if (mm && mm.status !== MediaStatus.AVAILABLE) {
           mm.status = MediaStatus.UNKNOWN;
           await manager.save(mm);
+        }
+      }
+      if (entity.comicMedia) {
+        const { ComicMedia } = await import('@server/entity/ComicMedia');
+        const cm = await manager.findOne(ComicMedia, {
+          where: { id: entity.comicMedia.id },
+        });
+        if (cm && cm.status !== MediaStatus.AVAILABLE) {
+          cm.status = MediaStatus.UNKNOWN;
+          await manager.save(cm);
         }
       }
       return;
