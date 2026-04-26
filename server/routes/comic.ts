@@ -250,19 +250,21 @@ comicRoutes.get('/:id', isAuthenticated(), requireMediaType('comic'), async (req
 
     const primaryCreator = pickPrimaryCreator(volume.people);
 
-    // /volume's `people` array doesn't carry images. Fire one extra
-    // /person/<id> for the primary creator so the author block on
-    // the detail page can render their photo. Cached at 12h on
-    // ComicVine's side (see api/comicvine), so this is effectively
-    // free after the first hit and not worth blocking on for
-    // failures.
+    // /volume's `people` array doesn't carry images or biographical
+    // data. Fire one extra /person/<id> for the primary creator so
+    // the author block on the detail page can render their photo
+    // and country flag. Cached at 12h on ComicVine's side, so this
+    // is effectively free after the first hit and not worth
+    // blocking on for failures.
     let creatorPhotoUrl: string | undefined;
+    let creatorCountry: string | undefined;
     if (primaryCreator?.id) {
       try {
         const fullCreator = await cv.getPerson(primaryCreator.id);
         creatorPhotoUrl = comicVineCoverUrl(fullCreator?.image);
+        creatorCountry = fullCreator?.country ?? undefined;
       } catch (e) {
-        logger.debug('Comic primary-creator photo lookup skipped', {
+        logger.debug('Comic primary-creator profile lookup skipped', {
           label: 'comic',
           personId: primaryCreator.id,
           error: e instanceof Error ? e.message : String(e),
@@ -315,6 +317,7 @@ comicRoutes.get('/:id', isAuthenticated(), requireMediaType('comic'), async (req
       creatorKey: primaryCreator?.id,
       creatorRole: primaryCreator?.role ?? undefined,
       creatorPhotoUrl,
+      creatorCountry,
       // Full credit list (de-duplicated by id) for the credits panel.
       credits:
         volume.people?.map((p) => ({

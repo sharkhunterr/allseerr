@@ -53,7 +53,84 @@ interface ComicDetailData {
   creatorKey?: number;
   creatorRole?: string;
   creatorPhotoUrl?: string;
+  creatorCountry?: string;
 }
+
+// Convert an ISO-3166-1 alpha-2 country code to its flag emoji
+// (regional indicator symbols, each = "🇦" + (letter - A) offset).
+const countryFlag = (code: string): string => {
+  if (!/^[A-Z]{2}$/i.test(code)) return '';
+  return code
+    .toUpperCase()
+    .split('')
+    .map((c) => String.fromCodePoint(127397 + c.charCodeAt(0)))
+    .join('');
+};
+
+// ComicVine ships the creator's country as a full string ("United
+// States", "France", …), not an ISO code. Map the most common
+// origins to alpha-2 so we can render a flag chip in the author
+// block. Anything not in the table falls back to the bare country
+// name (no flag) so we never render a broken glyph.
+const COMIC_COUNTRY_TO_ISO: Record<string, string> = {
+  'united states': 'US',
+  usa: 'US',
+  'u.s.a.': 'US',
+  'u.s.': 'US',
+  america: 'US',
+  'united kingdom': 'GB',
+  uk: 'GB',
+  'u.k.': 'GB',
+  england: 'GB',
+  scotland: 'GB',
+  wales: 'GB',
+  'northern ireland': 'GB',
+  'great britain': 'GB',
+  france: 'FR',
+  belgium: 'BE',
+  italy: 'IT',
+  spain: 'ES',
+  portugal: 'PT',
+  germany: 'DE',
+  switzerland: 'CH',
+  austria: 'AT',
+  netherlands: 'NL',
+  ireland: 'IE',
+  canada: 'CA',
+  mexico: 'MX',
+  brazil: 'BR',
+  argentina: 'AR',
+  chile: 'CL',
+  australia: 'AU',
+  'new zealand': 'NZ',
+  japan: 'JP',
+  china: 'CN',
+  'south korea': 'KR',
+  korea: 'KR',
+  india: 'IN',
+  philippines: 'PH',
+  russia: 'RU',
+  poland: 'PL',
+  ukraine: 'UA',
+  sweden: 'SE',
+  norway: 'NO',
+  denmark: 'DK',
+  finland: 'FI',
+  greece: 'GR',
+  hungary: 'HU',
+  'czech republic': 'CZ',
+  czechia: 'CZ',
+  romania: 'RO',
+  turkey: 'TR',
+  israel: 'IL',
+  'south africa': 'ZA',
+};
+
+const comicCountryFlag = (country?: string): string => {
+  if (!country) return '';
+  const iso = COMIC_COUNTRY_TO_ISO[country.toLowerCase().trim()];
+  return iso ? countryFlag(iso) : '';
+};
 
 const ComicDetailPage: NextPage = () => {
   const router = useRouter();
@@ -223,6 +300,16 @@ const ComicDetailPage: NextPage = () => {
                   {data.creatorRole && (
                     <div className="text-xs text-gray-400">
                       {data.creatorRole}
+                    </div>
+                  )}
+                  {data.creatorCountry && (
+                    <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-gray-700/60 px-2 py-0.5 text-xs text-gray-200">
+                      {comicCountryFlag(data.creatorCountry) && (
+                        <span aria-hidden="true">
+                          {comicCountryFlag(data.creatorCountry)}
+                        </span>
+                      )}
+                      <span>{data.creatorCountry}</span>
                     </div>
                   )}
                 </div>
