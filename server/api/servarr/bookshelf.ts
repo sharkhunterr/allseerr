@@ -156,22 +156,48 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     const cacheKey = `lookup-book:${term.toLowerCase()}`;
     const hit = bookshelfCache.get<BookshelfBook[]>(cacheKey);
     if (hit !== undefined) return hit;
-    try {
-      // Bookshelf proxies to Goodreads/Hardcover — allow up to 25s for
-      // these upstream calls; the default 10s axios timeout is too tight.
+    // Bookshelf proxies to Goodreads/Hardcover. Use a 60s timeout
+    // (Hardcover is intermittently slow and 25s wasn't enough on the
+    // user's instance) and retry once on timeout — many timeouts win
+    // on a quick second attempt because the upstream cache warmed up.
+    const callOnce = async (timeoutMs: number) => {
       const response = await this.axios.get<BookshelfBook[]>('/book/lookup', {
         params: { term },
-        timeout: 25000,
+        timeout: timeoutMs,
       });
-      const value = response.data ?? [];
+      return response.data ?? [];
+    };
+    try {
+      const value = await callOnce(60000);
       // Cache 1h — same lookup during a session is a common flow
       // (book detail opens it twice: once for metadata, once for dispatch).
       setCacheable(cacheKey, value, 3600);
       return value;
     } catch (e) {
+      const isTimeout =
+        e?.code === 'ECONNABORTED' ||
+        /timeout/i.test(e?.message ?? '');
+      if (isTimeout) {
+        logger.warn('Bookshelf book lookup timed out — retrying once', {
+          label: 'Bookshelf API',
+          term,
+        });
+        try {
+          const value = await callOnce(60000);
+          setCacheable(cacheKey, value, 3600);
+          return value;
+        } catch (e2) {
+          logger.error('Bookshelf book lookup failed (after retry)', {
+            label: 'Bookshelf API',
+            errorMessage: e2 instanceof Error ? e2.message : String(e2),
+            term,
+          });
+          return [];
+        }
+      }
       logger.error('Bookshelf book lookup failed', {
         label: 'Bookshelf API',
-        errorMessage: e.message,
+        errorMessage: e instanceof Error ? e.message : String(e),
         term,
       });
       return [];
@@ -316,18 +342,46 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     const cacheKey = `lookup-author:${term.toLowerCase()}`;
     const hit = bookshelfCache.get<Record<string, unknown>[]>(cacheKey);
     if (hit !== undefined) return hit;
-    try {
+    // /author/lookup forwards to Hardcover and is consistently
+    // slower than /book/lookup. Bump the timeout to 60s and retry
+    // once on timeout — Hardcover is intermittently slow and a
+    // simple retry typically wins on the second try.
+    const callOnce = async (timeoutMs: number) => {
       const response = await this.axios.get<Record<string, unknown>[]>(
         '/author/lookup',
-        { params: { term }, timeout: 25000 }
+        { params: { term }, timeout: timeoutMs }
       );
-      const value = response.data ?? [];
+      return response.data ?? [];
+    };
+    try {
+      const value = await callOnce(60000);
       setCacheable(cacheKey, value, 3600);
       return value;
     } catch (e) {
+      const isTimeout =
+        e?.code === 'ECONNABORTED' ||
+        /timeout/i.test(e?.message ?? '');
+      if (isTimeout) {
+        logger.warn('Bookshelf author lookup timed out — retrying once', {
+          label: 'Bookshelf API',
+          term,
+        });
+        try {
+          const value = await callOnce(60000);
+          setCacheable(cacheKey, value, 3600);
+          return value;
+        } catch (e2) {
+          logger.error('Bookshelf author lookup failed (after retry)', {
+            label: 'Bookshelf API',
+            errorMessage: e2 instanceof Error ? e2.message : String(e2),
+            term,
+          });
+          return [];
+        }
+      }
       logger.error('Bookshelf author lookup failed', {
         label: 'Bookshelf API',
-        errorMessage: e.message,
+        errorMessage: e instanceof Error ? e.message : String(e),
         term,
       });
       return [];
@@ -388,6 +442,14 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     // network lookup.
     let candidate: Record<string, unknown> | undefined =
       options.preResolvedCandidate;
+    if (candidate) {
+      logger.debug('Bookshelf ensureAuthor: using pre-resolved candidate', {
+        label: 'Bookshelf API',
+        keys: Object.keys(candidate).slice(0, 12),
+        foreignAuthorId: (candidate as { foreignAuthorId?: string })
+          .foreignAuthorId,
+      });
+    }
     if (!candidate) {
       const candidates = await this.lookupAuthor(options.authorName);
       candidate =
