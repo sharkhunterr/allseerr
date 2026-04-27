@@ -447,20 +447,34 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     options: BookshelfBookAddOptions
   ): Promise<BookshelfBook> => {
     try {
-      // Step 1 — Book lookup. Per Libreseerr's reference implementation,
-      // Readarr/Bookshelf accepts ISBN with the `isbn:` prefix; ISBN is
-      // by far the most reliable key (one ISBN = one specific edition).
-      // ASIN (`asin:`) is the audiobook-equivalent for Audible products.
-      // Both fall back to free-text title+author when neither is set,
-      // and we additionally retry with a canonical English title when
-      // one is provided — covers the common "user requested an Audible
-      // localisation, Hardcover only knows the English title" case.
+      // Step 1 — Book lookup. Try every identifier we have, in order
+      // of decreasing reliability. Bookshelf (a Readarr-Audiobook
+      // fork) accepts the same prefix vocabulary Readarr does:
+      //   isbn:<value>     — print ISBN-13/-10
+      //   audible:<asin>   — Audible product ASIN (Readarr's
+      //                      canonical audiobook key)
+      //   goodreads:<id>   — Goodreads work id (we don't track one)
+      // ASIN gets two attempts (`audible:` + `asin:`) because some
+      // forks accept the bare prefix; cheap to try both.
+      // English-title text retry rescues the "user requested a
+      // localisation that Hardcover only indexed under its original
+      // English title" case (e.g. "Alien — La mer des désolations"
+      // → "Alien: Sea of Sorrows").
       let bookMatches: BookshelfBook[] = [];
+      const attemptedKeys: string[] = [];
       let lookupKey: string | undefined;
       const tryLookup = async (term: string, label: string) => {
         if (bookMatches.length > 0) return;
+        attemptedKeys.push(label);
         bookMatches = await this.lookupBook(term);
-        if (bookMatches.length > 0) lookupKey = label;
+        if (bookMatches.length > 0) {
+          lookupKey = label;
+          logger.debug('Bookshelf book lookup matched', {
+            label: 'Bookshelf API',
+            via: lookupKey,
+            matches: bookMatches.length,
+          });
+        }
       };
       if (options.isbn13) {
         await tryLookup(`isbn:${options.isbn13}`, `isbn:${options.isbn13}`);
@@ -469,6 +483,10 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         await tryLookup(`isbn:${options.isbn10}`, `isbn:${options.isbn10}`);
       }
       if (options.asin) {
+        await tryLookup(
+          `audible:${options.asin}`,
+          `audible:${options.asin}`
+        );
         await tryLookup(`asin:${options.asin}`, `asin:${options.asin}`);
       }
       await tryLookup(
@@ -480,6 +498,11 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         options.englishTitle.toLowerCase().trim() !==
           options.title.toLowerCase().trim()
       ) {
+        logger.info('Bookshelf book lookup retrying with English title', {
+          label: 'Bookshelf API',
+          localised: options.title,
+          english: options.englishTitle,
+        });
         await tryLookup(
           `${options.englishTitle} ${options.authorName}`,
           `text:"${options.englishTitle}" "${options.authorName}"`
@@ -496,8 +519,11 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         ) ?? looseBooks[0];
 
       if (!bookMatch || !bookMatch.foreignBookId) {
+        const tried = attemptedKeys.length
+          ? attemptedKeys.join(' / ')
+          : 'no key';
         throw new Error(
-          `Bookshelf book lookup returned no result via ${lookupKey ?? 'no key'}`
+          `Bookshelf book lookup returned no result. Tried: ${tried}`
         );
       }
 
