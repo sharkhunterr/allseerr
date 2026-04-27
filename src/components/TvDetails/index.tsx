@@ -24,6 +24,7 @@ import RequestButton from '@app/components/RequestButton';
 import RequestModal from '@app/components/RequestModal';
 import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
+import StatusReason from '@app/components/StatusReason';
 import Season from '@app/components/TvDetails/Season';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useLocale from '@app/hooks/useLocale';
@@ -556,6 +557,20 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
               plexUrl={plexUrl}
               serviceUrl={data.mediaInfo?.serviceUrl}
             />
+            {(() => {
+              const activeNon4kRequest = (
+                data.mediaInfo?.requests ?? []
+              ).find(
+                (r) =>
+                  !r.is4k &&
+                  r.status !== MediaRequestStatus.DECLINED &&
+                  r.status !== MediaRequestStatus.COMPLETED &&
+                  r.status !== MediaRequestStatus.FAILED
+              );
+              return activeNon4kRequest ? (
+                <StatusReason requestId={activeNon4kRequest.id} compact />
+              ) : null;
+            })()}
             {settings.currentSettings.series4kEnabled &&
               hasPermission(
                 [
@@ -567,19 +582,35 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                   type: 'or',
                 }
               ) && (
-                <StatusBadge
-                  status={data.mediaInfo?.status4k}
-                  downloadItem={data.mediaInfo?.downloadStatus4k}
-                  title={data.name}
-                  is4k
-                  inProgress={
-                    (data.mediaInfo?.downloadStatus4k ?? []).length > 0
-                  }
-                  tmdbId={data.mediaInfo?.tmdbId}
-                  mediaType="tv"
-                  plexUrl={plexUrl4k}
-                  serviceUrl={data.mediaInfo?.serviceUrl4k}
-                />
+                <>
+                  <StatusBadge
+                    status={data.mediaInfo?.status4k}
+                    downloadItem={data.mediaInfo?.downloadStatus4k}
+                    title={data.name}
+                    is4k
+                    inProgress={
+                      (data.mediaInfo?.downloadStatus4k ?? []).length > 0
+                    }
+                    tmdbId={data.mediaInfo?.tmdbId}
+                    mediaType="tv"
+                    plexUrl={plexUrl4k}
+                    serviceUrl={data.mediaInfo?.serviceUrl4k}
+                  />
+                  {(() => {
+                    const active4kRequest = (
+                      data.mediaInfo?.requests ?? []
+                    ).find(
+                      (r) =>
+                        r.is4k &&
+                        r.status !== MediaRequestStatus.DECLINED &&
+                        r.status !== MediaRequestStatus.COMPLETED &&
+                        r.status !== MediaRequestStatus.FAILED
+                    );
+                    return active4kRequest ? (
+                      <StatusReason requestId={active4kRequest.id} compact />
+                    ) : null;
+                  })()}
+                </>
               )}
           </div>
           <h1 data-testid="media-title">
