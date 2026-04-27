@@ -1,4 +1,4 @@
-import HardcoverAPI from '@server/api/hardcover';
+import HardcoverAPI, { hardcoverPrimaryAuthor } from '@server/api/hardcover';
 import BookshelfAPI from '@server/api/servarr/bookshelf';
 import { MediaType } from '@server/constants/media';
 import type { AudiobookMedia } from '@server/entity/AudiobookMedia';
@@ -67,20 +67,53 @@ export async function submitToBookshelf(
     const mediaAsin =
       'asin' in media ? (media as { asin?: string }).asin : undefined;
 
-    // For audiobooks with an ASIN, ask Hardcover for the canonical
-    // English title before dispatching. Bookshelf's underlying
-    // metadata source frequently doesn't index the localised title
-    // the user requested under (e.g. an Audible French audiobook
-    // whose Hardcover record only exists as the original English
+    // For audiobooks, ask Hardcover for the canonical English title
+    // before dispatching. Bookshelf's underlying metadata source
+    // frequently doesn't index the localised title the user
+    // requested under (e.g. an Audible French audiobook whose
+    // Hardcover record only exists as the original English
     // edition), so an English-title retry rescues the dispatch.
-    // Best-effort — failures don't block the dispatch.
+    //
+    // Two-pass shape mirrors the book-detail enrichment route:
+    //   1. searchAudiobookByAsin — direct ASIN→book mapping. Sparse;
+    //      Hardcover hasn't ingested every Audible product. Returns
+    //      null for many real ASINs.
+    //   2. searchBooks(title) + author-surname filter — Hardcover's
+    //      free-text bridges across languages well ("Alien — La mer
+    //      des désolations" lands on the English record). The
+    //      surname filter prevents a homonym hit from misattributing.
+    //
+    // Best-effort end-to-end — failures don't block the dispatch.
     let englishTitle: string | undefined;
-    if (mediaAsin && mediaType === MediaType.AUDIOBOOK) {
+    if (mediaType === MediaType.AUDIOBOOK) {
       const bookCfg = settings.book?.metadataProviders;
       if (bookCfg?.hardcoverApiKey) {
         try {
           const hc = new HardcoverAPI(bookCfg.hardcoverApiKey);
-          const hit = await hc.searchAudiobookByAsin(mediaAsin);
+          let hit = mediaAsin
+            ? await hc.searchAudiobookByAsin(mediaAsin)
+            : null;
+          if (!hit && media.title && media.authorName) {
+            const candidates = await hc.searchBooks(media.title, 5);
+            const normName = (s: string) =>
+              s
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[̀-ͯ]/g, '')
+                .replace(/[^a-z\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            const tokens = normName(media.authorName)
+              .split(' ')
+              .filter((t) => t.length > 1);
+            const surname = tokens[tokens.length - 1];
+            hit =
+              candidates.find((c) => {
+                const primary = hardcoverPrimaryAuthor(c.contributions) ?? '';
+                const cTokens = normName(primary).split(' ').filter(Boolean);
+                return !!surname && cTokens.includes(surname);
+              }) ?? null;
+          }
           if (
             hit?.title &&
             hit.title.toLowerCase().trim() !== media.title.toLowerCase().trim()
@@ -91,10 +124,11 @@ export async function submitToBookshelf(
               asin: mediaAsin,
               localised: media.title,
               english: englishTitle,
+              hardcoverId: hit.id,
             });
           }
         } catch (e) {
-          logger.debug('Bookshelf dispatch: Hardcover ASIN lookup skipped', {
+          logger.debug('Bookshelf dispatch: Hardcover lookup skipped', {
             label: 'bookshelf',
             asin: mediaAsin,
             error: e instanceof Error ? e.message : String(e),
