@@ -555,9 +555,28 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       // mirrors Libreseerr's `_ensure_author`: prefer an existing
       // persisted author (matched by foreignAuthorId then by name),
       // otherwise /author/lookup + POST /author with rootFolderPath.
+      //
+      // Author-name resolution priority:
+      //   1. matched book's author.authorName — the canonical name
+      //      Bookshelf returned for the lookup we just resolved.
+      //      Always single-author and always indexed (otherwise the
+      //      book lookup wouldn't have matched), so /author/lookup
+      //      will hit cleanly when this falls through to step 4.
+      //   2. options.englishAuthor — explicit override from the
+      //      dispatcher (Hardcover-resolved primary writer for the
+      //      audiobook English-title retry).
+      //   3. options.authorName — the original (potentially
+      //      multi-credit) request payload. Last resort because
+      //      forms like "Dirk Maggs, James A. Moore" timeout
+      //      Bookshelf's /author/lookup, which has nothing indexed
+      //      for the concatenation.
+      const matchedAuthorName =
+        (bookMatch.author as { authorName?: string } | undefined)?.authorName;
+      const ensureAuthorName =
+        matchedAuthorName ?? options.englishAuthor ?? options.authorName;
       const { author: persistedAuthor, wasExisting: authorWasExisting } =
         await this.ensureAuthor({
-          authorName: options.authorName,
+          authorName: ensureAuthorName,
           foreignAuthorId:
             (bookMatch.author as { foreignAuthorId?: string } | undefined)
               ?.foreignAuthorId ?? undefined,
