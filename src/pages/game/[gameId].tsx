@@ -9,7 +9,7 @@ import StatusReason from '@app/components/StatusReason';
 import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
-import { ExclamationTriangleIcon, PlayIcon } from '@heroicons/react/24/outline';
+import { PlayIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
 import axios from 'axios';
 import type { NextPage } from 'next';
@@ -26,8 +26,6 @@ const messages = defineMessages('pages.GameDetail', {
   playOnRomm: 'Play on ROMM',
   selectPlatform: 'Select platform...',
   awaitingAddition: 'Approved — Awaiting Manual Addition',
-  manualWorkflow:
-    'Games are added manually by the admin. There is no automatic download.',
   requestSuccess: 'Game requested successfully!',
   requestFailed: 'Failed to request game.',
   requestDuplicate: 'This game has already been requested for this platform.',
@@ -362,14 +360,6 @@ const GameDetailPage: NextPage = () => {
           <p>
             {game.summary || intl.formatMessage(messages.overviewunavailable)}
           </p>
-
-          {/* Manual workflow warning */}
-          <div className="mt-6 flex items-start gap-2 rounded-lg bg-amber-900/30 p-3">
-            <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-400" />
-            <p className="text-sm text-amber-200">
-              {intl.formatMessage(messages.manualWorkflow)}
-            </p>
-          </div>
 
           {/* Platform list with request buttons */}
           {game.platforms.length > 0 && (
