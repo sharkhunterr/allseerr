@@ -479,10 +479,14 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     };
 
     try {
+      // POST /author needs metadata from Hardcover too (Bookshelf
+      // populates the new author's overview / images / etc. as part
+      // of the create call). Bump to 60s to match the lookup
+      // timeouts above — Hardcover is slow but eventually responds.
       const response = await this.axios.post<Record<string, unknown>>(
         '/author',
         authorPayload,
-        { timeout: 30000 }
+        { timeout: 60000 }
       );
       return { author: response.data, wasExisting: false };
     } catch (e) {
