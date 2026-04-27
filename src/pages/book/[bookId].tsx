@@ -3,6 +3,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tag from '@app/components/Common/Tag';
 import BookRequestModal from '@app/components/RequestModal/BookRequestModal';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import StatusBadge from '@app/components/StatusBadge';
 import StatusReason from '@app/components/StatusReason';
 import useSettings from '@app/hooks/useSettings';
@@ -504,6 +505,10 @@ const BookDetailPage: NextPage = () => {
           setShowRequestModal(false);
           revalidate();
         }}
+      />
+      <RequestNoticesAlert
+        scope={isAudiobook ? 'audiobook' : 'book'}
+        className="my-4"
       />
       <div className="media-overview">
         <div className="media-overview-left">

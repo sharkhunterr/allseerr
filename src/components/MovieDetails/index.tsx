@@ -20,6 +20,7 @@ import ManageSlideOver from '@app/components/ManageSlideOver';
 import MediaSlider from '@app/components/MediaSlider';
 import PersonCard from '@app/components/PersonCard';
 import RequestButton from '@app/components/RequestButton';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
 import StatusReason from '@app/components/StatusReason';
@@ -719,6 +720,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
             )}
         </div>
       </div>
+      <RequestNoticesAlert scope="movie" className="my-4" />
       <div className="media-overview">
         <div className="media-overview-left">
           {data.tagline && <div className="tagline">{data.tagline}</div>}

@@ -1,6 +1,7 @@
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import MangaRequestModal from '@app/components/RequestModal/MangaRequestModal';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
 import StatusReason from '@app/components/StatusReason';
@@ -219,6 +220,8 @@ const MangaDetailPage: NextPage = () => {
           )}
         </div>
       </div>
+
+      <RequestNoticesAlert scope="manga" className="my-4" />
 
       <div className="media-overview">
         <div className="media-overview-left">

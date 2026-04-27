@@ -1,4 +1,5 @@
 import Alert from '@app/components/Common/Alert';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import Badge from '@app/components/Common/Badge';
 import Modal from '@app/components/Common/Modal';
 import type { RequestOverrides } from '@app/components/RequestModal/AdvancedRequester';
@@ -469,6 +470,7 @@ const TvRequestModal = ({
       }
       backdrop={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data?.backdropPath}`}
     >
+      <RequestNoticesAlert scope="tv" className="mt-4" />
       {editRequest
         ? isOwner
           ? intl.formatMessage(messages.pendingapproval)

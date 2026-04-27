@@ -3,6 +3,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import GameRequestModal from '@app/components/GameRequestModal';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import StatusBadge from '@app/components/StatusBadge';
 import StatusReason from '@app/components/StatusReason';
 import useSettings from '@app/hooks/useSettings';
@@ -354,6 +355,7 @@ const GameDetailPage: NextPage = () => {
           revalidate();
         }}
       />
+      <RequestNoticesAlert scope="game" className="my-4" />
       <div className="media-overview">
         <div className="media-overview-left">
           <h2>{intl.formatMessage(messages.overview)}</h2>

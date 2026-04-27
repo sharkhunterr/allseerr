@@ -1,4 +1,5 @@
 import Alert from '@app/components/Common/Alert';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import Modal from '@app/components/Common/Modal';
 import type { RequestOverrides } from '@app/components/RequestModal/AdvancedRequester';
 import AdvancedRequester from '@app/components/RequestModal/AdvancedRequester';
@@ -335,6 +336,7 @@ const MovieRequestModal = ({
       okButtonType={'primary'}
       backdrop={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data?.backdropPath}`}
     >
+      <RequestNoticesAlert scope="movie" className="mt-4" />
       {hasAutoApprove && !quota?.movie.restricted && (
         <div className="mt-6">
           <Alert

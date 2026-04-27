@@ -48,6 +48,14 @@ servers:
 
 components:
   schemas:
+    RequestNoticeEntry:
+      type: object
+      properties:
+        message:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, error]
     Blocklist:
       type: object
       properties:
@@ -5647,6 +5655,56 @@ paths:
                 apiKey: { type: string }
                 pollIntervalMinutes: { type: number }
                 enabled: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/request-notices:
+    get:
+      summary: Get the admin-defined request-modal notices
+      description: |
+        Returns the optional notices shown at the top of each
+        request modal. Empty string per scope = no notice.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  global: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  movie: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  tv: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  book: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  audiobook: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  game: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  manga: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  comic: { $ref: '#/components/schemas/RequestNoticeEntry' }
+    put:
+      summary: Update the request-modal notices
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                global: { type: string }
+                movie: { type: string }
+                tv: { type: string }
+                book: { type: string }
+                audiobook: { type: string }
+                game: { type: string }
+                manga: { type: string }
+                comic: { type: string }
       responses:
         '200':
           description: OK

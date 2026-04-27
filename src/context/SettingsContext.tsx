@@ -8,7 +8,7 @@ export interface SettingsContextProps {
   children?: React.ReactNode;
 }
 
-const defaultSettings = {
+const defaultSettings: PublicSettingsResponse = {
   initialized: false,
   applicationTitle: 'Seerr',
   applicationUrl: '',
@@ -39,6 +39,16 @@ const defaultSettings = {
   gameEnabled: false,
   mangaEnabled: false,
   comicEnabled: false,
+  requestNotices: {
+    global: { message: '', severity: 'info' },
+    movie: { message: '', severity: 'info' },
+    tv: { message: '', severity: 'info' },
+    book: { message: '', severity: 'info' },
+    audiobook: { message: '', severity: 'info' },
+    game: { message: '', severity: 'info' },
+    manga: { message: '', severity: 'info' },
+    comic: { message: '', severity: 'info' },
+  },
 };
 
 export const SettingsContext = React.createContext<SettingsContextProps>({

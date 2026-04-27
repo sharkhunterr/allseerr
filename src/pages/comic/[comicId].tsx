@@ -2,6 +2,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import ComicRequestModal from '@app/components/RequestModal/ComicRequestModal';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import StatusBadge from '@app/components/StatusBadge';
 import StatusReason from '@app/components/StatusReason';
 import { Permission, useUser } from '@app/hooks/useUser';
@@ -231,6 +232,8 @@ const ComicDetailPage: NextPage = () => {
           )}
         </div>
       </div>
+
+      <RequestNoticesAlert scope="comic" className="my-4" />
 
       <div className="media-overview">
         <div className="media-overview-left">

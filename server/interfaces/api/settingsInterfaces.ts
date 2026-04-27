@@ -21,6 +21,24 @@ export interface SettingsAboutResponse {
   appDataPath: string;
 }
 
+export type RequestNoticeSeverity = 'info' | 'warning' | 'error';
+
+export interface RequestNoticeEntry {
+  message: string;
+  severity: RequestNoticeSeverity;
+}
+
+export interface RequestNotices {
+  global: RequestNoticeEntry;
+  movie: RequestNoticeEntry;
+  tv: RequestNoticeEntry;
+  book: RequestNoticeEntry;
+  audiobook: RequestNoticeEntry;
+  game: RequestNoticeEntry;
+  manga: RequestNoticeEntry;
+  comic: RequestNoticeEntry;
+}
+
 export interface PublicSettingsResponse {
   jellyfinHost?: string;
   jellyfinExternalHost?: string;
@@ -56,6 +74,7 @@ export interface PublicSettingsResponse {
   gameEnabled: boolean;
   mangaEnabled: boolean;
   comicEnabled: boolean;
+  requestNotices: RequestNotices;
 }
 
 export interface CacheItem {

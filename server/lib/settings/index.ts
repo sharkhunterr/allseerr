@@ -236,6 +236,11 @@ interface FullPublicSettings extends PublicSettings {
   gameEnabled: boolean;
   mangaEnabled: boolean;
   comicEnabled: boolean;
+  // Optional admin-defined notices shown at the top of each request
+  // modal. Empty string per scope = no notice. Surfaced via the
+  // public settings endpoint so the modals (which run as any user)
+  // can read them without an admin-scoped request.
+  requestNotices: RequestNotices;
 }
 
 export interface NotificationAgentConfig {
@@ -586,6 +591,38 @@ export interface MediaTypeToggles {
   comic: boolean;
 }
 
+/** Severity drives the matching <Alert type=…> visual. */
+export type RequestNoticeSeverity = 'info' | 'warning' | 'error';
+
+/**
+ * One admin-defined notice block. Empty `message` = no notice for
+ * that scope (the severity is irrelevant when the message is
+ * blank). Severity drives the alert color / icon (info = blue,
+ * warning = amber, error = red — matches the existing Alert
+ * component's variants).
+ */
+export interface RequestNoticeEntry {
+  message: string;
+  severity: RequestNoticeSeverity;
+}
+
+/**
+ * Optional admin-defined notices that surface as alerts at the top
+ * of each request modal AND on the matching content detail page.
+ * The `global` field shows on every request regardless of type;
+ * per-type fields stack with it (global on top, per-type below).
+ */
+export interface RequestNotices {
+  global: RequestNoticeEntry;
+  movie: RequestNoticeEntry;
+  tv: RequestNoticeEntry;
+  book: RequestNoticeEntry;
+  audiobook: RequestNoticeEntry;
+  game: RequestNoticeEntry;
+  manga: RequestNoticeEntry;
+  comic: RequestNoticeEntry;
+}
+
 export interface AllSettings {
   clientId: string;
   sessionSecret?: string;
@@ -610,6 +647,7 @@ export interface AllSettings {
   manga: MangaSettings;
   comic: ComicSettings;
   mediaTypes: MediaTypeToggles;
+  requestNotices: RequestNotices;
   oidc: OidcSettings;
   migrations: string[];
 }
@@ -977,6 +1015,16 @@ class Settings {
         manga: true,
         comic: true,
       },
+      requestNotices: {
+        global: { message: '', severity: 'info' },
+        movie: { message: '', severity: 'info' },
+        tv: { message: '', severity: 'info' },
+        book: { message: '', severity: 'info' },
+        audiobook: { message: '', severity: 'info' },
+        game: { message: '', severity: 'info' },
+        manga: { message: '', severity: 'info' },
+        comic: { message: '', severity: 'info' },
+      },
       oidc: {
         enabled: false,
         issuerUrl: '',
@@ -1127,6 +1175,51 @@ class Settings {
     this.data.mediaTypes = { ...this.mediaTypes, ...data };
   }
 
+  get requestNotices(): RequestNotices {
+    const stored = this.data.requestNotices as
+      | RequestNotices
+      | Record<string, string>
+      | undefined;
+    // Soft-migrate: an earlier development build of this branch
+    // wrote each field as a plain string. Coerce that shape into
+    // the new {message, severity} block on read so downstream
+    // consumers don't have to care.
+    const coerce = (
+      value: RequestNoticeEntry | string | undefined
+    ): RequestNoticeEntry => {
+      if (typeof value === 'string') {
+        return { message: value, severity: 'info' };
+      }
+      if (value && typeof value === 'object') {
+        const sev = value.severity;
+        return {
+          message: value.message ?? '',
+          severity:
+            sev === 'warning' || sev === 'error' || sev === 'info'
+              ? sev
+              : 'info',
+        };
+      }
+      return { message: '', severity: 'info' };
+    };
+    return {
+      global: coerce(stored?.global as RequestNoticeEntry | string | undefined),
+      movie: coerce(stored?.movie as RequestNoticeEntry | string | undefined),
+      tv: coerce(stored?.tv as RequestNoticeEntry | string | undefined),
+      book: coerce(stored?.book as RequestNoticeEntry | string | undefined),
+      audiobook: coerce(
+        stored?.audiobook as RequestNoticeEntry | string | undefined
+      ),
+      game: coerce(stored?.game as RequestNoticeEntry | string | undefined),
+      manga: coerce(stored?.manga as RequestNoticeEntry | string | undefined),
+      comic: coerce(stored?.comic as RequestNoticeEntry | string | undefined),
+    };
+  }
+
+  set requestNotices(data: RequestNotices) {
+    this.data.requestNotices = { ...this.requestNotices, ...data };
+  }
+
   get oidc(): OidcSettings {
     return this.data.oidc;
   }
@@ -1230,6 +1323,7 @@ class Settings {
         types.comic &&
         !!this.data.comic?.metadataProviders?.comicvine &&
         !!this.data.comic?.metadataProviders?.apiKey,
+      requestNotices: this.requestNotices,
     };
   }
 

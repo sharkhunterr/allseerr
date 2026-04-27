@@ -2,6 +2,7 @@ import Alert from '@app/components/Common/Alert';
 import Badge from '@app/components/Common/Badge';
 import Modal from '@app/components/Common/Modal';
 import RequestAsUserSelect from '@app/components/RequestModal/RequestAsUserSelect';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import type { User } from '@app/hooks/useUser';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -218,8 +219,11 @@ const GameRequestModal = ({
         okButtonType="primary"
         backdrop={coverUrl}
       >
+        <div className="mt-4">
+          <RequestNoticesAlert scope="game" />
+        </div>
         {willAutoApprove && (
-          <div className="mt-6">
+          <div className="mt-4">
             <Alert
               title={intl.formatMessage(messages.autoApprove)}
               type="info"

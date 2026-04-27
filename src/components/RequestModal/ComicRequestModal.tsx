@@ -1,6 +1,7 @@
 import Alert from '@app/components/Common/Alert';
 import Modal from '@app/components/Common/Modal';
 import RequestAsUserSelect from '@app/components/RequestModal/RequestAsUserSelect';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import type { User } from '@app/hooks/useUser';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -200,8 +201,9 @@ const ComicRequestModal = ({
         cancelText={intl.formatMessage(globalMessages.cancel)}
         backdrop={coverUrl}
       >
+        <RequestNoticesAlert scope="comic" className="mt-4" />
         {willAutoApprove && (
-          <div className="mt-6">
+          <div className="mt-4">
             <Alert
               title={intl.formatMessage(messages.autoApprove)}
               type="info"
