@@ -5697,14 +5697,14 @@ paths:
             schema:
               type: object
               properties:
-                global: { type: string }
-                movie: { type: string }
-                tv: { type: string }
-                book: { type: string }
-                audiobook: { type: string }
-                game: { type: string }
-                manga: { type: string }
-                comic: { type: string }
+                global: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                movie: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                tv: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                book: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                audiobook: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                game: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                manga: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                comic: { $ref: '#/components/schemas/RequestNoticeEntry' }
       responses:
         '200':
           description: OK
