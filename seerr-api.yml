@@ -8501,6 +8501,36 @@ paths:
                     type: number
                   completed:
                     type: number
+  /request/{requestId}/status-reason:
+    get:
+      summary: Get a human-readable reason for the request's current state
+      description: |
+        Returns a single user-facing string explaining why the request
+        is in its current status (e.g. "Not released yet — scheduled
+        for 2026-08-12", "Downloading 45% — 7 min remaining", "No
+        download manager configured"). For non-TMDB types this is the
+        persisted reason set at dispatch time; for movie / TV it's
+        computed live from Radarr / Sonarr queue + record state and
+        cached server-side for 60s.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resolved reason (may be null when there is nothing useful to surface beyond the status badge)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reason:
+                    type: string
+                    nullable: true
   /request/{requestId}:
     get:
       summary: Get MediaRequest

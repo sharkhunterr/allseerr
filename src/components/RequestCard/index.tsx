@@ -788,6 +788,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                 }
               />
             )}
+            <StatusReason requestId={requestData.id} compact />
           </div>
           <div className="flex flex-1 items-end space-x-2">
             {requestData.status === MediaRequestStatus.FAILED &&

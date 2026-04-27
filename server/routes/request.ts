@@ -493,6 +493,64 @@ requestRoutes.get('/:requestId', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/v1/request/:requestId/status-reason
+ *
+ * Resolves "why is this request stuck" into a single user-facing
+ * string. For non-TMDB types it forwards the persisted reason from
+ * the matching *Media entity. For movie / TV it queries Radarr /
+ * Sonarr's queue + the relevant series/movie record live, then maps
+ * into a human reason ("Downloading 45% — 7 min remaining", "Not
+ * released yet — scheduled for 2026-08-12", "Monitored by Radarr —
+ * waiting for indexers", …).
+ *
+ * Cached server-side at 60s per request id so the lazy frontend
+ * fetches don't hammer Radarr/Sonarr when /requests renders 30
+ * cards.
+ */
+requestRoutes.get('/:requestId/status-reason', async (req, res, next) => {
+  const requestRepository = getRepository(MediaRequest);
+  try {
+    const request = await requestRepository.findOneOrFail({
+      where: { id: Number(req.params.requestId) },
+      relations: {
+        requestedBy: true,
+        media: true,
+        gameMedia: true,
+        bookMedia: true,
+        audiobookMedia: true,
+        mangaMedia: true,
+        comicMedia: true,
+      },
+    });
+
+    if (
+      request.requestedBy.id !== req.user?.id &&
+      !req.user?.hasPermission(
+        [Permission.MANAGE_REQUESTS, Permission.REQUEST_VIEW],
+        { type: 'or' }
+      )
+    ) {
+      return next({
+        status: 403,
+        message: 'You do not have permission to view this request.',
+      });
+    }
+
+    const { getRequestStatusReason } = await import(
+      '@server/lib/services/statusReason'
+    );
+    const reason = await getRequestStatusReason(request);
+    return res.status(200).json({ reason });
+  } catch (e) {
+    logger.debug('Failed to resolve request status reason.', {
+      label: 'API',
+      errorMessage: e instanceof Error ? e.message : String(e),
+    });
+    next({ status: 404, message: 'Request not found.' });
+  }
+});
+
 requestRoutes.put<{ requestId: string }>(
   '/:requestId',
   async (req, res, next) => {

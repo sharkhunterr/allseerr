@@ -900,6 +900,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                   }
                 />
               )}
+              <StatusReason requestId={requestData.id} compact />
             </div>
             {renderMetadata()}
             {request.profileName && (
