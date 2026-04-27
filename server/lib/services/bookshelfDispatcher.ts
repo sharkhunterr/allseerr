@@ -1,3 +1,4 @@
+import HardcoverAPI from '@server/api/hardcover';
 import BookshelfAPI from '@server/api/servarr/bookshelf';
 import { MediaType } from '@server/constants/media';
 import type { AudiobookMedia } from '@server/entity/AudiobookMedia';
@@ -58,17 +59,57 @@ export async function submitToBookshelf(
     });
 
     // Pass through every identifier we have — Bookshelf will pick the
-    // most reliable one (ISBN > title+author).
+    // most reliable one (ISBN > ASIN > title+author > englishTitle+author).
     const mediaIsbn13 =
       'isbn13' in media ? (media as { isbn13?: string }).isbn13 : undefined;
     const mediaIsbn10 =
       'isbn10' in media ? (media as { isbn10?: string }).isbn10 : undefined;
+    const mediaAsin =
+      'asin' in media ? (media as { asin?: string }).asin : undefined;
+
+    // For audiobooks with an ASIN, ask Hardcover for the canonical
+    // English title before dispatching. Bookshelf's underlying
+    // metadata source frequently doesn't index the localised title
+    // the user requested under (e.g. an Audible French audiobook
+    // whose Hardcover record only exists as the original English
+    // edition), so an English-title retry rescues the dispatch.
+    // Best-effort — failures don't block the dispatch.
+    let englishTitle: string | undefined;
+    if (mediaAsin && mediaType === MediaType.AUDIOBOOK) {
+      const bookCfg = settings.book?.metadataProviders;
+      if (bookCfg?.hardcoverApiKey) {
+        try {
+          const hc = new HardcoverAPI(bookCfg.hardcoverApiKey);
+          const hit = await hc.searchAudiobookByAsin(mediaAsin);
+          if (
+            hit?.title &&
+            hit.title.toLowerCase().trim() !== media.title.toLowerCase().trim()
+          ) {
+            englishTitle = hit.title;
+            logger.info('Bookshelf dispatch: resolved English title fallback', {
+              label: 'bookshelf',
+              asin: mediaAsin,
+              localised: media.title,
+              english: englishTitle,
+            });
+          }
+        } catch (e) {
+          logger.debug('Bookshelf dispatch: Hardcover ASIN lookup skipped', {
+            label: 'bookshelf',
+            asin: mediaAsin,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+    }
 
     const book = await api.addBook({
       title: media.title,
       authorName: media.authorName,
       isbn13: mediaIsbn13 ?? undefined,
       isbn10: mediaIsbn10 ?? undefined,
+      asin: mediaAsin ?? undefined,
+      englishTitle,
       foreignBookId: media.foreignBookId,
       foreignAuthorId: media.foreignAuthorId ?? undefined,
       qualityProfileId: instance.activeProfileId,

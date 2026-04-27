@@ -18,11 +18,29 @@ export interface BookshelfBookAddOptions {
   authorName: string;
   /**
    * Preferred lookup keys — Bookshelf's /book/lookup deterministically
-   * matches by ISBN when supplied, much more reliable than title+author
-   * fuzzy search (which can pick the wrong edition / translation).
+   * matches by ISBN / ASIN when supplied, much more reliable than
+   * title+author fuzzy search (which can pick the wrong edition /
+   * translation, or fail entirely when the user requested a
+   * localised title that the Goodreads / Hardcover index doesn't
+   * carry under that name).
    */
   isbn13?: string;
   isbn10?: string;
+  /**
+   * Audible / Amazon Standard Identification Number. When present,
+   * tried after ISBN and before falling back to free-text. Bookshelf
+   * forwards `asin:<value>` to its upstream metadata source which
+   * resolves it to a canonical edition.
+   */
+  asin?: string;
+  /**
+   * Optional English / canonical title. Used as a last-ditch
+   * free-text retry when the localised title doesn't match — covers
+   * the common case of an Audible audiobook requested in French
+   * whose Hardcover record only exists under its English title
+   * ("Alien — La mer des désolations" → "Alien: Sea of Sorrows").
+   */
+  englishTitle?: string;
   /**
    * OpenLibrary work key kept for logging/troubleshooting only — Bookshelf
    * uses Goodreads/Hardcover numeric IDs internally and won't recognise OL
@@ -430,24 +448,42 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
   ): Promise<BookshelfBook> => {
     try {
       // Step 1 — Book lookup. Per Libreseerr's reference implementation,
-      // Readarr/Bookshelf accepts ISBN with the `isbn:` prefix; ISBN is by
-      // far the most reliable key (one ISBN = one specific edition).
-      // Fall back to free text "<title> <author>" when ISBN isn't available.
+      // Readarr/Bookshelf accepts ISBN with the `isbn:` prefix; ISBN is
+      // by far the most reliable key (one ISBN = one specific edition).
+      // ASIN (`asin:`) is the audiobook-equivalent for Audible products.
+      // Both fall back to free-text title+author when neither is set,
+      // and we additionally retry with a canonical English title when
+      // one is provided — covers the common "user requested an Audible
+      // localisation, Hardcover only knows the English title" case.
       let bookMatches: BookshelfBook[] = [];
       let lookupKey: string | undefined;
+      const tryLookup = async (term: string, label: string) => {
+        if (bookMatches.length > 0) return;
+        bookMatches = await this.lookupBook(term);
+        if (bookMatches.length > 0) lookupKey = label;
+      };
       if (options.isbn13) {
-        bookMatches = await this.lookupBook(`isbn:${options.isbn13}`);
-        lookupKey = `isbn:${options.isbn13}`;
+        await tryLookup(`isbn:${options.isbn13}`, `isbn:${options.isbn13}`);
       }
-      if (bookMatches.length === 0 && options.isbn10) {
-        bookMatches = await this.lookupBook(`isbn:${options.isbn10}`);
-        lookupKey = `isbn:${options.isbn10}`;
+      if (options.isbn10) {
+        await tryLookup(`isbn:${options.isbn10}`, `isbn:${options.isbn10}`);
       }
-      if (bookMatches.length === 0) {
-        bookMatches = await this.lookupBook(
-          `${options.title} ${options.authorName}`
+      if (options.asin) {
+        await tryLookup(`asin:${options.asin}`, `asin:${options.asin}`);
+      }
+      await tryLookup(
+        `${options.title} ${options.authorName}`,
+        `text:"${options.title}" "${options.authorName}"`
+      );
+      if (
+        options.englishTitle &&
+        options.englishTitle.toLowerCase().trim() !==
+          options.title.toLowerCase().trim()
+      ) {
+        await tryLookup(
+          `${options.englishTitle} ${options.authorName}`,
+          `text:"${options.englishTitle}" "${options.authorName}"`
         );
-        lookupKey = `text:"${options.title}" "${options.authorName}"`;
       }
 
       const looseBooks = bookMatches as unknown as Record<string, unknown>[];
