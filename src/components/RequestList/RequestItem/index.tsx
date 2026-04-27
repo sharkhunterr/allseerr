@@ -218,7 +218,6 @@ const getNonTmdbInfo = (
         title: string;
         coverUrl?: string;
         comicVineId: number;
-        publisher?: string;
         status?: MediaStatus | null;
       }
     | undefined;
@@ -267,12 +266,15 @@ const getNonTmdbInfo = (
     };
   }
   if (request.type === MediaType.COMIC && cm) {
+    // Intentionally no `platform` field — the platform badge is for
+    // game-style metadata. Surfacing the publisher here would
+    // duplicate what's already on the comic detail page and cluttered
+    // the request card.
     return {
       title: cm.title,
       coverUrl: cm.coverUrl,
       href: `/comic/${cm.comicVineId}`,
       typeLabel: 'Comic',
-      platform: cm.publisher,
     };
   }
   return { title: 'Unknown', href: '#', typeLabel: request.type };
