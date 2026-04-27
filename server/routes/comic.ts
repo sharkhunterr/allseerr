@@ -242,6 +242,14 @@ comicRoutes.get('/:id', isAuthenticated(), requireMediaType('comic'), async (req
         .status(404)
         .json({ status: 404, message: 'Comic not found.' });
     }
+
+    // Local availability + dispatch reason if this comic is
+    // already requested. Falls through to nulls otherwise so the
+    // detail page renders unchanged for new comics.
+    const existingComicMedia = await getRepository(ComicMedia).findOne({
+      where: { comicVineId: volume.id },
+    });
+
     if (cfg.hideAdult && looksAdult(volume)) {
       return res
         .status(404)
@@ -325,6 +333,8 @@ comicRoutes.get('/:id', isAuthenticated(), requireMediaType('comic'), async (req
           name: p.name,
           role: p.role,
         })) ?? [],
+      mediaStatus: existingComicMedia?.status ?? null,
+      mediaStatusReason: existingComicMedia?.statusReason ?? null,
       mediaType: MediaType.COMIC,
     });
   } catch (e) {

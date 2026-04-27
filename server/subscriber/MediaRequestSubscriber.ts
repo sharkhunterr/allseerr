@@ -1133,13 +1133,25 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
 
     const result = await submitToBindery(media, entity.type);
-    if (result.success) {
+    const persist = async () => {
       if (entity.type === MediaType.BOOK) {
         await getRepository(BookMedia).save(media as BookMedia);
       } else {
         await getRepository(AudiobookMedia).save(media as AudiobookMedia);
       }
-    } else if (!result.noInstance) {
+    };
+    if (result.success) {
+      media.statusReason = null;
+      await persist();
+    } else if (result.noInstance) {
+      // Don't write a reason yet — sendToBookshelf runs right after
+      // and will either succeed (clearing) or write its own
+      // "no DM configured" reason if it also has no instance.
+    } else {
+      media.statusReason = result.message
+        ? `Dispatch to Bindery failed: ${result.message}`
+        : 'Dispatch to Bindery failed.';
+      await persist();
       logger.warn('Bindery dispatch did not succeed', {
         label: 'Media Request',
         requestId: entity.id,
@@ -1195,13 +1207,31 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
 
     const result = await submitToBookshelf(media, entity.type);
-    if (result.success) {
+    const persist = async () => {
       if (entity.type === MediaType.BOOK) {
         await getRepository(BookMedia).save(media as BookMedia);
       } else {
         await getRepository(AudiobookMedia).save(media as AudiobookMedia);
       }
-    } else if (!result.noInstance) {
+    };
+    const typeLabel = entity.type === MediaType.AUDIOBOOK ? 'audiobook' : 'book';
+    if (result.success) {
+      media.statusReason = null;
+      await persist();
+    } else if (result.noInstance) {
+      // Bookshelf is the second of the two book/audiobook
+      // dispatchers. If it also has no instance AND Bindery didn't
+      // already write a different reason, this means truly nothing
+      // is configured for this type — surface the manual workflow.
+      if (!media.statusReason) {
+        media.statusReason = `No ${typeLabel} download manager is configured. Bindery or Bookshelf can be enabled in Settings → Services → ${typeLabel === 'audiobook' ? 'Audiobooks' : 'Books'}, or this request can be fulfilled manually.`;
+        await persist();
+      }
+    } else {
+      media.statusReason = result.message
+        ? `Dispatch to Bookshelf failed: ${result.message}`
+        : 'Dispatch to Bookshelf failed.';
+      await persist();
       logger.warn('Bookshelf dispatch did not succeed', {
         label: 'Media Request',
         requestId: entity.id,
@@ -1238,10 +1268,19 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
 
     const result = await submitToMylar(media);
+    const { ComicMedia } = await import('@server/entity/ComicMedia');
     if (result.success) {
-      const { ComicMedia } = await import('@server/entity/ComicMedia');
+      media.statusReason = null;
       await getRepository(ComicMedia).save(media);
-    } else if (!result.noInstance) {
+    } else if (result.noInstance) {
+      media.statusReason =
+        'No comic download manager is configured. Mylar3 can be enabled in Settings → Services → Comics, or this request can be fulfilled manually.';
+      await getRepository(ComicMedia).save(media);
+    } else {
+      media.statusReason = result.message
+        ? `Dispatch to Mylar3 failed: ${result.message}`
+        : 'Dispatch to Mylar3 failed.';
+      await getRepository(ComicMedia).save(media);
       logger.warn('Mylar dispatch did not succeed', {
         label: 'Media Request',
         requestId: entity.id,
@@ -1280,10 +1319,19 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
 
     const result = await submitToSuwayomi(media);
+    const { MangaMedia } = await import('@server/entity/MangaMedia');
     if (result.success) {
-      const { MangaMedia } = await import('@server/entity/MangaMedia');
+      media.statusReason = null;
       await getRepository(MangaMedia).save(media);
-    } else if (!result.noInstance) {
+    } else if (result.noInstance) {
+      media.statusReason =
+        'No manga download manager is configured. Suwayomi (Tachidesk) can be enabled in Settings → Services → Manga, or this request can be fulfilled manually.';
+      await getRepository(MangaMedia).save(media);
+    } else {
+      media.statusReason = result.message
+        ? `Dispatch to Suwayomi failed: ${result.message}`
+        : 'Dispatch to Suwayomi failed.';
+      await getRepository(MangaMedia).save(media);
       logger.warn('Suwayomi dispatch did not succeed', {
         label: 'Media Request',
         requestId: entity.id,

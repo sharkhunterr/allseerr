@@ -315,6 +315,13 @@ gameRoutes.post('/request', isAuthenticated(), requireMediaType('game'), async (
         genre: body.genre,
         coverUrl: body.coverUrl,
         status: MediaStatus.PENDING,
+        // No automated dispatcher exists for games — ROMM is a
+        // library scanner, not a download manager. Surface the
+        // manual-workflow nature of the request up front so users
+        // (and admins) understand why "Requested" doesn't trigger
+        // a download.
+        statusReason:
+          'Game requests have no automated download manager. Once approved, add the ROM to your ROMM library manually — the scanner will mark it AVAILABLE on the next pass.',
       });
       await gameMediaRepo.save(gameMedia);
     } else if (gameMedia.status !== MediaStatus.AVAILABLE) {
@@ -609,6 +616,7 @@ gameRoutes.get('/:igdbId', isAuthenticated(), async (req, res) => {
         mediaStatus: availableMatch
           ? MediaStatus.AVAILABLE
           : (matchedMedia?.status ?? null),
+        mediaStatusReason: matchedMedia?.statusReason ?? null,
         gameMediaId: matchedMedia?.id ?? null,
         rommUrl: remapRommPublicUrl(matchedMedia?.rommUrl),
       };

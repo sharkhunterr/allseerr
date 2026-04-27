@@ -65,6 +65,12 @@ export class ComicMedia {
   @Column({ type: 'varchar', nullable: true })
   public downloadManagerExternalId?: string | null;
 
+  // Human-readable explanation of why the request is in its current
+  // state — set at dispatch time by the subscriber. Null means
+  // "nothing to communicate beyond what the badge already says".
+  @Column({ type: 'varchar', nullable: true })
+  public statusReason?: string | null;
+
   // Public URL of the comic inside the configured library server
   // (Komga / Mylar / etc.) so the detail page can show a "Read" /
   // "Open" button when AVAILABLE.

@@ -5,6 +5,7 @@ import CachedImage from '@app/components/Common/CachedImage';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
 import RequestModal from '@app/components/RequestModal';
 import StatusBadge from '@app/components/StatusBadge';
+import StatusReason from '@app/components/StatusReason';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -175,6 +176,7 @@ const getNonTmdbInfo = (
   href: string;
   typeLabel: string;
   platform?: string;
+  statusReason?: string | null;
 } => {
   const gm = request.gameMedia as
     | {
@@ -183,6 +185,7 @@ const getNonTmdbInfo = (
         igdbId: number;
         platformName?: string;
         status?: MediaStatus | null;
+        statusReason?: string | null;
       }
     | undefined;
   const bm = request.bookMedia as
@@ -193,6 +196,7 @@ const getNonTmdbInfo = (
         foreignBookId?: string;
         covers?: number[];
         status?: MediaStatus | null;
+        statusReason?: string | null;
       }
     | undefined;
   const am = request.audiobookMedia as
@@ -203,6 +207,7 @@ const getNonTmdbInfo = (
         foreignBookId?: string;
         covers?: number[];
         status?: MediaStatus | null;
+        statusReason?: string | null;
       }
     | undefined;
   const mm = request.mangaMedia as
@@ -211,6 +216,7 @@ const getNonTmdbInfo = (
         coverUrl?: string;
         anilistId: number;
         status?: MediaStatus | null;
+        statusReason?: string | null;
       }
     | undefined;
   const cm = request.comicMedia as
@@ -219,6 +225,7 @@ const getNonTmdbInfo = (
         coverUrl?: string;
         comicVineId: number;
         status?: MediaStatus | null;
+        statusReason?: string | null;
       }
     | undefined;
 
@@ -229,6 +236,7 @@ const getNonTmdbInfo = (
       href: `/game/${gm.igdbId}`,
       typeLabel: 'Game',
       platform: gm.platformName,
+      statusReason: gm.statusReason,
     };
   }
   if (request.type === MediaType.BOOK && bm) {
@@ -242,6 +250,7 @@ const getNonTmdbInfo = (
           : undefined),
       href: `/book/${bookId}`,
       typeLabel: 'Book',
+      statusReason: bm.statusReason,
     };
   }
   if (request.type === MediaType.AUDIOBOOK && am) {
@@ -255,6 +264,7 @@ const getNonTmdbInfo = (
           : undefined),
       href: `/book/${bookId}`,
       typeLabel: 'Audiobook',
+      statusReason: am.statusReason,
     };
   }
   if (request.type === MediaType.MANGA && mm) {
@@ -263,6 +273,7 @@ const getNonTmdbInfo = (
       coverUrl: mm.coverUrl,
       href: `/manga/${mm.anilistId}`,
       typeLabel: 'Manga',
+      statusReason: mm.statusReason,
     };
   }
   if (request.type === MediaType.COMIC && cm) {
@@ -275,6 +286,7 @@ const getNonTmdbInfo = (
       coverUrl: cm.coverUrl,
       href: `/comic/${cm.comicVineId}`,
       typeLabel: 'Comic',
+      statusReason: cm.statusReason,
     };
   }
   return { title: 'Unknown', href: '#', typeLabel: request.type };
@@ -686,14 +698,17 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               <span className="card-field-name">
                 {intl.formatMessage(globalMessages.status)}
               </span>
-              {showRequestBadge ? (
-                <NonTmdbStatusBadge status={requestStatus} />
-              ) : (
-                <StatusBadge
-                  status={mediaStatus ?? undefined}
-                  title={info.title}
-                />
-              )}
+              <span className="inline-flex items-center gap-1">
+                {showRequestBadge ? (
+                  <NonTmdbStatusBadge status={requestStatus} />
+                ) : (
+                  <StatusBadge
+                    status={mediaStatus ?? undefined}
+                    title={info.title}
+                  />
+                )}
+                <StatusReason reason={info.statusReason} compact />
+              </span>
             </div>
             {renderMetadata()}
           </div>

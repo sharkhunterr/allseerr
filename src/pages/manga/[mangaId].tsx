@@ -2,6 +2,8 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import MangaRequestModal from '@app/components/RequestModal/MangaRequestModal';
 import Slider from '@app/components/Slider';
+import StatusBadge from '@app/components/StatusBadge';
+import StatusReason from '@app/components/StatusReason';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
@@ -79,6 +81,8 @@ interface MangaDetailData {
   authorPhotoUrl?: string;
   authorRole?: string;
   relations?: MangaRelation[];
+  mediaStatus?: number | null;
+  mediaStatusReason?: string | null;
 }
 
 const MangaDetailPage: NextPage = () => {
@@ -168,7 +172,7 @@ const MangaDetailPage: NextPage = () => {
           )}
         </div>
         <div className="media-title">
-          <div className="media-status">
+          <div className="media-status flex items-center gap-2">
             <span className="rounded-full border border-fuchsia-500 bg-fuchsia-600/80 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-md">
               {(data.countryOfOrigin ?? 'jp').toUpperCase() === 'KR'
                 ? 'Manhwa'
@@ -176,6 +180,11 @@ const MangaDetailPage: NextPage = () => {
                   ? 'Manhua'
                   : 'Manga'}
             </span>
+            <StatusBadge
+              status={data.mediaStatus ?? undefined}
+              title={data.title}
+            />
+            <StatusReason reason={data.mediaStatusReason} />
           </div>
           <h1>{data.title}</h1>
           {data.titleNative && data.titleNative !== data.title && (

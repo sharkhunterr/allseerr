@@ -232,6 +232,14 @@ mangaRoutes.get('/:id', isAuthenticated(), requireMediaType('manga'), async (req
         .json({ status: 404, message: 'Manga not found.' });
     }
 
+    // Local availability + dispatch reason if this anilistId has
+    // already been requested. Falls through to nulls for un-
+    // requested manga so the detail page renders the same way as
+    // before (no badge, no info icon).
+    const existingMangaMedia = await getRepository(MangaMedia).findOne({
+      where: { anilistId: media.id },
+    });
+
     if (cfg.hideAdult && media.isAdult) {
       return res
         .status(404)
@@ -319,6 +327,8 @@ mangaRoutes.get('/:id', isAuthenticated(), requireMediaType('manga'), async (req
         primaryStaff?.image?.large ?? primaryStaff?.image?.medium ?? undefined,
       authorRole: primaryStaffEdge?.role ?? undefined,
       relations,
+      mediaStatus: existingMangaMedia?.status ?? null,
+      mediaStatusReason: existingMangaMedia?.statusReason ?? null,
       mediaType: MediaType.MANGA,
     });
   } catch (e) {

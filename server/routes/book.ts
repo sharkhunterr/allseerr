@@ -2288,6 +2288,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         return best ? cleanOpenLibraryText(best) : undefined;
       })(),
       mediaStatus: existing?.status ?? null,
+      mediaStatusReason: existing?.statusReason ?? null,
       bookMediaId: existing?.id ?? null,
       libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),
     });

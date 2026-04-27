@@ -4,6 +4,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import GameRequestModal from '@app/components/GameRequestModal';
 import StatusBadge from '@app/components/StatusBadge';
+import StatusReason from '@app/components/StatusReason';
 import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -46,6 +47,7 @@ interface Platform {
   name: string;
   abbreviation?: string;
   mediaStatus?: MediaStatus | null;
+  mediaStatusReason?: string | null;
   gameMediaId?: number | null;
   rommUrl?: string | null;
 }
@@ -194,6 +196,7 @@ const PlatformRequestButton = ({
           {platform.name}
         </span>
         <StatusBadge status={effectiveStatus ?? undefined} title={game.title} />
+        <StatusReason reason={platform.mediaStatusReason} compact />
       </div>
       {isAvailable && platform.rommUrl ? (
         <a href={platform.rommUrl} target="_blank" rel="noopener noreferrer">

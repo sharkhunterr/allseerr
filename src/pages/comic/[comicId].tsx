@@ -2,6 +2,8 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import ComicRequestModal from '@app/components/RequestModal/ComicRequestModal';
+import StatusBadge from '@app/components/StatusBadge';
+import StatusReason from '@app/components/StatusReason';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
@@ -55,6 +57,8 @@ interface ComicDetailData {
   creatorRole?: string;
   creatorPhotoUrl?: string;
   creatorCountry?: string;
+  mediaStatus?: number | null;
+  mediaStatusReason?: string | null;
 }
 
 // Convert an ISO-3166-1 alpha-2 country code to its flag emoji
@@ -183,10 +187,15 @@ const ComicDetailPage: NextPage = () => {
           )}
         </div>
         <div className="media-title">
-          <div className="media-status">
+          <div className="media-status flex items-center gap-2">
             <span className="rounded-full border border-amber-500 bg-amber-600/80 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-md">
               Comic
             </span>
+            <StatusBadge
+              status={data.mediaStatus ?? undefined}
+              title={data.title}
+            />
+            <StatusReason reason={data.mediaStatusReason} />
           </div>
           <h1>{data.title}</h1>
           {data.aliases && (
