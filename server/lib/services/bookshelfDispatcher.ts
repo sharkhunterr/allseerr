@@ -85,6 +85,7 @@ export async function submitToBookshelf(
     //
     // Best-effort end-to-end — failures don't block the dispatch.
     let englishTitle: string | undefined;
+    let englishAuthor: string | undefined;
     if (mediaType === MediaType.AUDIOBOOK) {
       const bookCfg = settings.book?.metadataProviders;
       if (bookCfg?.hardcoverApiKey) {
@@ -119,11 +120,27 @@ export async function submitToBookshelf(
             hit.title.toLowerCase().trim() !== media.title.toLowerCase().trim()
           ) {
             englishTitle = hit.title;
+            // Hardcover's primary author is usually a single name
+            // (the original writer) — Goodreads/Bookshelf index by
+            // that, not by the Audible-style multi-credit string
+            // (narrator + adaptation director + writer). Pass it
+            // through so the English-title retry lookup uses the
+            // form the upstream catalogue actually carries.
+            const primary = hardcoverPrimaryAuthor(hit.contributions) ?? '';
+            if (
+              primary &&
+              primary.toLowerCase().trim() !==
+                media.authorName.toLowerCase().trim()
+            ) {
+              englishAuthor = primary;
+            }
             logger.info('Bookshelf dispatch: resolved English title fallback', {
               label: 'bookshelf',
               asin: mediaAsin,
               localised: media.title,
               english: englishTitle,
+              localisedAuthor: media.authorName,
+              englishAuthor,
               hardcoverId: hit.id,
             });
           }
@@ -144,6 +161,7 @@ export async function submitToBookshelf(
       isbn10: mediaIsbn10 ?? undefined,
       asin: mediaAsin ?? undefined,
       englishTitle,
+      englishAuthor,
       foreignBookId: media.foreignBookId,
       foreignAuthorId: media.foreignAuthorId ?? undefined,
       qualityProfileId: instance.activeProfileId,

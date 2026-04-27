@@ -42,6 +42,15 @@ export interface BookshelfBookAddOptions {
    */
   englishTitle?: string;
   /**
+   * Optional canonical author name to pair with `englishTitle` in
+   * the retry. Helps when the Audible product credits multiple
+   * people (e.g. narrator + screenwriter + author) but the
+   * underlying Hardcover/Goodreads record is filed under the
+   * primary writer alone — `"Alien: Sea of Sorrows" "James A.
+   * Moore"` matches where `"Dirk Maggs, James A. Moore"` doesn't.
+   */
+  englishAuthor?: string;
+  /**
    * OpenLibrary work key kept for logging/troubleshooting only — Bookshelf
    * uses Goodreads/Hardcover numeric IDs internally and won't recognise OL
    * keys, so we resolve the actual Bookshelf foreign IDs via lookup.
@@ -498,14 +507,29 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         options.englishTitle.toLowerCase().trim() !==
           options.title.toLowerCase().trim()
       ) {
+        // Prefer the canonical Hardcover/Goodreads author when one
+        // was passed (single primary writer), then fall back to the
+        // local authorName which may include credits like narrators
+        // or adaptation directors that confuse the upstream index.
+        const retryAuthor = options.englishAuthor ?? options.authorName;
         logger.info('Bookshelf book lookup retrying with English title', {
           label: 'Bookshelf API',
           localised: options.title,
           english: options.englishTitle,
+          retryAuthor,
         });
         await tryLookup(
-          `${options.englishTitle} ${options.authorName}`,
-          `text:"${options.englishTitle}" "${options.authorName}"`
+          `${options.englishTitle} ${retryAuthor}`,
+          `text:"${options.englishTitle}" "${retryAuthor}"`
+        );
+        // Final ditch — title alone. Goodreads' fuzzy match is good
+        // enough that "Alien: Sea of Sorrows" will land on the
+        // right work even without an author hint, and we've
+        // already verified identity client-side via Hardcover's
+        // ASIN/title cross-match.
+        await tryLookup(
+          options.englishTitle,
+          `text:"${options.englishTitle}"`
         );
       }
 
