@@ -350,6 +350,17 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     qualityProfileId: number;
     metadataProfileId: number;
     rootFolderPath: string;
+    /**
+     * Optional author resource already resolved upstream (e.g. the
+     * `author` object embedded in a `/book/lookup` result). When
+     * present, it replaces the `/author/lookup?term=…` round-trip in
+     * the not-yet-persisted branch — Bookshelf's author lookup
+     * endpoint forwards to Hardcover and frequently times out at
+     * 25s when Hardcover is slow, so reusing the candidate we
+     * already pulled (and which carries the same shape) avoids a
+     * gratuitous failure when only the name is the bottleneck.
+     */
+    preResolvedCandidate?: Record<string, unknown>;
   }): Promise<{ author: Record<string, unknown>; wasExisting: boolean }> {
     const existingList = await this.axios
       .get<Record<string, unknown>[]>('/author', { timeout: 25000 })
@@ -371,14 +382,21 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     );
     if (byName) return { author: byName, wasExisting: true };
 
-    // Not persisted — lookup metadata and POST /author
-    const candidates = await this.lookupAuthor(options.authorName);
-    const candidate =
-      candidates.find(
-        (a) =>
-          typeof a.authorName === 'string' &&
-          a.authorName.toLowerCase() === nameLc
-      ) ?? candidates[0];
+    // Not persisted — POST /author. Use the upstream-supplied
+    // candidate when the caller already has one (saves a
+    // /author/lookup round-trip), otherwise fall back to the
+    // network lookup.
+    let candidate: Record<string, unknown> | undefined =
+      options.preResolvedCandidate;
+    if (!candidate) {
+      const candidates = await this.lookupAuthor(options.authorName);
+      candidate =
+        candidates.find(
+          (a) =>
+            typeof a.authorName === 'string' &&
+            a.authorName.toLowerCase() === nameLc
+        ) ?? candidates[0];
+    }
     if (!candidate) {
       throw new Error(
         `Bookshelf ensureAuthor: no lookup result for "${options.authorName}"`
@@ -570,19 +588,29 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       //      forms like "Dirk Maggs, James A. Moore" timeout
       //      Bookshelf's /author/lookup, which has nothing indexed
       //      for the concatenation.
-      const matchedAuthorName =
-        (bookMatch.author as { authorName?: string } | undefined)?.authorName;
+      const matchedAuthor = bookMatch.author as
+        | (Record<string, unknown> & {
+            authorName?: string;
+            foreignAuthorId?: string;
+          })
+        | undefined;
+      const matchedAuthorName = matchedAuthor?.authorName;
       const ensureAuthorName =
         matchedAuthorName ?? options.englishAuthor ?? options.authorName;
       const { author: persistedAuthor, wasExisting: authorWasExisting } =
         await this.ensureAuthor({
           authorName: ensureAuthorName,
-          foreignAuthorId:
-            (bookMatch.author as { foreignAuthorId?: string } | undefined)
-              ?.foreignAuthorId ?? undefined,
+          foreignAuthorId: matchedAuthor?.foreignAuthorId ?? undefined,
           qualityProfileId: options.qualityProfileId,
           metadataProfileId: options.metadataProfileId,
           rootFolderPath: options.rootFolderPath,
+          // Reuse the author resource already attached to the
+          // matched book — bypasses /author/lookup which forwards
+          // to Hardcover and times out at 25s when Hardcover is
+          // slow. The shape is the same (Bookshelf returns a full
+          // author resource embedded inside each /book/lookup
+          // result), so POST /author below accepts it as-is.
+          preResolvedCandidate: matchedAuthor,
         });
 
       // Step 3 — Short-circuit: if the book already exists in Bookshelf
