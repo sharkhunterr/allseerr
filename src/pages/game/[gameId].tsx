@@ -3,11 +3,13 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import GameRequestModal from '@app/components/GameRequestModal';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import StatusBadge from '@app/components/StatusBadge';
+import StatusReason from '@app/components/StatusReason';
 import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
-import { ExclamationTriangleIcon, PlayIcon } from '@heroicons/react/24/outline';
+import { PlayIcon } from '@heroicons/react/24/outline';
 import { MediaStatus } from '@server/constants/media';
 import axios from 'axios';
 import type { NextPage } from 'next';
@@ -24,8 +26,6 @@ const messages = defineMessages('pages.GameDetail', {
   playOnRomm: 'Play on ROMM',
   selectPlatform: 'Select platform...',
   awaitingAddition: 'Approved — Awaiting Manual Addition',
-  manualWorkflow:
-    'Games are added manually by the admin. There is no automatic download.',
   requestSuccess: 'Game requested successfully!',
   requestFailed: 'Failed to request game.',
   requestDuplicate: 'This game has already been requested for this platform.',
@@ -37,8 +37,7 @@ const messages = defineMessages('pages.GameDetail', {
   publisher: 'Publisher',
   genre: 'Genre',
   rating: 'Rating',
-  collectionCountFmt:
-    '{count, plural, one {# game} other {# games}}',
+  collectionCountFmt: '{count, plural, one {# game} other {# games}}',
 });
 
 interface Platform {
@@ -46,6 +45,7 @@ interface Platform {
   name: string;
   abbreviation?: string;
   mediaStatus?: MediaStatus | null;
+  mediaStatusReason?: string | null;
   gameMediaId?: number | null;
   rommUrl?: string | null;
 }
@@ -194,6 +194,7 @@ const PlatformRequestButton = ({
           {platform.name}
         </span>
         <StatusBadge status={effectiveStatus ?? undefined} title={game.title} />
+        <StatusReason reason={platform.mediaStatusReason} compact />
       </div>
       {isAvailable && platform.rommUrl ? (
         <a href={platform.rommUrl} target="_blank" rel="noopener noreferrer">
@@ -351,20 +352,13 @@ const GameDetailPage: NextPage = () => {
           revalidate();
         }}
       />
+      <RequestNoticesAlert scope="game" className="my-4" />
       <div className="media-overview">
         <div className="media-overview-left">
           <h2>{intl.formatMessage(messages.overview)}</h2>
           <p>
             {game.summary || intl.formatMessage(messages.overviewunavailable)}
           </p>
-
-          {/* Manual workflow warning */}
-          <div className="mt-6 flex items-start gap-2 rounded-lg bg-amber-900/30 p-3">
-            <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-400" />
-            <p className="text-sm text-amber-200">
-              {intl.formatMessage(messages.manualWorkflow)}
-            </p>
-          </div>
 
           {/* Platform list with request buttons */}
           {game.platforms.length > 0 && (
@@ -394,9 +388,7 @@ const GameDetailPage: NextPage = () => {
                   type="button"
                   className="group relative z-0 mb-6 block w-full cursor-pointer overflow-hidden rounded-lg bg-gray-800 bg-cover bg-center text-left shadow-md ring-1 ring-gray-700 transition duration-300 hover:scale-105 hover:ring-gray-500"
                   onClick={() =>
-                    router.push(
-                      `/game/collection/${encodeURIComponent(c.id)}`
-                    )
+                    router.push(`/game/collection/${encodeURIComponent(c.id)}`)
                   }
                 >
                   {(c.coverUrl || game.coverUrl) && (

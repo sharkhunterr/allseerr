@@ -4,6 +4,7 @@ import Modal from '@app/components/Common/Modal';
 import type { RequestOverrides } from '@app/components/RequestModal/AdvancedRequester';
 import AdvancedRequester from '@app/components/RequestModal/AdvancedRequester';
 import QuotaDisplay from '@app/components/RequestModal/QuotaDisplay';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import SearchByNameModal from '@app/components/RequestModal/SearchByNameModal';
 import useSettings from '@app/hooks/useSettings';
 import { useUser } from '@app/hooks/useUser';
@@ -469,6 +470,7 @@ const TvRequestModal = ({
       }
       backdrop={`https://image.tmdb.org/t/p/w1920_and_h800_multi_faces/${data?.backdropPath}`}
     >
+      <RequestNoticesAlert scope="tv" className="mt-4" />
       {editRequest
         ? isOwner
           ? intl.formatMessage(messages.pendingapproval)

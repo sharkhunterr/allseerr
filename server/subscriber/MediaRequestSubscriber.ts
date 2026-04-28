@@ -23,6 +23,8 @@ import SeasonRequest from '@server/entity/SeasonRequest';
 import notificationManager, { Notification } from '@server/lib/notifications';
 import { submitToBindery } from '@server/lib/services/binderyDispatcher';
 import { submitToBookshelf } from '@server/lib/services/bookshelfDispatcher';
+import { submitToMylar } from '@server/lib/services/mylarDispatcher';
+import { submitToSuwayomi } from '@server/lib/services/suwayomiDispatcher';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isEqual, truncate } from 'lodash';
@@ -835,12 +837,20 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         entity.status === MediaRequestStatus.APPROVED &&
         (entity.type === MediaType.BOOK ||
           entity.type === MediaType.AUDIOBOOK ||
-          entity.type === MediaType.GAME)
+          entity.type === MediaType.GAME ||
+          entity.type === MediaType.MANGA ||
+          entity.type === MediaType.COMIC)
       ) {
         const requestRepository = getRepository(MediaRequest);
         const fullRequest = await requestRepository.findOne({
           where: { id: entity.id },
-          relations: ['bookMedia', 'audiobookMedia', 'gameMedia'],
+          relations: [
+            'bookMedia',
+            'audiobookMedia',
+            'gameMedia',
+            'mangaMedia',
+            'comicMedia',
+          ],
         });
         if (fullRequest?.bookMedia) {
           if (fullRequest.bookMedia.status !== MediaStatus.AVAILABLE) {
@@ -861,6 +871,18 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
             await getRepository(GameMedia).save(
               fullRequest.gameMedia as GameMediaType
             );
+          }
+        } else if (fullRequest?.mangaMedia) {
+          if (fullRequest.mangaMedia.status !== MediaStatus.AVAILABLE) {
+            const { MangaMedia } = await import('@server/entity/MangaMedia');
+            fullRequest.mangaMedia.status = MediaStatus.PROCESSING;
+            await getRepository(MangaMedia).save(fullRequest.mangaMedia);
+          }
+        } else if (fullRequest?.comicMedia) {
+          if (fullRequest.comicMedia.status !== MediaStatus.AVAILABLE) {
+            const { ComicMedia } = await import('@server/entity/ComicMedia');
+            fullRequest.comicMedia.status = MediaStatus.PROCESSING;
+            await getRepository(ComicMedia).save(fullRequest.comicMedia);
           }
         }
       }
@@ -1019,15 +1041,34 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
         }
       }
       if (entity.audiobookMedia) {
-        const { AudiobookMedia } = await import(
-          '@server/entity/AudiobookMedia'
-        );
+        const { AudiobookMedia } =
+          await import('@server/entity/AudiobookMedia');
         const am = await manager.findOne(AudiobookMedia, {
           where: { id: entity.audiobookMedia.id },
         });
         if (am && am.status !== MediaStatus.AVAILABLE) {
           am.status = MediaStatus.UNKNOWN;
           await manager.save(am);
+        }
+      }
+      if (entity.mangaMedia) {
+        const { MangaMedia } = await import('@server/entity/MangaMedia');
+        const mm = await manager.findOne(MangaMedia, {
+          where: { id: entity.mangaMedia.id },
+        });
+        if (mm && mm.status !== MediaStatus.AVAILABLE) {
+          mm.status = MediaStatus.UNKNOWN;
+          await manager.save(mm);
+        }
+      }
+      if (entity.comicMedia) {
+        const { ComicMedia } = await import('@server/entity/ComicMedia');
+        const cm = await manager.findOne(ComicMedia, {
+          where: { id: entity.comicMedia.id },
+        });
+        if (cm && cm.status !== MediaStatus.AVAILABLE) {
+          cm.status = MediaStatus.UNKNOWN;
+          await manager.save(cm);
         }
       }
       return;
@@ -1072,10 +1113,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     if (entity.status !== MediaRequestStatus.APPROVED) {
       return;
     }
-    if (
-      entity.type !== MediaType.BOOK &&
-      entity.type !== MediaType.AUDIOBOOK
-    ) {
+    if (entity.type !== MediaType.BOOK && entity.type !== MediaType.AUDIOBOOK) {
       return;
     }
 
@@ -1091,13 +1129,25 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
 
     const result = await submitToBindery(media, entity.type);
-    if (result.success) {
+    const persist = async () => {
       if (entity.type === MediaType.BOOK) {
         await getRepository(BookMedia).save(media as BookMedia);
       } else {
         await getRepository(AudiobookMedia).save(media as AudiobookMedia);
       }
-    } else if (!result.noInstance) {
+    };
+    if (result.success) {
+      media.statusReason = null;
+      await persist();
+    } else if (result.noInstance) {
+      // Don't write a reason yet — sendToBookshelf runs right after
+      // and will either succeed (clearing) or write its own
+      // "no DM configured" reason if it also has no instance.
+    } else {
+      media.statusReason = result.message
+        ? `Dispatch to Bindery failed: ${result.message}`
+        : 'Dispatch to Bindery failed.';
+      await persist();
       logger.warn('Bindery dispatch did not succeed', {
         label: 'Media Request',
         requestId: entity.id,
@@ -1115,10 +1165,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     if (entity.status !== MediaRequestStatus.APPROVED) {
       return;
     }
-    if (
-      entity.type !== MediaType.BOOK &&
-      entity.type !== MediaType.AUDIOBOOK
-    ) {
+    if (entity.type !== MediaType.BOOK && entity.type !== MediaType.AUDIOBOOK) {
       return;
     }
 
@@ -1153,14 +1200,133 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
 
     const result = await submitToBookshelf(media, entity.type);
-    if (result.success) {
+    const persist = async () => {
       if (entity.type === MediaType.BOOK) {
         await getRepository(BookMedia).save(media as BookMedia);
       } else {
         await getRepository(AudiobookMedia).save(media as AudiobookMedia);
       }
-    } else if (!result.noInstance) {
+    };
+    const typeLabel =
+      entity.type === MediaType.AUDIOBOOK ? 'audiobook' : 'book';
+    if (result.success) {
+      media.statusReason = null;
+      await persist();
+    } else if (result.noInstance) {
+      // Bookshelf is the second of the two book/audiobook
+      // dispatchers. If it also has no instance AND Bindery didn't
+      // already write a different reason, this means truly nothing
+      // is configured for this type — surface the manual workflow.
+      if (!media.statusReason) {
+        media.statusReason = `No ${typeLabel} download manager is configured. Bindery or Bookshelf can be enabled in Settings → Services → ${typeLabel === 'audiobook' ? 'Audiobooks' : 'Books'}, or this request can be fulfilled manually.`;
+        await persist();
+      }
+    } else {
+      media.statusReason = result.message
+        ? `Dispatch to Bookshelf failed: ${result.message}`
+        : 'Dispatch to Bookshelf failed.';
+      await persist();
       logger.warn('Bookshelf dispatch did not succeed', {
+        label: 'Media Request',
+        requestId: entity.id,
+        message: result.message,
+      });
+    }
+  }
+
+  /**
+   * Dispatches comic requests to a configured Mylar3 instance on
+   * approval. Skips silently when Mylar isn't enabled — manual
+   * workflow (parallel to Suwayomi-for-manga / ROMM-for-games).
+   */
+  public async sendToMylar(entity: MediaRequest): Promise<void> {
+    if (entity.status !== MediaRequestStatus.APPROVED) {
+      return;
+    }
+    if (entity.type !== MediaType.COMIC) {
+      return;
+    }
+
+    const requestRepo = getRepository(MediaRequest);
+    const fullRequest = await requestRepo.findOne({
+      where: { id: entity.id },
+      relations: ['comicMedia'],
+    });
+    const media = fullRequest?.comicMedia;
+    if (!media) {
+      return;
+    }
+
+    if (media.downloadManagerExternalId) {
+      return;
+    }
+
+    const result = await submitToMylar(media);
+    const { ComicMedia } = await import('@server/entity/ComicMedia');
+    if (result.success) {
+      media.statusReason = null;
+      await getRepository(ComicMedia).save(media);
+    } else if (result.noInstance) {
+      media.statusReason =
+        'No comic download manager is configured. Mylar3 can be enabled in Settings → Services → Comics, or this request can be fulfilled manually.';
+      await getRepository(ComicMedia).save(media);
+    } else {
+      media.statusReason = result.message
+        ? `Dispatch to Mylar3 failed: ${result.message}`
+        : 'Dispatch to Mylar3 failed.';
+      await getRepository(ComicMedia).save(media);
+      logger.warn('Mylar dispatch did not succeed', {
+        label: 'Media Request',
+        requestId: entity.id,
+        message: result.message,
+      });
+    }
+  }
+
+  /**
+   * Dispatches manga requests to a configured Suwayomi (Tachidesk)
+   * instance on approval. Skips silently when Suwayomi is not enabled
+   * — that's the manual-workflow case (parallel to ROMM for games).
+   */
+  public async sendToSuwayomi(entity: MediaRequest): Promise<void> {
+    if (entity.status !== MediaRequestStatus.APPROVED) {
+      return;
+    }
+    if (entity.type !== MediaType.MANGA) {
+      return;
+    }
+
+    const requestRepo = getRepository(MediaRequest);
+    const fullRequest = await requestRepo.findOne({
+      where: { id: entity.id },
+      relations: ['mangaMedia'],
+    });
+    const media = fullRequest?.mangaMedia;
+    if (!media) {
+      return;
+    }
+
+    // Already dispatched — no point re-submitting on every approval
+    // toggle.
+    if (media.downloadManagerExternalId) {
+      return;
+    }
+
+    const result = await submitToSuwayomi(media);
+    const { MangaMedia } = await import('@server/entity/MangaMedia');
+    if (result.success) {
+      media.statusReason = null;
+      await getRepository(MangaMedia).save(media);
+    } else if (result.noInstance) {
+      media.statusReason =
+        'No manga download manager is configured. Suwayomi (Tachidesk) can be enabled in Settings → Services → Manga, or this request can be fulfilled manually.';
+      await getRepository(MangaMedia).save(media);
+    } else {
+      media.statusReason = result.message
+        ? `Dispatch to Suwayomi failed: ${result.message}`
+        : 'Dispatch to Suwayomi failed.';
+      await getRepository(MangaMedia).save(media);
+      logger.warn('Suwayomi dispatch did not succeed', {
         label: 'Media Request',
         requestId: entity.id,
         message: result.message,
@@ -1178,6 +1344,8 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToSonarr(event.entity as MediaRequest);
       await this.sendToBindery(event.entity as MediaRequest);
       await this.sendToBookshelf(event.entity as MediaRequest);
+      await this.sendToSuwayomi(event.entity as MediaRequest);
+      await this.sendToMylar(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterUpdate subscriber', {
         label: 'Media Request',
@@ -1219,6 +1387,8 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToSonarr(event.entity as MediaRequest);
       await this.sendToBindery(event.entity as MediaRequest);
       await this.sendToBookshelf(event.entity as MediaRequest);
+      await this.sendToSuwayomi(event.entity as MediaRequest);
+      await this.sendToMylar(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterInsert subscriber', {
         label: 'Media Request',

@@ -28,10 +28,13 @@ export const messages = defineMessages('components.PermissionEdit', {
   requestBook: 'Request Books',
   requestBookDescription: 'Grant permission to submit book requests.',
   requestAudiobook: 'Request Audiobooks',
-  requestAudiobookDescription:
-    'Grant permission to submit audiobook requests.',
+  requestAudiobookDescription: 'Grant permission to submit audiobook requests.',
   requestGame: 'Request Games',
   requestGameDescription: 'Grant permission to submit game requests.',
+  requestManga: 'Request Manga',
+  requestMangaDescription: 'Grant permission to submit manga requests.',
+  requestComic: 'Request Comics',
+  requestComicDescription: 'Grant permission to submit comic requests.',
   autoapprove: 'Auto-Approve',
   autoapproveDescription:
     'Grant automatic approval for all non-4K media requests.',
@@ -48,6 +51,10 @@ export const messages = defineMessages('components.PermissionEdit', {
     'Grant automatic approval for audiobook requests.',
   autoapproveGame: 'Auto-Approve Games',
   autoapproveGameDescription: 'Grant automatic approval for game requests.',
+  autoapproveManga: 'Auto-Approve Manga',
+  autoapproveMangaDescription: 'Grant automatic approval for manga requests.',
+  autoapproveComic: 'Auto-Approve Comics',
+  autoapproveComicDescription: 'Grant automatic approval for comic requests.',
   autoapprove4k: 'Auto-Approve 4K',
   autoapprove4kDescription:
     'Grant automatic approval for all 4K media requests.',
@@ -214,6 +221,18 @@ export const PermissionEdit = ({
           description: intl.formatMessage(messages.requestGameDescription),
           permission: Permission.REQUEST_GAME,
         },
+        {
+          id: 'request-manga',
+          name: intl.formatMessage(messages.requestManga),
+          description: intl.formatMessage(messages.requestMangaDescription),
+          permission: Permission.REQUEST_MANGA,
+        },
+        {
+          id: 'request-comic',
+          name: intl.formatMessage(messages.requestComic),
+          description: intl.formatMessage(messages.requestComicDescription),
+          permission: Permission.REQUEST_COMIC,
+        },
       ],
     },
     {
@@ -254,9 +273,7 @@ export const PermissionEdit = ({
         {
           id: 'autoapprovebook',
           name: intl.formatMessage(messages.autoapproveBook),
-          description: intl.formatMessage(
-            messages.autoapproveBookDescription
-          ),
+          description: intl.formatMessage(messages.autoapproveBookDescription),
           permission: Permission.AUTO_APPROVE_BOOK,
           requires: [
             {
@@ -282,13 +299,35 @@ export const PermissionEdit = ({
         {
           id: 'autoapprovegame',
           name: intl.formatMessage(messages.autoapproveGame),
-          description: intl.formatMessage(
-            messages.autoapproveGameDescription
-          ),
+          description: intl.formatMessage(messages.autoapproveGameDescription),
           permission: Permission.AUTO_APPROVE_GAME,
           requires: [
             {
               permissions: [Permission.REQUEST, Permission.REQUEST_GAME],
+              type: 'or',
+            },
+          ],
+        },
+        {
+          id: 'autoapprovemanga',
+          name: intl.formatMessage(messages.autoapproveManga),
+          description: intl.formatMessage(messages.autoapproveMangaDescription),
+          permission: Permission.AUTO_APPROVE_MANGA,
+          requires: [
+            {
+              permissions: [Permission.REQUEST, Permission.REQUEST_MANGA],
+              type: 'or',
+            },
+          ],
+        },
+        {
+          id: 'autoapprovecomic',
+          name: intl.formatMessage(messages.autoapproveComic),
+          description: intl.formatMessage(messages.autoapproveComicDescription),
+          permission: Permission.AUTO_APPROVE_COMIC,
+          requires: [
+            {
+              permissions: [Permission.REQUEST, Permission.REQUEST_COMIC],
               type: 'or',
             },
           ],

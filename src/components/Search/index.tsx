@@ -1,26 +1,29 @@
 import AudiobookCard from '@app/components/AudiobookCard';
 import BookCard from '@app/components/BookCard';
+import ComicCard from '@app/components/ComicCard';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import GameCard from '@app/components/GameCard';
+import MangaCard from '@app/components/MangaCard';
+import { SearchLoadingContext } from '@app/context/SearchLoadingContext';
 import useDiscover from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
 import ErrorPage from '@app/pages/_error';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
 import { MediaStatus } from '@server/constants/media';
-import Link from 'next/link';
 import type {
   MovieResult,
   PersonResult,
   TvResult,
 } from '@server/models/Search';
 import axios from 'axios';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.Search', {
@@ -30,6 +33,8 @@ const messages = defineMessages('components.Search', {
   tabBooks: 'Books',
   tabAudiobooks: 'Audiobooks',
   tabGames: 'Games',
+  tabManga: 'Manga',
+  tabComics: 'Comics',
   noResults: 'No results found.',
   bookBadge: 'Book',
   seriesBadge: 'Series',
@@ -41,13 +46,46 @@ const messages = defineMessages('components.Search', {
   collectionCountFmt: '{count, plural, one {# game} other {# games}}',
 });
 
-type MediaTab = 'all' | 'books' | 'audiobooks' | 'games';
+type MediaTab = 'all' | 'books' | 'audiobooks' | 'games' | 'manga' | 'comics';
 
-const AuthorSearchCard = ({
-  result,
-}: {
-  result: AuthorSearchResult;
-}) => {
+interface MangaResult {
+  anilistId: number;
+  title: string;
+  titleNative?: string;
+  coverUrl?: string;
+  year?: number;
+  status?: string;
+  format?: string;
+  chapters?: number;
+  volumes?: number;
+  averageScore?: number;
+  countryOfOrigin?: string;
+  isAdult?: boolean;
+  mediaType: 'manga';
+}
+
+interface MangaSearchResponse {
+  results: MangaResult[];
+  totalResults: number;
+}
+
+interface ComicResult {
+  comicVineId: number;
+  title: string;
+  year?: number;
+  coverUrl?: string;
+  issueCount?: number;
+  publisher?: string;
+  deck?: string;
+  mediaType: 'comic';
+}
+
+interface ComicSearchResponse {
+  results: ComicResult[];
+  totalResults: number;
+}
+
+const AuthorSearchCard = ({ result }: { result: AuthorSearchResult }) => {
   const intl = useIntl();
   return (
     <Link href={`/book/author/${encodeURIComponent(result.key)}`}>
@@ -296,18 +334,25 @@ const Search = () => {
   const intl = useIntl();
   const router = useRouter();
   const { currentSettings } = useSettings();
+  const { setIsSearching } = useContext(SearchLoadingContext);
   const bookEnabled = currentSettings.bookEnabled;
   const audiobookEnabled = currentSettings.audiobookEnabled;
   const gameEnabled = currentSettings.gameEnabled;
+  const mangaEnabled = currentSettings.mangaEnabled;
+  const comicEnabled = currentSettings.comicEnabled;
   const [activeTab, setActiveTab] = useState<MediaTab>('all');
   const [bookResults, setBookResults] = useState<BookOrSeriesResult[]>([]);
   const [audiobookResults, setAudiobookResults] = useState<
     (BookResult | AuthorSearchResult)[]
   >([]);
   const [gameResults, setGameResults] = useState<GameOrCollectionResult[]>([]);
+  const [mangaResults, setMangaResults] = useState<MangaResult[]>([]);
+  const [comicResults, setComicResults] = useState<ComicResult[]>([]);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
+  const [isLoadingManga, setIsLoadingManga] = useState(false);
+  const [isLoadingComics, setIsLoadingComics] = useState(false);
 
   const query = (router.query.query as string) ?? '';
 
@@ -332,6 +377,8 @@ const Search = () => {
       setBookResults([]);
       setAudiobookResults([]);
       setGameResults([]);
+      setMangaResults([]);
+      setComicResults([]);
       return;
     }
 
@@ -394,7 +441,63 @@ const Search = () => {
     } else {
       setGameResults([]);
     }
-  }, [query, bookEnabled, audiobookEnabled, gameEnabled]);
+
+    if (mangaEnabled) {
+      setIsLoadingManga(true);
+      axios
+        .get<MangaSearchResponse>('/api/v1/manga/search', {
+          params: { query, limit: 40 },
+          paramsSerializer,
+        })
+        .then((res) => setMangaResults(res.data.results))
+        .catch(() => setMangaResults([]))
+        .finally(() => setIsLoadingManga(false));
+    } else {
+      setMangaResults([]);
+    }
+
+    if (comicEnabled) {
+      setIsLoadingComics(true);
+      axios
+        .get<ComicSearchResponse>('/api/v1/comic/search', {
+          params: { query, limit: 40 },
+          paramsSerializer,
+        })
+        .then((res) => setComicResults(res.data.results))
+        .catch(() => setComicResults([]))
+        .finally(() => setIsLoadingComics(false));
+    } else {
+      setComicResults([]);
+    }
+  }, [
+    query,
+    bookEnabled,
+    audiobookEnabled,
+    gameEnabled,
+    mangaEnabled,
+    comicEnabled,
+  ]);
+
+  // Publish a combined "any active fetch" boolean to SearchLoadingContext
+  // so the global SearchInput in the layout can swap its magnifying-glass
+  // for a spinner. We only count the per-type queries that are actually
+  // enabled — a disabled type never fetches and never blocks the spinner
+  // from clearing. Movies/TV (useDiscover) is always counted because the
+  // /api/v1/search endpoint runs regardless of type toggles.
+  const isAnySearching =
+    !!query &&
+    (isLoadingInitialData ||
+      (bookEnabled && isLoadingBooks) ||
+      (audiobookEnabled && isLoadingAudiobooks) ||
+      (gameEnabled && isLoadingGames) ||
+      (mangaEnabled && isLoadingManga) ||
+      (comicEnabled && isLoadingComics));
+  useEffect(() => {
+    setIsSearching(isAnySearching);
+    // Reset on unmount so navigating away from /search doesn't strand
+    // the spinner on.
+    return () => setIsSearching(false);
+  }, [isAnySearching, setIsSearching]);
 
   if (error && activeTab === 'all') {
     return <ErrorPage statusCode={500} />;
@@ -442,6 +545,26 @@ const Search = () => {
           },
         ]
       : []),
+    ...(mangaEnabled
+      ? [
+          {
+            key: 'manga' as MediaTab,
+            label: intl.formatMessage(messages.tabManga),
+            count: isLoadingManga ? null : mangaResults.length,
+            loading: isLoadingManga,
+          },
+        ]
+      : []),
+    ...(comicEnabled
+      ? [
+          {
+            key: 'comics' as MediaTab,
+            label: intl.formatMessage(messages.tabComics),
+            count: isLoadingComics ? null : comicResults.length,
+            loading: isLoadingComics,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -451,15 +574,19 @@ const Search = () => {
         <Header>{intl.formatMessage(messages.searchresults)}</Header>
       </div>
 
-      {/* Media Type Tabs */}
-      <div className="mb-6 flex border-b border-gray-600">
+      {/* Media Type Tabs — chip-style so 6+ tabs (All / Books /
+          Audiobooks / Games / Manga / Comics) wrap to a second row on
+          mobile instead of overflowing or scrolling off-screen.
+          Self-contained pills mean every count stays visible at a
+          glance; no underline weirdness across rows. */}
+      <div className="mb-6 flex flex-wrap gap-2">
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
               activeTab === tab.key
-                ? 'border-b-2 border-indigo-500 text-indigo-400'
-                : 'text-gray-400 hover:text-gray-300'
+                ? 'bg-indigo-500/20 text-indigo-300 ring-1 ring-inset ring-indigo-500/40'
+                : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
             }`}
             onClick={() => setActiveTab(tab.key)}
           >
@@ -468,8 +595,8 @@ const Search = () => {
               <span
                 className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${
                   activeTab === tab.key
-                    ? 'bg-indigo-500/30 text-indigo-300'
-                    : 'bg-gray-700 text-gray-400'
+                    ? 'bg-indigo-500/30 text-indigo-200'
+                    : 'bg-gray-700/80 text-gray-300'
                 }`}
               >
                 {tab.count}
@@ -615,6 +742,68 @@ const Search = () => {
                   </li>
                 );
               })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Manga */}
+      {activeTab === 'manga' && (
+        <div>
+          {isLoadingManga ? (
+            <LoadingSpinner />
+          ) : mangaResults.length === 0 ? (
+            <p className="py-8 text-center text-gray-400">
+              {intl.formatMessage(messages.noResults)}
+            </p>
+          ) : (
+            <ul className="cards-vertical">
+              {mangaResults.map((m) => (
+                <li key={m.anilistId}>
+                  <MangaCard
+                    anilistId={m.anilistId}
+                    title={m.title}
+                    titleNative={m.titleNative}
+                    coverUrl={m.coverUrl}
+                    year={m.year}
+                    status={m.status}
+                    format={m.format}
+                    chapters={m.chapters}
+                    volumes={m.volumes}
+                    averageScore={m.averageScore}
+                    countryOfOrigin={m.countryOfOrigin}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Comics */}
+      {activeTab === 'comics' && (
+        <div>
+          {isLoadingComics ? (
+            <LoadingSpinner />
+          ) : comicResults.length === 0 ? (
+            <p className="py-8 text-center text-gray-400">
+              {intl.formatMessage(messages.noResults)}
+            </p>
+          ) : (
+            <ul className="cards-vertical">
+              {comicResults.map((c) => (
+                <li key={c.comicVineId}>
+                  <ComicCard
+                    comicVineId={c.comicVineId}
+                    title={c.title}
+                    coverUrl={c.coverUrl}
+                    year={c.year}
+                    issueCount={c.issueCount}
+                    publisher={c.publisher}
+                    deck={c.deck}
+                  />
+                </li>
+              ))}
             </ul>
           )}
         </div>

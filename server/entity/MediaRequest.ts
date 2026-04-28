@@ -9,7 +9,9 @@ import {
 import { getRepository } from '@server/datasource';
 import { AudiobookMedia } from '@server/entity/AudiobookMedia';
 import { BookMedia } from '@server/entity/BookMedia';
+import { ComicMedia } from '@server/entity/ComicMedia';
 import { GameMedia } from '@server/entity/GameMedia';
+import { MangaMedia } from '@server/entity/MangaMedia';
 import OverrideRule from '@server/entity/OverrideRule';
 import type { MediaRequestBody } from '@server/interfaces/api/requestInterfaces';
 import notificationManager, { Notification } from '@server/lib/notifications';
@@ -548,6 +550,20 @@ export class MediaRequest {
     onDelete: 'SET NULL',
   })
   public gameMedia?: GameMedia | null;
+
+  @ManyToOne(() => MangaMedia, {
+    nullable: true,
+    eager: true,
+    onDelete: 'SET NULL',
+  })
+  public mangaMedia?: MangaMedia | null;
+
+  @ManyToOne(() => ComicMedia, {
+    nullable: true,
+    eager: true,
+    onDelete: 'SET NULL',
+  })
+  public comicMedia?: ComicMedia | null;
 
   @ManyToOne(() => User, (user) => user.requests, {
     eager: true,

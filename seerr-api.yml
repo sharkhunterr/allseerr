@@ -48,6 +48,14 @@ servers:
 
 components:
   schemas:
+    RequestNoticeEntry:
+      type: object
+      properties:
+        message:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, error]
     Blocklist:
       type: object
       properties:
@@ -4349,6 +4357,216 @@ paths:
                       type: object
                   totalResults:
                     type: number
+  /manga/search:
+    get:
+      summary: Search for manga
+      description: Searches AniList for manga matching the query.
+      tags:
+        - manga
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: number
+            default: 20
+      responses:
+        '200':
+          description: Manga search results
+          content:
+            application/json:
+              schema:
+                type: object
+  /manga/{id}:
+    get:
+      summary: Get manga details by AniList id
+      tags:
+        - manga
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Manga details returned
+          content:
+            application/json:
+              schema:
+                type: object
+  /manga/staff/{id}:
+    get:
+      summary: Get manga staff (mangaka / illustrator) details by AniList id
+      tags:
+        - manga
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Staff details + manga credits
+          content:
+            application/json:
+              schema:
+                type: object
+  /comic/search:
+    get:
+      summary: Search comic volumes
+      description: Free-text search of ComicVine volumes (series).
+      tags:
+        - comic
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                  totalResults: { type: number }
+  /comic/{id}:
+    get:
+      summary: Get comic volume details
+      tags:
+        - comic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Volume details returned
+          content:
+            application/json:
+              schema:
+                type: object
+  /comic/person/{id}:
+    get:
+      summary: Get comic creator details by ComicVine id
+      tags:
+        - comic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Creator details + credited volumes
+          content:
+            application/json:
+              schema:
+                type: object
+  /comic/request:
+    post:
+      summary: Submit a comic request
+      description: Creates a new comic request from a ComicVine volume.
+      tags:
+        - comic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - comicVineId
+                - title
+              properties:
+                comicVineId: { type: number }
+                title: { type: string }
+                year: { type: number }
+                coverUrl: { type: string }
+                issueCount: { type: number }
+                publisher: { type: string }
+                publisherId: { type: number }
+                creatorName: { type: string }
+                creatorKey: { type: number }
+                userId: { type: number }
+                selectedIssueNumbers:
+                  type: array
+                  items: { type: string }
+      responses:
+        '201':
+          description: Comic request created
+          content:
+            application/json:
+              schema:
+                type: object
+  /manga/request:
+    post:
+      summary: Submit a manga request
+      description: Creates a new manga request from an AniList result.
+      tags:
+        - manga
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - anilistId
+                - title
+              properties:
+                anilistId:
+                  type: number
+                malId:
+                  type: number
+                title:
+                  type: string
+                titleNative:
+                  type: string
+                coverUrl:
+                  type: string
+                year:
+                  type: number
+                format:
+                  type: string
+                statusAnilist:
+                  type: string
+                chapters:
+                  type: number
+                volumes:
+                  type: number
+                countryOfOrigin:
+                  type: string
+                authorName:
+                  type: string
+                userId:
+                  type: number
+      responses:
+        '201':
+          description: Manga request created
+          content:
+            application/json:
+              schema:
+                type: object
   /game/{igdbId}:
     get:
       summary: Get game details
@@ -5168,6 +5386,397 @@ paths:
       responses:
         '200':
           description: Test complete (see success flag in body)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+  /settings/manga/metadata-providers:
+    get:
+      summary: Get manga metadata provider config
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  primarySource:
+                    type: string
+                    enum: [anilist]
+                  anilist:
+                    type: boolean
+                  jikan:
+                    type: boolean
+                  preferredLanguage:
+                    type: string
+                  languagePolicy:
+                    type: string
+                    enum: [prefer, strict]
+                  hideAdult:
+                    type: boolean
+    put:
+      summary: Update manga metadata provider config
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                primarySource:
+                  type: string
+                  enum: [anilist]
+                anilist:
+                  type: boolean
+                jikan:
+                  type: boolean
+                preferredLanguage:
+                  type: string
+                languagePolicy:
+                  type: string
+                  enum: [prefer, strict]
+                hideAdult:
+                  type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/manga/metadata-providers/test:
+    post:
+      summary: Test a manga metadata provider's reachability
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  enum: [anilist, jikan]
+              required: [provider]
+      responses:
+        '200':
+          description: Test complete (see success flag in body)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+  /settings/manga/suwayomi:
+    get:
+      summary: Get Suwayomi (manga download manager) config
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string }
+                  publicUrl: { type: string }
+                  apiKey: { type: string }
+                  username: { type: string }
+                  password: { type: string }
+                  pollIntervalMinutes: { type: number }
+                  enabled: { type: boolean }
+    put:
+      summary: Update Suwayomi config
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string }
+                publicUrl: { type: string }
+                apiKey: { type: string }
+                username: { type: string }
+                password: { type: string }
+                pollIntervalMinutes: { type: number }
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/manga/suwayomi/test:
+    post:
+      summary: Probe a Suwayomi instance for reachability
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string }
+                apiKey: { type: string }
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Test complete (see success flag)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  version: { type: string }
+  /settings/comic/metadata-providers:
+    get:
+      summary: Get comic metadata provider config
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  primarySource:
+                    type: string
+                    enum: [comicvine]
+                  comicvine: { type: boolean }
+                  apiKey: { type: string }
+                  hideAdult: { type: boolean }
+    put:
+      summary: Update comic metadata provider config
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                primarySource:
+                  type: string
+                  enum: [comicvine]
+                comicvine: { type: boolean }
+                apiKey: { type: string }
+                hideAdult: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/comic/metadata-providers/test:
+    post:
+      summary: Test the comic metadata provider's reachability
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              properties:
+                provider:
+                  type: string
+                  enum: [comicvine]
+                apiKey: { type: string }
+      responses:
+        '200':
+          description: Test complete (see success flag)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+  /settings/comic/mylar:
+    get:
+      summary: Get Mylar3 (comic download manager) config
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string }
+                  publicUrl: { type: string }
+                  apiKey: { type: string }
+                  pollIntervalMinutes: { type: number }
+                  enabled: { type: boolean }
+    put:
+      summary: Update Mylar3 config
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string }
+                publicUrl: { type: string }
+                apiKey: { type: string }
+                pollIntervalMinutes: { type: number }
+                enabled: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/request-notices:
+    get:
+      summary: Get the admin-defined request-modal notices
+      description: |
+        Returns the optional notices shown at the top of each
+        request modal. Empty string per scope = no notice.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  global: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  movie: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  tv: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  book: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  audiobook: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  game: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  manga: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                  comic: { $ref: '#/components/schemas/RequestNoticeEntry' }
+    put:
+      summary: Update the request-modal notices
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                global: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                movie: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                tv: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                book: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                audiobook: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                game: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                manga: { $ref: '#/components/schemas/RequestNoticeEntry' }
+                comic: { $ref: '#/components/schemas/RequestNoticeEntry' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /settings/media-types:
+    get:
+      summary: Get the master on/off toggles for non-TMDB media types
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  book: { type: boolean }
+                  audiobook: { type: boolean }
+                  game: { type: boolean }
+                  manga: { type: boolean }
+                  comic: { type: boolean }
+    put:
+      summary: Update the master on/off toggles for non-TMDB media types
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                book: { type: boolean }
+                audiobook: { type: boolean }
+                game: { type: boolean }
+                manga: { type: boolean }
+                comic: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  book: { type: boolean }
+                  audiobook: { type: boolean }
+                  game: { type: boolean }
+                  manga: { type: boolean }
+                  comic: { type: boolean }
+  /settings/comic/mylar/test:
+    post:
+      summary: Probe a Mylar3 instance for reachability
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, apiKey]
+              properties:
+                url: { type: string }
+                apiKey: { type: string }
+      responses:
+        '200':
+          description: Test complete (see success flag)
           content:
             application/json:
               schema:
@@ -7950,6 +8559,36 @@ paths:
                     type: number
                   completed:
                     type: number
+  /request/{requestId}/status-reason:
+    get:
+      summary: Get a human-readable reason for the request's current state
+      description: |
+        Returns a single user-facing string explaining why the request
+        is in its current status (e.g. "Not released yet — scheduled
+        for 2026-08-12", "Downloading 45% — 7 min remaining", "No
+        download manager configured"). For non-TMDB types this is the
+        persisted reason set at dispatch time; for movie / TV it's
+        computed live from Radarr / Sonarr queue + record state and
+        cached server-side for 60s.
+      tags:
+        - request
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resolved reason (may be null when there is nothing useful to surface beyond the status badge)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reason:
+                    type: string
+                    nullable: true
   /request/{requestId}:
     get:
       summary: Get MediaRequest

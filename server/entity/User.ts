@@ -115,8 +115,7 @@ export class User {
       // foreseeable future (a few dozen bits), so coerce back to a
       // regular Number for runtime math — `hasPermission` uses BigInt
       // internally when needed.
-      to: (value: number | undefined | null): number | null =>
-        value ?? 0,
+      to: (value: number | undefined | null): number | null => value ?? 0,
       from: (value: string | number | null | undefined): number => {
         if (value == null) return 0;
         if (typeof value === 'number') return value;
@@ -173,6 +172,18 @@ export class User {
 
   @Column({ nullable: true })
   public gameQuotaDays?: number;
+
+  @Column({ nullable: true })
+  public mangaQuotaLimit?: number;
+
+  @Column({ nullable: true })
+  public mangaQuotaDays?: number;
+
+  @Column({ nullable: true })
+  public comicQuotaLimit?: number;
+
+  @Column({ nullable: true })
+  public comicQuotaDays?: number;
 
   @OneToOne(() => UserSettings, (settings) => settings.user, {
     cascade: true,
@@ -437,6 +448,28 @@ export class User {
       gameQuotaDays
     );
 
+    const mangaQuotaLimit = !canBypass
+      ? (this.mangaQuotaLimit ?? defaultQuotas.manga?.quotaLimit ?? 0)
+      : 0;
+    const mangaQuotaDays =
+      this.mangaQuotaDays ?? defaultQuotas.manga?.quotaDays ?? 0;
+    const mangaQuotaUsed = await countSimpleQuota(
+      MediaType.MANGA,
+      mangaQuotaLimit,
+      mangaQuotaDays
+    );
+
+    const comicQuotaLimit = !canBypass
+      ? (this.comicQuotaLimit ?? defaultQuotas.comic?.quotaLimit ?? 0)
+      : 0;
+    const comicQuotaDays =
+      this.comicQuotaDays ?? defaultQuotas.comic?.quotaDays ?? 0;
+    const comicQuotaUsed = await countSimpleQuota(
+      MediaType.COMIC,
+      comicQuotaLimit,
+      comicQuotaDays
+    );
+
     return {
       movie: {
         days: movieQuotaDays,
@@ -486,6 +519,28 @@ export class User {
           ? Math.max(0, gameQuotaLimit - gameQuotaUsed)
           : undefined,
         restricted: !!(gameQuotaLimit && gameQuotaLimit - gameQuotaUsed <= 0),
+      },
+      manga: {
+        days: mangaQuotaDays,
+        limit: mangaQuotaLimit,
+        used: mangaQuotaUsed,
+        remaining: mangaQuotaLimit
+          ? Math.max(0, mangaQuotaLimit - mangaQuotaUsed)
+          : undefined,
+        restricted: !!(
+          mangaQuotaLimit && mangaQuotaLimit - mangaQuotaUsed <= 0
+        ),
+      },
+      comic: {
+        days: comicQuotaDays,
+        limit: comicQuotaLimit,
+        used: comicQuotaUsed,
+        remaining: comicQuotaLimit
+          ? Math.max(0, comicQuotaLimit - comicQuotaUsed)
+          : undefined,
+        restricted: !!(
+          comicQuotaLimit && comicQuotaLimit - comicQuotaUsed <= 0
+        ),
       },
     };
   }

@@ -65,6 +65,13 @@ export class BookMedia {
   @Column({ type: 'varchar', nullable: true })
   public downloadManagerExternalId?: string | null;
 
+  // Human-readable explanation of why the request is in its current
+  // state — set at dispatch time by the subscriber (manual workflow,
+  // dispatch failure, no source matched, etc). Null means "nothing
+  // to communicate beyond what the status badge already says".
+  @Column({ type: 'varchar', nullable: true })
+  public statusReason?: string | null;
+
   @CreateDateColumn()
   public createdAt: Date;
 

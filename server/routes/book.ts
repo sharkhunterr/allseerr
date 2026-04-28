@@ -23,6 +23,7 @@ import { Permission, hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
+import { isMediaTypeEnabled } from '@server/middleware/mediaTypeGuard';
 import { Router } from 'express';
 
 const bookRoutes = Router();
@@ -137,6 +138,17 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
   const page = parseInt((req.query.page as string) || '1', 10);
   const limit = parseInt((req.query.limit as string) || '20', 10);
 
+  // Master toggle short-circuit. /book/search is shared between book
+  // and audiobook (driven by ?type=) so we can't use the route-level
+  // requireMediaType middleware — check inline.
+  const subtype = type === 'audiobook' ? 'audiobook' : 'book';
+  if (!isMediaTypeEnabled(subtype)) {
+    return res.status(503).json({
+      status: 503,
+      message: `${subtype} requests are disabled by the administrator.`,
+    });
+  }
+
   if (!query || query.trim().length === 0) {
     return res.status(400).json({
       status: 400,
@@ -181,7 +193,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
         const prefLang =
           audioCfg?.preferredLanguage?.toLowerCase().trim() || undefined;
         const hits = await hc.searchAudiobooks(query, limit);
-        const enriched: Array<{
+        const enriched: {
           openLibraryId: string;
           title: string;
           authorName: string;
@@ -194,7 +206,7 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
           mediaType: MediaType;
           mediaStatus: MediaStatus | null;
           bookMediaId: number | null;
-        }> = [];
+        }[] = [];
         for (const hit of hits) {
           // Drop the non-preferred-language audio editions under the
           // "strict" policy; under "prefer" we let them through so the
@@ -214,15 +226,13 @@ bookRoutes.get('/search', isAuthenticated(), async (req, res) => {
             audioEds.find(
               (e) =>
                 !!e.asin &&
-                (!prefLang ||
-                  e.language?.code2?.toLowerCase() === prefLang)
+                (!prefLang || e.language?.code2?.toLowerCase() === prefLang)
             ) ?? audioEds.find((e) => !!e.asin);
           if (!withAsin?.asin) continue;
           const existing = await audiobookMediaRepo.findOne({
             where: { asin: withAsin.asin },
           });
-          const coverUrl =
-            withAsin.image?.url ?? hit.image?.url ?? undefined;
+          const coverUrl = withAsin.image?.url ?? hit.image?.url ?? undefined;
           enriched.push({
             openLibraryId: withAsin.asin,
             title: hit.title,
@@ -862,9 +872,7 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
       const firstMember = members[0];
       if (firstMember?.workKey) {
         const work = await openLibrary.getWork(`/works/${firstMember.workKey}`);
-        const olAuthorKey = work?.authors?.[0]?.author?.key
-          ?.split('/')
-          .pop();
+        const olAuthorKey = work?.authors?.[0]?.author?.key?.split('/').pop();
         if (olAuthorKey) {
           const olAuthor = await openLibrary.getAuthor(olAuthorKey);
           if (olAuthor) {
@@ -881,11 +889,7 @@ bookRoutes.get('/series/:seriesId', isAuthenticated(), async (req, res) => {
         // sparse. Switches the author card to a Hardcover-keyed link
         // so the audiobooks tab on the author page works too.
         const cfg = getSettings().book?.metadataProviders;
-        if (
-          seriesAuthorName &&
-          cfg?.hardcover &&
-          cfg?.hardcoverApiKey
-        ) {
+        if (seriesAuthorName && cfg?.hardcover && cfg?.hardcoverApiKey) {
           const hc = new HardcoverAPI(cfg.hardcoverApiKey);
           const [match] = await hc.findAuthorByExactName(seriesAuthorName);
           if (match) {
@@ -1311,9 +1315,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       const audioEds = hit.editions ?? [];
       const firstEd =
         (prefLang
-          ? audioEds.find(
-              (e) => e.language?.code2?.toLowerCase() === prefLang
-            )
+          ? audioEds.find((e) => e.language?.code2?.toLowerCase() === prefLang)
           : undefined) ?? audioEds[0];
 
       const audiobookMediaRepo = getRepository(AudiobookMedia);
@@ -1361,7 +1363,8 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         description:
           typeof hit.description === 'string'
             ? hit.description
-            : (hit.description as { value?: string } | null)?.value ?? undefined,
+            : ((hit.description as { value?: string } | null)?.value ??
+              undefined),
         coverUrl: firstEd?.image?.url ?? hit.image?.url ?? undefined,
         year: firstEd?.release_date
           ? parseInt(firstEd.release_date.slice(0, 4), 10)
@@ -1590,13 +1593,13 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       let moods: string[] = [];
       let contentWarnings: string[] = [];
       let characters: string[] = [];
-      let series: Array<{
+      let series: {
         key: string;
         name: string;
         position?: string;
         seedCount: number;
         linkable: boolean;
-      }> = [];
+      }[] = [];
       let enrichedDescription: string | undefined;
       const bookCfg = getSettings().book?.metadataProviders;
       const audioCfg = getSettings().audiobook?.metadataProviders;
@@ -1642,7 +1645,9 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
                 candidates.find((c) => {
                   const primaryAuthor =
                     hardcoverPrimaryAuthor(c.contributions) ?? '';
-                  const cTokens = normName(primaryAuthor).split(' ').filter(Boolean);
+                  const cTokens = normName(primaryAuthor)
+                    .split(' ')
+                    .filter(Boolean);
                   return !!audibleSurname && cTokens.includes(audibleSurname);
                 }) ?? null;
               if (hit) enrichmentPass = 'title';
@@ -1672,9 +1677,9 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
             readersCount = hit.users_count ?? undefined;
             readCount = hit.users_read_count ?? undefined;
             subjects =
-              hit.cached_tags?.Genre?.map((t) => t.tag).filter(
-                (t): t is string => !!t
-              ).slice(0, 15) ?? [];
+              hit.cached_tags?.Genre?.map((t) => t.tag)
+                .filter((t): t is string => !!t)
+                .slice(0, 15) ?? [];
             moods =
               hit.cached_tags?.Mood?.map((t) => t.tag)
                 .filter((t): t is string => !!t)
@@ -1704,14 +1709,12 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
             enrichedDescription =
               typeof hit.description === 'string'
                 ? hit.description
-                : (hit.description as { value?: string } | null)?.value ??
-                  undefined;
+                : ((hit.description as { value?: string } | null)?.value ??
+                  undefined);
             // Author enrichment via the matched Hardcover book's
             // primary contributor — more accurate than a name-based
             // search because we're anchored to the actual book record.
-            const primaryAuthorId = hardcoverPrimaryAuthorId(
-              hit.contributions
-            );
+            const primaryAuthorId = hardcoverPrimaryAuthorId(hit.contributions);
             if (primaryAuthorId !== undefined) {
               try {
                 const a = await hc.getAuthor(primaryAuthorId);
@@ -1754,7 +1757,12 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
                 .filter((t) => t.length > 1);
               const qSurname = qTokens[qTokens.length - 1];
               const pickMatch = (
-                candidates: { id: number; name: string; bio?: string; photoUrl?: string }[]
+                candidates: {
+                  id: number;
+                  name: string;
+                  bio?: string;
+                  photoUrl?: string;
+                }[]
               ) =>
                 candidates.find((c) => {
                   const cTokens = normName(c.name).split(' ').filter(Boolean);
@@ -1778,7 +1786,10 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
                 new Set(
                   [
                     primaryName,
-                    primaryName.replace(/\./g, '. ').replace(/\s+/g, ' ').trim(),
+                    primaryName
+                      .replace(/\./g, '. ')
+                      .replace(/\s+/g, ' ')
+                      .trim(),
                     primaryName.replace(/\./g, ' ').replace(/\s+/g, ' ').trim(),
                     primaryName.replace(/\./g, '').replace(/\s+/g, ' ').trim(),
                   ].filter((v) => v.length > 0)
@@ -1791,7 +1802,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
                 photoUrl?: string;
                 booksCount?: number;
               }[] = [];
-              let match: typeof candidates[number] | undefined;
+              let match: (typeof candidates)[number] | undefined;
               let pass = 'exact';
               for (const v of variants) {
                 const hits = await hc.findAuthorByExactName(v);
@@ -2276,6 +2287,7 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         return best ? cleanOpenLibraryText(best) : undefined;
       })(),
       mediaStatus: existing?.status ?? null,
+      mediaStatusReason: existing?.statusReason ?? null,
       bookMediaId: existing?.id ?? null,
       libraryServerUrl: remapToPublicUrl(existing?.libraryServerUrl),
     });
@@ -2315,6 +2327,17 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
     narratorName?: string;
     userId?: number;
   };
+
+  // Master toggle short-circuit. The mediaType in the body decides
+  // which toggle applies — book vs audiobook can be turned off
+  // independently.
+  const subtype = body.mediaType === MediaType.AUDIOBOOK ? 'audiobook' : 'book';
+  if (!isMediaTypeEnabled(subtype)) {
+    return res.status(503).json({
+      status: 503,
+      message: `${subtype} requests are disabled by the administrator.`,
+    });
+  }
 
   if (
     !body.mediaType ||

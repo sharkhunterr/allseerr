@@ -3,12 +3,14 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import SubTabs from '@app/components/Common/SubTabs';
-import SettingsAudiobookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsAudiobookMetadata';
-import SettingsBookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsBookMetadata';
-import SettingsIgdb from '@app/components/Settings/Games/SettingsIgdb';
 import MetadataSelector, {
   MetadataProviderType,
 } from '@app/components/MetadataSelector';
+import SettingsAudiobookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsAudiobookMetadata';
+import SettingsBookMetadata from '@app/components/Settings/BooksAudiobooks/SettingsBookMetadata';
+import SettingsIgdb from '@app/components/Settings/Games/SettingsIgdb';
+import SettingsComicMetadata from '@app/components/Settings/MangaComics/SettingsComicMetadata';
+import SettingsMangaMetadata from '@app/components/Settings/MangaComics/SettingsMangaMetadata';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { ArrowDownOnSquareIcon, BeakerIcon } from '@heroicons/react/24/outline';
@@ -473,7 +475,7 @@ const MoviesAndTVMetadata = () => {
 const SettingsMetadata = () => {
   const intl = useIntl();
   const [activeTab, setActiveTab] = useState<
-    'movies-tv' | 'books' | 'audiobooks' | 'games'
+    'movies-tv' | 'books' | 'audiobooks' | 'games' | 'manga' | 'comics'
   >('movies-tv');
 
   const tabs: { key: typeof activeTab; label: string }[] = [
@@ -484,6 +486,8 @@ const SettingsMetadata = () => {
     { key: 'books', label: intl.formatMessage(globalMessages.book) },
     { key: 'audiobooks', label: intl.formatMessage(globalMessages.audiobook) },
     { key: 'games', label: intl.formatMessage(globalMessages.game) },
+    { key: 'manga', label: intl.formatMessage(globalMessages.manga) },
+    { key: 'comics', label: intl.formatMessage(globalMessages.comic) },
   ];
 
   return (
@@ -504,6 +508,8 @@ const SettingsMetadata = () => {
       {activeTab === 'books' && <SettingsBookMetadata />}
       {activeTab === 'audiobooks' && <SettingsAudiobookMetadata />}
       {activeTab === 'games' && <SettingsIgdb />}
+      {activeTab === 'manga' && <SettingsMangaMetadata />}
+      {activeTab === 'comics' && <SettingsComicMetadata />}
     </>
   );
 };

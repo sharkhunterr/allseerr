@@ -61,6 +61,14 @@ export class GameMedia {
   @Column({ type: 'varchar', nullable: true })
   public rommUrl?: string | null;
 
+  // Human-readable explanation of why the request is in its current
+  // state — set at dispatch time by the subscriber. Null means
+  // "nothing to communicate beyond what the badge already says".
+  // Game requests have no automated dispatcher, so this is set to a
+  // manual-workflow notice on creation.
+  @Column({ type: 'varchar', nullable: true })
+  public statusReason?: string | null;
+
   @CreateDateColumn()
   public createdAt: Date;
 

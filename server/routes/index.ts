@@ -30,14 +30,16 @@ import { isPerson } from '@server/utils/typeHelpers';
 import { Router } from 'express';
 import authRoutes from './auth';
 import blocklistRoutes from './blocklist';
+import bookRoutes from './book';
 import collectionRoutes from './collection';
+import comicRoutes from './comic';
 import discoverRoutes, { createTmdbWithRegionLanguage } from './discover';
+import gameRoutes from './game';
 import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
+import mangaRoutes from './manga';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
-import bookRoutes from './book';
-import gameRoutes from './game';
 import { getMusicRoutes } from './music';
 import personRoutes from './person';
 import requestRoutes from './request';
@@ -177,6 +179,8 @@ router.use('/issueComment', isAuthenticated(), issueCommentRoutes);
 router.use('/auth', authRoutes);
 router.use('/book', bookRoutes);
 router.use('/game', gameRoutes);
+router.use('/manga', mangaRoutes);
+router.use('/comic', comicRoutes);
 
 // Music routes: conditionally registered based on ENABLE_MUSIC flag (FR-014)
 const musicRouter = getMusicRoutes();

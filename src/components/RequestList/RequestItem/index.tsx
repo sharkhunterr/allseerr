@@ -5,6 +5,7 @@ import CachedImage from '@app/components/Common/CachedImage';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
 import RequestModal from '@app/components/RequestModal';
 import StatusBadge from '@app/components/StatusBadge';
+import StatusReason from '@app/components/StatusReason';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -62,7 +63,9 @@ const isMovie = (movie: MovieDetails | TvDetails): movie is MovieDetails => {
 const isNonTmdbType = (type: string) =>
   type === MediaType.GAME ||
   type === MediaType.BOOK ||
-  type === MediaType.AUDIOBOOK;
+  type === MediaType.AUDIOBOOK ||
+  type === MediaType.MANGA ||
+  type === MediaType.COMIC;
 
 interface RequestItemErrorProps {
   requestData?: NonFunctionProperties<MediaRequest>;
@@ -173,6 +176,7 @@ const getNonTmdbInfo = (
   href: string;
   typeLabel: string;
   platform?: string;
+  statusReason?: string | null;
 } => {
   const gm = request.gameMedia as
     | {
@@ -181,6 +185,7 @@ const getNonTmdbInfo = (
         igdbId: number;
         platformName?: string;
         status?: MediaStatus | null;
+        statusReason?: string | null;
       }
     | undefined;
   const bm = request.bookMedia as
@@ -191,6 +196,7 @@ const getNonTmdbInfo = (
         foreignBookId?: string;
         covers?: number[];
         status?: MediaStatus | null;
+        statusReason?: string | null;
       }
     | undefined;
   const am = request.audiobookMedia as
@@ -201,6 +207,25 @@ const getNonTmdbInfo = (
         foreignBookId?: string;
         covers?: number[];
         status?: MediaStatus | null;
+        statusReason?: string | null;
+      }
+    | undefined;
+  const mm = request.mangaMedia as
+    | {
+        title: string;
+        coverUrl?: string;
+        anilistId: number;
+        status?: MediaStatus | null;
+        statusReason?: string | null;
+      }
+    | undefined;
+  const cm = request.comicMedia as
+    | {
+        title: string;
+        coverUrl?: string;
+        comicVineId: number;
+        status?: MediaStatus | null;
+        statusReason?: string | null;
       }
     | undefined;
 
@@ -211,10 +236,13 @@ const getNonTmdbInfo = (
       href: `/game/${gm.igdbId}`,
       typeLabel: 'Game',
       platform: gm.platformName,
+      statusReason: gm.statusReason,
     };
   }
   if (request.type === MediaType.BOOK && bm) {
-    const bookId = stripOLWorkPrefix(bm.openLibraryId || bm.foreignBookId || '');
+    const bookId = stripOLWorkPrefix(
+      bm.openLibraryId || bm.foreignBookId || ''
+    );
     return {
       title: bm.title,
       coverUrl:
@@ -224,10 +252,13 @@ const getNonTmdbInfo = (
           : undefined),
       href: `/book/${bookId}`,
       typeLabel: 'Book',
+      statusReason: bm.statusReason,
     };
   }
   if (request.type === MediaType.AUDIOBOOK && am) {
-    const bookId = stripOLWorkPrefix(am.openLibraryId || am.foreignBookId || '');
+    const bookId = stripOLWorkPrefix(
+      am.openLibraryId || am.foreignBookId || ''
+    );
     return {
       title: am.title,
       coverUrl:
@@ -237,6 +268,29 @@ const getNonTmdbInfo = (
           : undefined),
       href: `/book/${bookId}`,
       typeLabel: 'Audiobook',
+      statusReason: am.statusReason,
+    };
+  }
+  if (request.type === MediaType.MANGA && mm) {
+    return {
+      title: mm.title,
+      coverUrl: mm.coverUrl,
+      href: `/manga/${mm.anilistId}`,
+      typeLabel: 'Manga',
+      statusReason: mm.statusReason,
+    };
+  }
+  if (request.type === MediaType.COMIC && cm) {
+    // Intentionally no `platform` field — the platform badge is for
+    // game-style metadata. Surfacing the publisher here would
+    // duplicate what's already on the comic detail page and cluttered
+    // the request card.
+    return {
+      title: cm.title,
+      coverUrl: cm.coverUrl,
+      href: `/comic/${cm.comicVineId}`,
+      typeLabel: 'Comic',
+      statusReason: cm.statusReason,
     };
   }
   return { title: 'Unknown', href: '#', typeLabel: request.type };
@@ -570,7 +624,9 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
     // that aren't reflected on the media (DECLINED, FAILED).
     const mediaWithStatus = (request.bookMedia ??
       request.audiobookMedia ??
-      request.gameMedia) as { status?: MediaStatus | null } | undefined;
+      request.gameMedia ??
+      request.mangaMedia ??
+      request.comicMedia) as { status?: MediaStatus | null } | undefined;
     const mediaStatus = mediaWithStatus?.status ?? null;
     const requestStatus = requestData?.status ?? request.status;
     const showRequestBadge =
@@ -602,7 +658,11 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                     ? '🎮'
                     : request.type === MediaType.AUDIOBOOK
                       ? '🎧'
-                      : '📖'}
+                      : request.type === MediaType.MANGA
+                        ? '📚'
+                        : request.type === MediaType.COMIC
+                          ? '💥'
+                          : '📖'}
                 </div>
               )}
             </Link>
@@ -614,7 +674,11 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                       ? 'border-teal-500 bg-teal-600/80'
                       : request.type === MediaType.AUDIOBOOK
                         ? 'border-pink-500 bg-pink-600/80'
-                        : 'border-orange-500 bg-orange-600/80'
+                        : request.type === MediaType.MANGA
+                          ? 'border-fuchsia-500 bg-fuchsia-600/80'
+                          : request.type === MediaType.COMIC
+                            ? 'border-amber-500 bg-amber-600/80'
+                            : 'border-orange-500 bg-orange-600/80'
                   }`}
                 >
                   {info.typeLabel}
@@ -638,14 +702,17 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               <span className="card-field-name">
                 {intl.formatMessage(globalMessages.status)}
               </span>
-              {showRequestBadge ? (
-                <NonTmdbStatusBadge status={requestStatus} />
-              ) : (
-                <StatusBadge
-                  status={mediaStatus ?? undefined}
-                  title={info.title}
-                />
-              )}
+              <span className="inline-flex items-center gap-1">
+                {showRequestBadge ? (
+                  <NonTmdbStatusBadge status={requestStatus} />
+                ) : (
+                  <StatusBadge
+                    status={mediaStatus ?? undefined}
+                    title={info.title}
+                  />
+                )}
+                <StatusReason reason={info.statusReason} compact />
+              </span>
             </div>
             {renderMetadata()}
           </div>
@@ -837,6 +904,7 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
                   }
                 />
               )}
+              <StatusReason requestId={requestData.id} compact />
             </div>
             {renderMetadata()}
             {request.profileName && (

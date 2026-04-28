@@ -150,6 +150,8 @@ export interface MainSettings {
     book: Quota;
     audiobook: Quota;
     game: Quota;
+    manga: Quota;
+    comic: Quota;
   };
   hideAvailable: boolean;
   hideBlocklisted: boolean;
@@ -232,6 +234,13 @@ interface FullPublicSettings extends PublicSettings {
   bookEnabled: boolean;
   audiobookEnabled: boolean;
   gameEnabled: boolean;
+  mangaEnabled: boolean;
+  comicEnabled: boolean;
+  // Optional admin-defined notices shown at the top of each request
+  // modal. Empty string per scope = no notice. Surfaced via the
+  // public settings endpoint so the modals (which run as any user)
+  // can read them without an admin-scoped request.
+  requestNotices: RequestNotices;
 }
 
 export interface NotificationAgentConfig {
@@ -475,6 +484,40 @@ export interface AudiobookSettings {
   };
 }
 
+export interface MangaSettings {
+  metadataProviders: {
+    // Sole source today (AniList GraphQL, free, no API key). The
+    // shape mirrors book.metadataProviders so the UI tab can reuse
+    // the primarySource select / enrichment toggle pattern, but
+    // currently AniList is the only viable free metadata source
+    // for manga at scale.
+    primarySource: 'anilist';
+    anilist: boolean;
+    // Optional Jikan (MyAnimeList REST proxy) enrichment — disabled
+    // by default because AniList already carries score / tags /
+    // characters and Jikan adds latency without much new content.
+    jikan: boolean;
+    preferredLanguage: string;
+    languagePolicy: 'prefer' | 'strict';
+    // Hide adult-tagged manga from search + detail responses.
+    // AniList exposes `isAdult` and `tags[].isAdult` flags we
+    // honour when this is on.
+    hideAdult: boolean;
+  };
+  // Optional Suwayomi (a.k.a. Tachidesk) download-manager. Behaves
+  // like ROMM for games — when not configured, requests fall back
+  // to a manual workflow (admin marks AVAILABLE by hand).
+  suwayomi: {
+    url: string;
+    publicUrl: string;
+    apiKey: string;
+    username: string;
+    password: string;
+    pollIntervalMinutes: number;
+    enabled: boolean;
+  };
+}
+
 export interface GameSettings {
   igdb: {
     clientId: string;
@@ -491,6 +534,32 @@ export interface GameSettings {
   };
 }
 
+export interface ComicSettings {
+  metadataProviders: {
+    // ComicVine is the only viable free comics metadata source today
+    // (League of Comic Geeks needs a paid partner key, Marvel's API
+    // is per-character only). Shape mirrors manga.metadataProviders
+    // so the UI tab can reuse the same primarySource select.
+    primarySource: 'comicvine';
+    comicvine: boolean;
+    apiKey: string;
+    // Hide adult / mature-flagged volumes from search + detail.
+    // ComicVine doesn't expose a dedicated isAdult flag, so we
+    // filter on tags / publisher heuristics inside the route layer.
+    hideAdult: boolean;
+  };
+  // Optional Mylar3 download manager. Behaves like Suwayomi for
+  // manga / ROMM for games — when not configured, comic requests
+  // fall back to the manual workflow.
+  mylar: {
+    url: string;
+    publicUrl: string;
+    apiKey: string;
+    pollIntervalMinutes: number;
+    enabled: boolean;
+  };
+}
+
 export interface OidcSettings {
   enabled: boolean;
   issuerUrl: string;
@@ -501,6 +570,57 @@ export interface OidcSettings {
   groupClaimName: string;
   defaultPermissions: number;
   groupMappings: OidcGroupMapping[];
+}
+
+/**
+ * Master on/off switches for each non-TMDB media type. When a
+ * type is OFF:
+ *  - it disappears from the search tabs (xxxEnabled in
+ *    fullPublicSettings ANDs with these flags)
+ *  - the search / detail / request routes for that type return 503
+ *  - the request modal can't be opened (the detail page returns 404)
+ *
+ * Defaults to true for every type to preserve existing behaviour
+ * for upgrading installs — admins explicitly opt OUT.
+ */
+export interface MediaTypeToggles {
+  book: boolean;
+  audiobook: boolean;
+  game: boolean;
+  manga: boolean;
+  comic: boolean;
+}
+
+/** Severity drives the matching <Alert type=…> visual. */
+export type RequestNoticeSeverity = 'info' | 'warning' | 'error';
+
+/**
+ * One admin-defined notice block. Empty `message` = no notice for
+ * that scope (the severity is irrelevant when the message is
+ * blank). Severity drives the alert color / icon (info = blue,
+ * warning = amber, error = red — matches the existing Alert
+ * component's variants).
+ */
+export interface RequestNoticeEntry {
+  message: string;
+  severity: RequestNoticeSeverity;
+}
+
+/**
+ * Optional admin-defined notices that surface as alerts at the top
+ * of each request modal AND on the matching content detail page.
+ * The `global` field shows on every request regardless of type;
+ * per-type fields stack with it (global on top, per-type below).
+ */
+export interface RequestNotices {
+  global: RequestNoticeEntry;
+  movie: RequestNoticeEntry;
+  tv: RequestNoticeEntry;
+  book: RequestNoticeEntry;
+  audiobook: RequestNoticeEntry;
+  game: RequestNoticeEntry;
+  manga: RequestNoticeEntry;
+  comic: RequestNoticeEntry;
 }
 
 export interface AllSettings {
@@ -524,6 +644,10 @@ export interface AllSettings {
   game: GameSettings;
   book: BookSettings;
   audiobook: AudiobookSettings;
+  manga: MangaSettings;
+  comic: ComicSettings;
+  mediaTypes: MediaTypeToggles;
+  requestNotices: RequestNotices;
   oidc: OidcSettings;
   migrations: string[];
 }
@@ -554,6 +678,8 @@ class Settings {
           book: {},
           audiobook: {},
           game: {},
+          manga: {},
+          comic: {},
         },
         hideAvailable: false,
         hideBlocklisted: false,
@@ -848,6 +974,57 @@ class Settings {
           languagePolicy: 'prefer',
         },
       },
+      manga: {
+        metadataProviders: {
+          primarySource: 'anilist',
+          anilist: true,
+          jikan: false,
+          preferredLanguage: '',
+          languagePolicy: 'prefer',
+          hideAdult: true,
+        },
+        suwayomi: {
+          url: '',
+          publicUrl: '',
+          apiKey: '',
+          username: '',
+          password: '',
+          pollIntervalMinutes: 15,
+          enabled: false,
+        },
+      },
+      comic: {
+        metadataProviders: {
+          primarySource: 'comicvine',
+          comicvine: false,
+          apiKey: '',
+          hideAdult: true,
+        },
+        mylar: {
+          url: '',
+          publicUrl: '',
+          apiKey: '',
+          pollIntervalMinutes: 15,
+          enabled: false,
+        },
+      },
+      mediaTypes: {
+        book: true,
+        audiobook: true,
+        game: true,
+        manga: true,
+        comic: true,
+      },
+      requestNotices: {
+        global: { message: '', severity: 'info' },
+        movie: { message: '', severity: 'info' },
+        tv: { message: '', severity: 'info' },
+        book: { message: '', severity: 'info' },
+        audiobook: { message: '', severity: 'info' },
+        game: { message: '', severity: 'info' },
+        manga: { message: '', severity: 'info' },
+        comic: { message: '', severity: 'info' },
+      },
       oidc: {
         enabled: false,
         issuerUrl: '',
@@ -965,6 +1142,84 @@ class Settings {
     this.data.audiobook = mergeSettings(this.data.audiobook, data);
   }
 
+  get manga(): MangaSettings {
+    return this.data.manga;
+  }
+
+  set manga(data: MangaSettings) {
+    this.data.manga = mergeSettings(this.data.manga, data);
+  }
+
+  get comic(): ComicSettings {
+    return this.data.comic;
+  }
+
+  set comic(data: ComicSettings) {
+    this.data.comic = mergeSettings(this.data.comic, data);
+  }
+
+  get mediaTypes(): MediaTypeToggles {
+    // Default-true fallback so older settings.json files (written
+    // before this block existed) still get the right shape on read.
+    const stored = this.data.mediaTypes;
+    return {
+      book: stored?.book ?? true,
+      audiobook: stored?.audiobook ?? true,
+      game: stored?.game ?? true,
+      manga: stored?.manga ?? true,
+      comic: stored?.comic ?? true,
+    };
+  }
+
+  set mediaTypes(data: MediaTypeToggles) {
+    this.data.mediaTypes = { ...this.mediaTypes, ...data };
+  }
+
+  get requestNotices(): RequestNotices {
+    const stored = this.data.requestNotices as
+      | RequestNotices
+      | Record<string, string>
+      | undefined;
+    // Soft-migrate: an earlier development build of this branch
+    // wrote each field as a plain string. Coerce that shape into
+    // the new {message, severity} block on read so downstream
+    // consumers don't have to care.
+    const coerce = (
+      value: RequestNoticeEntry | string | undefined
+    ): RequestNoticeEntry => {
+      if (typeof value === 'string') {
+        return { message: value, severity: 'info' };
+      }
+      if (value && typeof value === 'object') {
+        const sev = value.severity;
+        return {
+          message: value.message ?? '',
+          severity:
+            sev === 'warning' || sev === 'error' || sev === 'info'
+              ? sev
+              : 'info',
+        };
+      }
+      return { message: '', severity: 'info' };
+    };
+    return {
+      global: coerce(stored?.global as RequestNoticeEntry | string | undefined),
+      movie: coerce(stored?.movie as RequestNoticeEntry | string | undefined),
+      tv: coerce(stored?.tv as RequestNoticeEntry | string | undefined),
+      book: coerce(stored?.book as RequestNoticeEntry | string | undefined),
+      audiobook: coerce(
+        stored?.audiobook as RequestNoticeEntry | string | undefined
+      ),
+      game: coerce(stored?.game as RequestNoticeEntry | string | undefined),
+      manga: coerce(stored?.manga as RequestNoticeEntry | string | undefined),
+      comic: coerce(stored?.comic as RequestNoticeEntry | string | undefined),
+    };
+  }
+
+  set requestNotices(data: RequestNotices) {
+    this.data.requestNotices = { ...this.requestNotices, ...data };
+  }
+
   get oidc(): OidcSettings {
     return this.data.oidc;
   }
@@ -982,6 +1237,11 @@ class Settings {
   }
 
   get fullPublicSettings(): FullPublicSettings {
+    // Master toggles short-circuit every per-type Enabled flag below.
+    // When a media type is OFF in admin, its tab disappears from
+    // search and request endpoints return 503 — without us having to
+    // touch the per-provider config.
+    const types = this.mediaTypes;
     return {
       ...this.data.public,
       applicationTitle: this.data.main.applicationTitle,
@@ -1020,33 +1280,49 @@ class Settings {
         !!this.data.oidc.clientId,
       oidcProviderName: this.data.oidc.displayName || 'OIDC',
       bookEnabled:
-        (this.data.book.komga.enabled && !!this.data.book.komga.url) ||
-        (this.data.book.grimmory.enabled && !!this.data.book.grimmory.url) ||
-        (this.data.book.audiobookshelf.enabled &&
-          !!this.data.book.audiobookshelf.url &&
-          this.data.book.audiobookshelf.libraries.some(
-            (l) => l.mediaType === 'book'
-          )) ||
-        this.data.bindery.some(
-          (b) => b.mediaType === 'book' && !!b.hostname
-        ) ||
-        this.data.bookshelf.some(
-          (b) => b.mediaType === 'book' && !!b.hostname
-        ),
+        types.book &&
+        ((this.data.book.komga.enabled && !!this.data.book.komga.url) ||
+          (this.data.book.grimmory.enabled && !!this.data.book.grimmory.url) ||
+          (this.data.book.audiobookshelf.enabled &&
+            !!this.data.book.audiobookshelf.url &&
+            this.data.book.audiobookshelf.libraries.some(
+              (l) => l.mediaType === 'book'
+            )) ||
+          this.data.bindery.some(
+            (b) => b.mediaType === 'book' && !!b.hostname
+          ) ||
+          this.data.bookshelf.some(
+            (b) => b.mediaType === 'book' && !!b.hostname
+          )),
       audiobookEnabled:
-        (this.data.book.audiobookshelf.enabled &&
+        types.audiobook &&
+        ((this.data.book.audiobookshelf.enabled &&
           !!this.data.book.audiobookshelf.url &&
           this.data.book.audiobookshelf.libraries.some(
             (l) => l.mediaType === 'audiobook'
           )) ||
-        this.data.bindery.some(
-          (b) => b.mediaType === 'audiobook' && !!b.hostname
-        ) ||
-        this.data.bookshelf.some(
-          (b) => b.mediaType === 'audiobook' && !!b.hostname
-        ),
+          this.data.bindery.some(
+            (b) => b.mediaType === 'audiobook' && !!b.hostname
+          ) ||
+          this.data.bookshelf.some(
+            (b) => b.mediaType === 'audiobook' && !!b.hostname
+          )),
       gameEnabled:
-        this.data.game.romm.enabled && !!this.data.game.romm.url,
+        types.game && this.data.game.romm.enabled && !!this.data.game.romm.url,
+      mangaEnabled:
+        // Manga search needs a metadata source; Suwayomi (download
+        // manager) is optional. The tab is visible as long as the
+        // user has AniList enabled in Settings → Metadata Providers
+        // → Manga.
+        types.manga && !!this.data.manga?.metadataProviders?.anilist,
+      comicEnabled:
+        // Comics search needs an API key (ComicVine is keyed); Mylar3
+        // is optional. The tab is visible as long as ComicVine is
+        // enabled AND has a key set.
+        types.comic &&
+        !!this.data.comic?.metadataProviders?.comicvine &&
+        !!this.data.comic?.metadataProviders?.apiKey,
+      requestNotices: this.requestNotices,
     };
   }
 

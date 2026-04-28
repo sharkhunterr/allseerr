@@ -18,6 +18,10 @@ export interface UserSettingsGeneralResponse {
   audiobookQuotaDays?: number;
   gameQuotaLimit?: number;
   gameQuotaDays?: number;
+  mangaQuotaLimit?: number;
+  mangaQuotaDays?: number;
+  comicQuotaLimit?: number;
+  comicQuotaDays?: number;
   globalMovieQuotaDays?: number;
   globalMovieQuotaLimit?: number;
   globalTvQuotaLimit?: number;
@@ -28,6 +32,10 @@ export interface UserSettingsGeneralResponse {
   globalAudiobookQuotaLimit?: number;
   globalGameQuotaDays?: number;
   globalGameQuotaLimit?: number;
+  globalMangaQuotaDays?: number;
+  globalMangaQuotaLimit?: number;
+  globalComicQuotaDays?: number;
+  globalComicQuotaLimit?: number;
   watchlistSyncMovies?: boolean;
   watchlistSyncTv?: boolean;
 }

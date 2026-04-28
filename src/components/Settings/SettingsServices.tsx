@@ -8,13 +8,16 @@ import Modal from '@app/components/Common/Modal';
 import PageTitle from '@app/components/Common/PageTitle';
 import SubTabs from '@app/components/Common/SubTabs';
 import BinderyModal from '@app/components/Settings/BinderyModal';
-import BookshelfModal from '@app/components/Settings/BookshelfModal';
 import DownloadManagerSettings from '@app/components/Settings/BooksAudiobooks/DownloadManagerSettings';
 import LibraryServerSettings from '@app/components/Settings/BooksAudiobooks/LibraryServerSettings';
+import BookshelfModal from '@app/components/Settings/BookshelfModal';
+import SettingsMylar from '@app/components/Settings/MangaComics/SettingsMylar';
+import SettingsSuwayomi from '@app/components/Settings/MangaComics/SettingsSuwayomi';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
 import OverrideRuleTiles from '@app/components/Settings/OverrideRule/OverrideRuleTiles';
 import RadarrModal from '@app/components/Settings/RadarrModal';
 import SonarrModal from '@app/components/Settings/SonarrModal';
+import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
@@ -608,12 +611,12 @@ const BinderyServices = ({ mediaType }: BinderyServicesProps) => {
     serverId: number | null;
   }>({ open: false, serverId: null });
 
-  const filtered = (binderyData ?? []).filter(
-    (b) => b.mediaType === mediaType
-  );
+  const filtered = (binderyData ?? []).filter((b) => b.mediaType === mediaType);
 
   const deleteServer = async () => {
-    await axios.delete(`/api/v1/settings/bindery/${deleteBinderyModal.serverId}`);
+    await axios.delete(
+      `/api/v1/settings/bindery/${deleteBinderyModal.serverId}`
+    );
     setDeleteBinderyModal({ open: false, serverId: null });
     revalidateBindery();
     mutate('/api/v1/settings/public');
@@ -667,18 +670,17 @@ const BinderyServices = ({ mediaType }: BinderyServicesProps) => {
         {!binderyData && !binderyError && <LoadingSpinner />}
         {binderyData && !binderyError && (
           <>
-            {filtered.length > 0 &&
-              !filtered.some((b) => b.isDefault) && (
-                <Alert
-                  title={intl.formatMessage(messages.noDefaultBindery, {
-                    mediaType: intl.formatMessage(
-                      mediaType === 'book'
-                        ? messages.mediaTypeBook
-                        : messages.mediaTypeAudiobook
-                    ),
-                  })}
-                />
-              )}
+            {filtered.length > 0 && !filtered.some((b) => b.isDefault) && (
+              <Alert
+                title={intl.formatMessage(messages.noDefaultBindery, {
+                  mediaType: intl.formatMessage(
+                    mediaType === 'book'
+                      ? messages.mediaTypeBook
+                      : messages.mediaTypeAudiobook
+                  ),
+                })}
+              />
+            )}
             <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
               {filtered.map((bindery) => (
                 <ServerInstance
@@ -691,9 +693,7 @@ const BinderyServices = ({ mediaType }: BinderyServicesProps) => {
                   isDefault={bindery.isDefault}
                   isBindery
                   externalUrl={bindery.externalUrl}
-                  onEdit={() =>
-                    setEditBinderyModal({ open: true, bindery })
-                  }
+                  onEdit={() => setEditBinderyModal({ open: true, bindery })}
                   onDelete={() =>
                     setDeleteBinderyModal({
                       open: true,
@@ -865,14 +865,39 @@ const BookshelfServices = ({ mediaType }: BookshelfServicesProps) => {
 
 const SettingsServices = () => {
   const intl = useIntl();
+  const { currentSettings } = useSettings();
   const [activeTab, setActiveTab] = useState<
-    'movies-tv' | 'books' | 'audiobooks'
+    'movies-tv' | 'books' | 'audiobooks' | 'manga' | 'comics'
   >('movies-tv');
 
+  // Per-type tabs only show when their master toggle is on. Suwayomi
+  // (manga) and Mylar3 (comic) live as the download-manager half of
+  // their respective types, mirroring the existing books / audiobooks
+  // tabs that host Bindery / Bookshelf / DownloadManager / Library
+  // panels.
   const tabs: { key: typeof activeTab; label: string }[] = [
-    { key: 'movies-tv', label: `${intl.formatMessage(globalMessages.movies)} & ${intl.formatMessage(globalMessages.tvshows)}` },
+    {
+      key: 'movies-tv',
+      label: `${intl.formatMessage(globalMessages.movies)} & ${intl.formatMessage(globalMessages.tvshows)}`,
+    },
     { key: 'books', label: intl.formatMessage(globalMessages.book) },
     { key: 'audiobooks', label: intl.formatMessage(globalMessages.audiobook) },
+    ...(currentSettings.mangaEnabled
+      ? [
+          {
+            key: 'manga' as const,
+            label: intl.formatMessage(globalMessages.manga),
+          },
+        ]
+      : []),
+    ...(currentSettings.comicEnabled
+      ? [
+          {
+            key: 'comics' as const,
+            label: intl.formatMessage(globalMessages.comic),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -884,9 +909,7 @@ const SettingsServices = () => {
         ]}
       />
       <div className="mb-6">
-        <h3 className="heading">
-          {intl.formatMessage(messages.services)}
-        </h3>
+        <h3 className="heading">{intl.formatMessage(messages.services)}</h3>
       </div>
       <SubTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
       {activeTab === 'movies-tv' && <MoviesAndTVServices />}
@@ -906,6 +929,8 @@ const SettingsServices = () => {
           <LibraryServerSettings mediaTypeFilter="audiobook" />
         </div>
       )}
+      {activeTab === 'manga' && <SettingsSuwayomi />}
+      {activeTab === 'comics' && <SettingsMylar />}
     </>
   );
 };

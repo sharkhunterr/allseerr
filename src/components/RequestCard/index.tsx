@@ -5,6 +5,7 @@ import CachedImage from '@app/components/Common/CachedImage';
 import Tooltip from '@app/components/Common/Tooltip';
 import RequestModal from '@app/components/RequestModal';
 import StatusBadge from '@app/components/StatusBadge';
+import StatusReason from '@app/components/StatusReason';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
@@ -227,7 +228,9 @@ interface RequestCardProps {
 const isNonTmdbType = (type: string) =>
   type === MediaType.GAME ||
   type === MediaType.BOOK ||
-  type === MediaType.AUDIOBOOK;
+  type === MediaType.AUDIOBOOK ||
+  type === MediaType.MANGA ||
+  type === MediaType.COMIC;
 
 const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
   const { ref, inView } = useInView({
@@ -327,7 +330,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
     }
   }, [title, onTitleData, request]);
 
-  // === Non-TMDB rendering (game, book, audiobook) ===
+  // === Non-TMDB rendering (game, book, audiobook, manga, comic) ===
   if (isNonTmdb) {
     const typedRequest = request as NonFunctionProperties<MediaRequest>;
     const gm = typedRequest.gameMedia as
@@ -336,6 +339,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           coverUrl?: string;
           igdbId: number;
           status?: MediaStatus | null;
+          statusReason?: string | null;
         }
       | undefined;
     const bm = typedRequest.bookMedia as
@@ -346,6 +350,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           foreignBookId?: string;
           covers?: number[];
           status?: MediaStatus | null;
+          statusReason?: string | null;
         }
       | undefined;
     const am = typedRequest.audiobookMedia as
@@ -356,6 +361,25 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           foreignBookId?: string;
           covers?: number[];
           status?: MediaStatus | null;
+          statusReason?: string | null;
+        }
+      | undefined;
+    const mm = typedRequest.mangaMedia as
+      | {
+          title: string;
+          coverUrl?: string;
+          anilistId: number;
+          status?: MediaStatus | null;
+          statusReason?: string | null;
+        }
+      | undefined;
+    const cm = typedRequest.comicMedia as
+      | {
+          title: string;
+          coverUrl?: string;
+          comicVineId: number;
+          status?: MediaStatus | null;
+          statusReason?: string | null;
         }
       | undefined;
 
@@ -387,6 +411,16 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           : undefined);
       href = `/book/${stripOLWorkPrefix(am.openLibraryId || am.foreignBookId || '')}`;
       typeLabel = 'Audiobook';
+    } else if (request.type === MediaType.MANGA && mm) {
+      infoTitle = mm.title;
+      coverUrl = mm.coverUrl;
+      href = `/manga/${mm.anilistId}`;
+      typeLabel = 'Manga';
+    } else if (request.type === MediaType.COMIC && cm) {
+      infoTitle = cm.title;
+      coverUrl = cm.coverUrl;
+      href = `/comic/${cm.comicVineId}`;
+      typeLabel = 'Comic';
     }
 
     const statusBadge = (() => {
@@ -399,7 +433,13 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
         reqStatus !== MediaRequestStatus.DECLINED &&
         reqStatus !== MediaRequestStatus.FAILED
       ) {
-        const mediaStatus = bm?.status ?? am?.status ?? gm?.status ?? undefined;
+        const mediaStatus =
+          bm?.status ??
+          am?.status ??
+          gm?.status ??
+          mm?.status ??
+          cm?.status ??
+          undefined;
         return <StatusBadge status={mediaStatus} title={infoTitle} />;
       }
       // reqStatus is narrowed to DECLINED | FAILED here.
@@ -463,12 +503,26 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                   ? 'border-teal-500 bg-teal-600/80'
                   : request.type === MediaType.AUDIOBOOK
                     ? 'border-pink-500 bg-pink-600/80'
-                    : 'border-orange-500 bg-orange-600/80'
+                    : request.type === MediaType.MANGA
+                      ? 'border-fuchsia-500 bg-fuchsia-600/80'
+                      : request.type === MediaType.COMIC
+                        ? 'border-amber-500 bg-amber-600/80'
+                        : 'border-orange-500 bg-orange-600/80'
               }`}
             >
               {typeLabel}
             </span>
             {statusBadge}
+            <StatusReason
+              compact
+              reason={
+                bm?.statusReason ??
+                am?.statusReason ??
+                gm?.statusReason ??
+                mm?.statusReason ??
+                cm?.statusReason
+              }
+            />
           </div>
           <div className="flex flex-1 items-end space-x-2">
             {(requestData?.status ?? request.status) ===
@@ -539,7 +593,11 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                   ? '🎮'
                   : request.type === MediaType.AUDIOBOOK
                     ? '🎧'
-                    : '📖'}
+                    : request.type === MediaType.MANGA
+                      ? '📚'
+                      : request.type === MediaType.COMIC
+                        ? '💥'
+                        : '📖'}
               </div>
             )}
           </div>
@@ -730,6 +788,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                 }
               />
             )}
+            <StatusReason requestId={requestData.id} compact />
           </div>
           <div className="flex flex-1 items-end space-x-2">
             {requestData.status === MediaRequestStatus.FAILED &&

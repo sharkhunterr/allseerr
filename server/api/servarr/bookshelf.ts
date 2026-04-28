@@ -18,11 +18,38 @@ export interface BookshelfBookAddOptions {
   authorName: string;
   /**
    * Preferred lookup keys — Bookshelf's /book/lookup deterministically
-   * matches by ISBN when supplied, much more reliable than title+author
-   * fuzzy search (which can pick the wrong edition / translation).
+   * matches by ISBN / ASIN when supplied, much more reliable than
+   * title+author fuzzy search (which can pick the wrong edition /
+   * translation, or fail entirely when the user requested a
+   * localised title that the Goodreads / Hardcover index doesn't
+   * carry under that name).
    */
   isbn13?: string;
   isbn10?: string;
+  /**
+   * Audible / Amazon Standard Identification Number. When present,
+   * tried after ISBN and before falling back to free-text. Bookshelf
+   * forwards `asin:<value>` to its upstream metadata source which
+   * resolves it to a canonical edition.
+   */
+  asin?: string;
+  /**
+   * Optional English / canonical title. Used as a last-ditch
+   * free-text retry when the localised title doesn't match — covers
+   * the common case of an Audible audiobook requested in French
+   * whose Hardcover record only exists under its English title
+   * ("Alien — La mer des désolations" → "Alien: Sea of Sorrows").
+   */
+  englishTitle?: string;
+  /**
+   * Optional canonical author name to pair with `englishTitle` in
+   * the retry. Helps when the Audible product credits multiple
+   * people (e.g. narrator + screenwriter + author) but the
+   * underlying Hardcover/Goodreads record is filed under the
+   * primary writer alone — `"Alien: Sea of Sorrows" "James A.
+   * Moore"` matches where `"Dirk Maggs, James A. Moore"` doesn't.
+   */
+  englishAuthor?: string;
   /**
    * OpenLibrary work key kept for logging/troubleshooting only — Bookshelf
    * uses Goodreads/Hardcover numeric IDs internally and won't recognise OL
@@ -75,23 +102,20 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
 
   public getProfiles = async (): Promise<QualityProfile[]> => {
     try {
-      const response = await this.axios.get<QualityProfile[]>(
-        '/qualityprofile'
-      );
+      const response =
+        await this.axios.get<QualityProfile[]>('/qualityprofile');
       return response.data;
     } catch (e) {
-      throw new Error(
-        `[Bookshelf] Failed to retrieve profiles: ${e.message}`,
-        { cause: e }
-      );
+      throw new Error(`[Bookshelf] Failed to retrieve profiles: ${e.message}`, {
+        cause: e,
+      });
     }
   };
 
   public getMetadataProfiles = async (): Promise<QualityProfile[]> => {
     try {
-      const response = await this.axios.get<QualityProfile[]>(
-        '/metadataprofile'
-      );
+      const response =
+        await this.axios.get<QualityProfile[]>('/metadataprofile');
       return response.data;
     } catch (e) {
       throw new Error(
@@ -106,10 +130,9 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       const response = await this.axios.get<BookshelfBook[]>('/book');
       return response.data;
     } catch (e) {
-      throw new Error(
-        `[Bookshelf] Failed to retrieve books: ${e.message}`,
-        { cause: e }
-      );
+      throw new Error(`[Bookshelf] Failed to retrieve books: ${e.message}`, {
+        cause: e,
+      });
     }
   };
 
@@ -118,10 +141,9 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       const response = await this.axios.get<BookshelfBook>(`/book/${id}`);
       return response.data;
     } catch (e) {
-      throw new Error(
-        `[Bookshelf] Failed to retrieve book: ${e.message}`,
-        { cause: e }
-      );
+      throw new Error(`[Bookshelf] Failed to retrieve book: ${e.message}`, {
+        cause: e,
+      });
     }
   };
 
@@ -129,22 +151,47 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     const cacheKey = `lookup-book:${term.toLowerCase()}`;
     const hit = bookshelfCache.get<BookshelfBook[]>(cacheKey);
     if (hit !== undefined) return hit;
-    try {
-      // Bookshelf proxies to Goodreads/Hardcover — allow up to 25s for
-      // these upstream calls; the default 10s axios timeout is too tight.
+    // Bookshelf proxies to Goodreads/Hardcover. Use a 60s timeout
+    // (Hardcover is intermittently slow and 25s wasn't enough on the
+    // user's instance) and retry once on timeout — many timeouts win
+    // on a quick second attempt because the upstream cache warmed up.
+    const callOnce = async (timeoutMs: number) => {
       const response = await this.axios.get<BookshelfBook[]>('/book/lookup', {
         params: { term },
-        timeout: 25000,
+        timeout: timeoutMs,
       });
-      const value = response.data ?? [];
+      return response.data ?? [];
+    };
+    try {
+      const value = await callOnce(60000);
       // Cache 1h — same lookup during a session is a common flow
       // (book detail opens it twice: once for metadata, once for dispatch).
       setCacheable(cacheKey, value, 3600);
       return value;
     } catch (e) {
+      const isTimeout =
+        e?.code === 'ECONNABORTED' || /timeout/i.test(e?.message ?? '');
+      if (isTimeout) {
+        logger.warn('Bookshelf book lookup timed out — retrying once', {
+          label: 'Bookshelf API',
+          term,
+        });
+        try {
+          const value = await callOnce(60000);
+          setCacheable(cacheKey, value, 3600);
+          return value;
+        } catch (e2) {
+          logger.error('Bookshelf book lookup failed (after retry)', {
+            label: 'Bookshelf API',
+            errorMessage: e2 instanceof Error ? e2.message : String(e2),
+            term,
+          });
+          return [];
+        }
+      }
       logger.error('Bookshelf book lookup failed', {
         label: 'Bookshelf API',
-        errorMessage: e.message,
+        errorMessage: e instanceof Error ? e.message : String(e),
         term,
       });
       return [];
@@ -190,9 +237,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
    * Only matches books already in Bookshelf's DB — which is every book
    * Bookshelf has imported for an author we've touched before.
    */
-  public async findSeriesMembers(
-    seriesName: string
-  ): Promise<
+  public async findSeriesMembers(seriesName: string): Promise<
     {
       id: number;
       title: string;
@@ -283,24 +328,49 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     }
   }
 
-  public async lookupAuthor(
-    term: string
-  ): Promise<Record<string, unknown>[]> {
+  public async lookupAuthor(term: string): Promise<Record<string, unknown>[]> {
     const cacheKey = `lookup-author:${term.toLowerCase()}`;
     const hit = bookshelfCache.get<Record<string, unknown>[]>(cacheKey);
     if (hit !== undefined) return hit;
-    try {
+    // /author/lookup forwards to Hardcover and is consistently
+    // slower than /book/lookup. Bump the timeout to 60s and retry
+    // once on timeout — Hardcover is intermittently slow and a
+    // simple retry typically wins on the second try.
+    const callOnce = async (timeoutMs: number) => {
       const response = await this.axios.get<Record<string, unknown>[]>(
         '/author/lookup',
-        { params: { term }, timeout: 25000 }
+        { params: { term }, timeout: timeoutMs }
       );
-      const value = response.data ?? [];
+      return response.data ?? [];
+    };
+    try {
+      const value = await callOnce(60000);
       setCacheable(cacheKey, value, 3600);
       return value;
     } catch (e) {
+      const isTimeout =
+        e?.code === 'ECONNABORTED' || /timeout/i.test(e?.message ?? '');
+      if (isTimeout) {
+        logger.warn('Bookshelf author lookup timed out — retrying once', {
+          label: 'Bookshelf API',
+          term,
+        });
+        try {
+          const value = await callOnce(60000);
+          setCacheable(cacheKey, value, 3600);
+          return value;
+        } catch (e2) {
+          logger.error('Bookshelf author lookup failed (after retry)', {
+            label: 'Bookshelf API',
+            errorMessage: e2 instanceof Error ? e2.message : String(e2),
+            term,
+          });
+          return [];
+        }
+      }
       logger.error('Bookshelf author lookup failed', {
         label: 'Bookshelf API',
-        errorMessage: e.message,
+        errorMessage: e instanceof Error ? e.message : String(e),
         term,
       });
       return [];
@@ -323,6 +393,17 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     qualityProfileId: number;
     metadataProfileId: number;
     rootFolderPath: string;
+    /**
+     * Optional author resource already resolved upstream (e.g. the
+     * `author` object embedded in a `/book/lookup` result). When
+     * present, it replaces the `/author/lookup?term=…` round-trip in
+     * the not-yet-persisted branch — Bookshelf's author lookup
+     * endpoint forwards to Hardcover and frequently times out at
+     * 25s when Hardcover is slow, so reusing the candidate we
+     * already pulled (and which carries the same shape) avoids a
+     * gratuitous failure when only the name is the bottleneck.
+     */
+    preResolvedCandidate?: Record<string, unknown>;
   }): Promise<{ author: Record<string, unknown>; wasExisting: boolean }> {
     const existingList = await this.axios
       .get<Record<string, unknown>[]>('/author', { timeout: 25000 })
@@ -344,14 +425,29 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     );
     if (byName) return { author: byName, wasExisting: true };
 
-    // Not persisted — lookup metadata and POST /author
-    const candidates = await this.lookupAuthor(options.authorName);
-    const candidate =
-      candidates.find(
-        (a) =>
-          typeof a.authorName === 'string' &&
-          a.authorName.toLowerCase() === nameLc
-      ) ?? candidates[0];
+    // Not persisted — POST /author. Use the upstream-supplied
+    // candidate when the caller already has one (saves a
+    // /author/lookup round-trip), otherwise fall back to the
+    // network lookup.
+    let candidate: Record<string, unknown> | undefined =
+      options.preResolvedCandidate;
+    if (candidate) {
+      logger.debug('Bookshelf ensureAuthor: using pre-resolved candidate', {
+        label: 'Bookshelf API',
+        keys: Object.keys(candidate).slice(0, 12),
+        foreignAuthorId: (candidate as { foreignAuthorId?: string })
+          .foreignAuthorId,
+      });
+    }
+    if (!candidate) {
+      const candidates = await this.lookupAuthor(options.authorName);
+      candidate =
+        candidates.find(
+          (a) =>
+            typeof a.authorName === 'string' &&
+            a.authorName.toLowerCase() === nameLc
+        ) ?? candidates[0];
+    }
     if (!candidate) {
       throw new Error(
         `Bookshelf ensureAuthor: no lookup result for "${options.authorName}"`
@@ -372,10 +468,14 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     };
 
     try {
+      // POST /author needs metadata from Hardcover too (Bookshelf
+      // populates the new author's overview / images / etc. as part
+      // of the create call). Bump to 60s to match the lookup
+      // timeouts above — Hardcover is slow but eventually responds.
       const response = await this.axios.post<Record<string, unknown>>(
         '/author',
         authorPayload,
-        { timeout: 30000 }
+        { timeout: 60000 }
       );
       return { author: response.data, wasExisting: false };
     } catch (e) {
@@ -400,8 +500,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
           .catch(() => [] as Record<string, unknown>[]);
         const match =
           again.find(
-            (a) =>
-              a.foreignAuthorId === (candidate.foreignAuthorId as string)
+            (a) => a.foreignAuthorId === (candidate.foreignAuthorId as string)
           ) ??
           again.find(
             (a) =>
@@ -429,25 +528,75 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     options: BookshelfBookAddOptions
   ): Promise<BookshelfBook> => {
     try {
-      // Step 1 — Book lookup. Per Libreseerr's reference implementation,
-      // Readarr/Bookshelf accepts ISBN with the `isbn:` prefix; ISBN is by
-      // far the most reliable key (one ISBN = one specific edition).
-      // Fall back to free text "<title> <author>" when ISBN isn't available.
+      // Step 1 — Book lookup. Try every identifier we have, in order
+      // of decreasing reliability. Bookshelf (a Readarr-Audiobook
+      // fork) accepts the same prefix vocabulary Readarr does:
+      //   isbn:<value>     — print ISBN-13/-10
+      //   audible:<asin>   — Audible product ASIN (Readarr's
+      //                      canonical audiobook key)
+      //   goodreads:<id>   — Goodreads work id (we don't track one)
+      // ASIN gets two attempts (`audible:` + `asin:`) because some
+      // forks accept the bare prefix; cheap to try both.
+      // English-title text retry rescues the "user requested a
+      // localisation that Hardcover only indexed under its original
+      // English title" case (e.g. "Alien — La mer des désolations"
+      // → "Alien: Sea of Sorrows").
       let bookMatches: BookshelfBook[] = [];
+      const attemptedKeys: string[] = [];
       let lookupKey: string | undefined;
+      const tryLookup = async (term: string, label: string) => {
+        if (bookMatches.length > 0) return;
+        attemptedKeys.push(label);
+        bookMatches = await this.lookupBook(term);
+        if (bookMatches.length > 0) {
+          lookupKey = label;
+          logger.debug('Bookshelf book lookup matched', {
+            label: 'Bookshelf API',
+            via: lookupKey,
+            matches: bookMatches.length,
+          });
+        }
+      };
       if (options.isbn13) {
-        bookMatches = await this.lookupBook(`isbn:${options.isbn13}`);
-        lookupKey = `isbn:${options.isbn13}`;
+        await tryLookup(`isbn:${options.isbn13}`, `isbn:${options.isbn13}`);
       }
-      if (bookMatches.length === 0 && options.isbn10) {
-        bookMatches = await this.lookupBook(`isbn:${options.isbn10}`);
-        lookupKey = `isbn:${options.isbn10}`;
+      if (options.isbn10) {
+        await tryLookup(`isbn:${options.isbn10}`, `isbn:${options.isbn10}`);
       }
-      if (bookMatches.length === 0) {
-        bookMatches = await this.lookupBook(
-          `${options.title} ${options.authorName}`
+      if (options.asin) {
+        await tryLookup(`audible:${options.asin}`, `audible:${options.asin}`);
+        await tryLookup(`asin:${options.asin}`, `asin:${options.asin}`);
+      }
+      await tryLookup(
+        `${options.title} ${options.authorName}`,
+        `text:"${options.title}" "${options.authorName}"`
+      );
+      if (
+        options.englishTitle &&
+        options.englishTitle.toLowerCase().trim() !==
+          options.title.toLowerCase().trim()
+      ) {
+        // Prefer the canonical Hardcover/Goodreads author when one
+        // was passed (single primary writer), then fall back to the
+        // local authorName which may include credits like narrators
+        // or adaptation directors that confuse the upstream index.
+        const retryAuthor = options.englishAuthor ?? options.authorName;
+        logger.info('Bookshelf book lookup retrying with English title', {
+          label: 'Bookshelf API',
+          localised: options.title,
+          english: options.englishTitle,
+          retryAuthor,
+        });
+        await tryLookup(
+          `${options.englishTitle} ${retryAuthor}`,
+          `text:"${options.englishTitle}" "${retryAuthor}"`
         );
-        lookupKey = `text:"${options.title}" "${options.authorName}"`;
+        // Final ditch — title alone. Goodreads' fuzzy match is good
+        // enough that "Alien: Sea of Sorrows" will land on the
+        // right work even without an author hint, and we've
+        // already verified identity client-side via Hardcover's
+        // ASIN/title cross-match.
+        await tryLookup(options.englishTitle, `text:"${options.englishTitle}"`);
       }
 
       const looseBooks = bookMatches as unknown as Record<string, unknown>[];
@@ -460,8 +609,11 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
         ) ?? looseBooks[0];
 
       if (!bookMatch || !bookMatch.foreignBookId) {
+        const tried = attemptedKeys.length
+          ? attemptedKeys.join(' / ')
+          : 'no key';
         throw new Error(
-          `Bookshelf book lookup returned no result via ${lookupKey ?? 'no key'}`
+          `Bookshelf book lookup returned no result. Tried: ${tried}`
         );
       }
 
@@ -469,15 +621,44 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       // mirrors Libreseerr's `_ensure_author`: prefer an existing
       // persisted author (matched by foreignAuthorId then by name),
       // otherwise /author/lookup + POST /author with rootFolderPath.
+      //
+      // Author-name resolution priority:
+      //   1. matched book's author.authorName — the canonical name
+      //      Bookshelf returned for the lookup we just resolved.
+      //      Always single-author and always indexed (otherwise the
+      //      book lookup wouldn't have matched), so /author/lookup
+      //      will hit cleanly when this falls through to step 4.
+      //   2. options.englishAuthor — explicit override from the
+      //      dispatcher (Hardcover-resolved primary writer for the
+      //      audiobook English-title retry).
+      //   3. options.authorName — the original (potentially
+      //      multi-credit) request payload. Last resort because
+      //      forms like "Dirk Maggs, James A. Moore" timeout
+      //      Bookshelf's /author/lookup, which has nothing indexed
+      //      for the concatenation.
+      const matchedAuthor = bookMatch.author as
+        | (Record<string, unknown> & {
+            authorName?: string;
+            foreignAuthorId?: string;
+          })
+        | undefined;
+      const matchedAuthorName = matchedAuthor?.authorName;
+      const ensureAuthorName =
+        matchedAuthorName ?? options.englishAuthor ?? options.authorName;
       const { author: persistedAuthor, wasExisting: authorWasExisting } =
         await this.ensureAuthor({
-          authorName: options.authorName,
-          foreignAuthorId:
-            (bookMatch.author as { foreignAuthorId?: string } | undefined)
-              ?.foreignAuthorId ?? undefined,
+          authorName: ensureAuthorName,
+          foreignAuthorId: matchedAuthor?.foreignAuthorId ?? undefined,
           qualityProfileId: options.qualityProfileId,
           metadataProfileId: options.metadataProfileId,
           rootFolderPath: options.rootFolderPath,
+          // Reuse the author resource already attached to the
+          // matched book — bypasses /author/lookup which forwards
+          // to Hardcover and times out at 25s when Hardcover is
+          // slow. The shape is the same (Bookshelf returns a full
+          // author resource embedded inside each /book/lookup
+          // result), so POST /author below accepts it as-is.
+          preResolvedCandidate: matchedAuthor,
         });
 
       // Step 3 — Short-circuit: if the book already exists in Bookshelf
@@ -623,10 +804,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
 
       // Defensive: confirm the monitored flag sticks even after Bookshelf's
       // post-add async sync. Readarr's sync can briefly reset the flag.
-      if (
-        (options.monitored ?? true) &&
-        typeof response.data.id === 'number'
-      ) {
+      if ((options.monitored ?? true) && typeof response.data.id === 'number') {
         await this.ensureBookMonitored(response.data.id, true);
       }
 
@@ -722,9 +900,7 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
     let lastChecked = false;
     for (let attempt = 0; attempt < backoffMs.length; attempt++) {
       if (backoffMs[attempt] > 0) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, backoffMs[attempt])
-        );
+        await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
       }
       await this.setBookMonitored([bookId], monitored);
       try {
@@ -757,10 +933,9 @@ class BookshelfAPI extends ServarrBase<{ bookId: number }> {
       });
       logger.info(`[Bookshelf] Removed book ${bookId}`);
     } catch (e) {
-      throw new Error(
-        `[Bookshelf] Failed to remove book: ${e.message}`,
-        { cause: e }
-      );
+      throw new Error(`[Bookshelf] Failed to remove book: ${e.message}`, {
+        cause: e,
+      });
     }
   };
 }

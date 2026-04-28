@@ -12,6 +12,8 @@ export enum MediaType {
   BOOK = 'book',
   AUDIOBOOK = 'audiobook',
   GAME = 'game',
+  MANGA = 'manga',
+  COMIC = 'comic',
   MUSIC = 'music',
 }
 

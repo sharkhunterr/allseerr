@@ -20,8 +20,10 @@ import ManageSlideOver from '@app/components/ManageSlideOver';
 import MediaSlider from '@app/components/MediaSlider';
 import PersonCard from '@app/components/PersonCard';
 import RequestButton from '@app/components/RequestButton';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
+import StatusReason from '@app/components/StatusReason';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useLocale from '@app/hooks/useLocale';
 import useSettings from '@app/hooks/useSettings';
@@ -49,7 +51,11 @@ import {
 } from '@heroicons/react/24/solid';
 import { type RatingResponse } from '@server/api/ratings';
 import { IssueStatus } from '@server/constants/issue';
-import { MediaStatus, MediaType } from '@server/constants/media';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
 import type { MovieDetails as MovieDetailsType } from '@server/models/Movie';
 import axios from 'axios';
@@ -514,6 +520,22 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
               plexUrl={plexUrl}
               serviceUrl={data.mediaInfo?.serviceUrl}
             />
+            {(() => {
+              // Pick the most relevant active non-4K request to anchor
+              // the status reason. PROCESSING > APPROVED > PENDING; we
+              // skip terminal states (DECLINED / FAILED / COMPLETED)
+              // because StatusBadge already conveys those clearly.
+              const activeNon4kRequest = (data.mediaInfo?.requests ?? []).find(
+                (r) =>
+                  !r.is4k &&
+                  r.status !== MediaRequestStatus.DECLINED &&
+                  r.status !== MediaRequestStatus.COMPLETED &&
+                  r.status !== MediaRequestStatus.FAILED
+              );
+              return activeNon4kRequest ? (
+                <StatusReason requestId={activeNon4kRequest.id} compact />
+              ) : null;
+            })()}
             {settings.currentSettings.movie4kEnabled &&
               hasPermission(
                 [
@@ -525,19 +547,35 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
                   type: 'or',
                 }
               ) && (
-                <StatusBadge
-                  status={data.mediaInfo?.status4k}
-                  downloadItem={data.mediaInfo?.downloadStatus4k}
-                  title={data.title}
-                  is4k
-                  inProgress={
-                    (data.mediaInfo?.downloadStatus4k ?? []).length > 0
-                  }
-                  tmdbId={data.mediaInfo?.tmdbId}
-                  mediaType="movie"
-                  plexUrl={plexUrl4k}
-                  serviceUrl={data.mediaInfo?.serviceUrl4k}
-                />
+                <>
+                  <StatusBadge
+                    status={data.mediaInfo?.status4k}
+                    downloadItem={data.mediaInfo?.downloadStatus4k}
+                    title={data.title}
+                    is4k
+                    inProgress={
+                      (data.mediaInfo?.downloadStatus4k ?? []).length > 0
+                    }
+                    tmdbId={data.mediaInfo?.tmdbId}
+                    mediaType="movie"
+                    plexUrl={plexUrl4k}
+                    serviceUrl={data.mediaInfo?.serviceUrl4k}
+                  />
+                  {(() => {
+                    const active4kRequest = (
+                      data.mediaInfo?.requests ?? []
+                    ).find(
+                      (r) =>
+                        r.is4k &&
+                        r.status !== MediaRequestStatus.DECLINED &&
+                        r.status !== MediaRequestStatus.COMPLETED &&
+                        r.status !== MediaRequestStatus.FAILED
+                    );
+                    return active4kRequest ? (
+                      <StatusReason requestId={active4kRequest.id} compact />
+                    ) : null;
+                  })()}
+                </>
               )}
           </div>
           <h1 data-testid="media-title">
@@ -684,6 +722,7 @@ const MovieDetails = ({ movie }: MovieDetailsProps) => {
             )}
         </div>
       </div>
+      <RequestNoticesAlert scope="movie" className="my-4" />
       <div className="media-overview">
         <div className="media-overview-left">
           {data.tagline && <div className="tagline">{data.tagline}</div>}

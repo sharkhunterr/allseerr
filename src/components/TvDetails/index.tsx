@@ -22,8 +22,10 @@ import MediaSlider from '@app/components/MediaSlider';
 import PersonCard from '@app/components/PersonCard';
 import RequestButton from '@app/components/RequestButton';
 import RequestModal from '@app/components/RequestModal';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import Slider from '@app/components/Slider';
 import StatusBadge from '@app/components/StatusBadge';
+import StatusReason from '@app/components/StatusReason';
 import Season from '@app/components/TvDetails/Season';
 import useDeepLinks from '@app/hooks/useDeepLinks';
 import useLocale from '@app/hooks/useLocale';
@@ -55,8 +57,8 @@ import {
   MediaType,
 } from '@server/constants/media';
 import { MediaServerType } from '@server/constants/server';
-import type { Crew } from '@server/models/common';
 import type { TvDetails as TvDetailsType } from '@server/models/Tv';
+import type { Crew } from '@server/models/common';
 import axios from 'axios';
 import { countries } from 'country-flag-icons';
 import 'country-flag-icons/3x2/flags.css';
@@ -556,6 +558,18 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
               plexUrl={plexUrl}
               serviceUrl={data.mediaInfo?.serviceUrl}
             />
+            {(() => {
+              const activeNon4kRequest = (data.mediaInfo?.requests ?? []).find(
+                (r) =>
+                  !r.is4k &&
+                  r.status !== MediaRequestStatus.DECLINED &&
+                  r.status !== MediaRequestStatus.COMPLETED &&
+                  r.status !== MediaRequestStatus.FAILED
+              );
+              return activeNon4kRequest ? (
+                <StatusReason requestId={activeNon4kRequest.id} compact />
+              ) : null;
+            })()}
             {settings.currentSettings.series4kEnabled &&
               hasPermission(
                 [
@@ -567,19 +581,35 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
                   type: 'or',
                 }
               ) && (
-                <StatusBadge
-                  status={data.mediaInfo?.status4k}
-                  downloadItem={data.mediaInfo?.downloadStatus4k}
-                  title={data.name}
-                  is4k
-                  inProgress={
-                    (data.mediaInfo?.downloadStatus4k ?? []).length > 0
-                  }
-                  tmdbId={data.mediaInfo?.tmdbId}
-                  mediaType="tv"
-                  plexUrl={plexUrl4k}
-                  serviceUrl={data.mediaInfo?.serviceUrl4k}
-                />
+                <>
+                  <StatusBadge
+                    status={data.mediaInfo?.status4k}
+                    downloadItem={data.mediaInfo?.downloadStatus4k}
+                    title={data.name}
+                    is4k
+                    inProgress={
+                      (data.mediaInfo?.downloadStatus4k ?? []).length > 0
+                    }
+                    tmdbId={data.mediaInfo?.tmdbId}
+                    mediaType="tv"
+                    plexUrl={plexUrl4k}
+                    serviceUrl={data.mediaInfo?.serviceUrl4k}
+                  />
+                  {(() => {
+                    const active4kRequest = (
+                      data.mediaInfo?.requests ?? []
+                    ).find(
+                      (r) =>
+                        r.is4k &&
+                        r.status !== MediaRequestStatus.DECLINED &&
+                        r.status !== MediaRequestStatus.COMPLETED &&
+                        r.status !== MediaRequestStatus.FAILED
+                    );
+                    return active4kRequest ? (
+                      <StatusReason requestId={active4kRequest.id} compact />
+                    ) : null;
+                  })()}
+                </>
               )}
           </div>
           <h1 data-testid="media-title">
@@ -723,6 +753,7 @@ const TvDetails = ({ tv }: TvDetailsProps) => {
           )}
         </div>
       </div>
+      <RequestNoticesAlert scope="tv" className="my-4" />
       <div className="media-overview">
         <div className="media-overview-left">
           {data.tagline && <div className="tagline">{data.tagline}</div>}
