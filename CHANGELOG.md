@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.5](https://github.com/seerr-team/seerr/-/compare/v0.2.4...v0.2.5) (2026-04-28)
+
+
+### Features
+
+* **anilist:** GraphQL client for the manga integration ([da126b6](https://github.com/seerr-team/seerr/-/commit/da126b684728b18e30fc6ffc390d7cd58738817e))
+* **brand:** allseerr identity — multi-source hub icon + new wordmark ([55b086f](https://github.com/seerr-team/seerr/-/commit/55b086ff8bf4aadb204471e909112e765aed6b13)), closes [#EF4444](https://github.com/seerr-team/seerr/-/issues/EF4444) [#F59E0](https://github.com/seerr-team/seerr/-/issues/F59E0) [emerald#10B981](https://github.com/seerr-team/emerald/-/issues/10B981) [#EC4899](https://github.com/seerr-team/seerr/-/issues/EC4899) [#F97316](https://github.com/seerr-team/seerr/-/issues/F97316) [#6366F1](https://github.com/seerr-team/seerr/-/issues/6366F1)
+* **brand:** README banner — multi-source identity at 1280×320 ([055af79](https://github.com/seerr-team/seerr/-/commit/055af79f001cb42d32c8d2d02e42adb0e6db78e7))
+* **comic-mylar:** Mylar3 adapter + dispatcher + settings panel ([34ec112](https://github.com/seerr-team/seerr/-/commit/34ec1122fbede27feea4612f639cc302f64532d9))
+* **comic-request:** primary CTA + TV-style issue selector modal ([34f0254](https://github.com/seerr-team/seerr/-/commit/34f02543b98cb6cdaa42907b94e4c9a3937d6584))
+* **comic-settings:** metadata-providers REST + UI tab + OpenAPI ([22a635b](https://github.com/seerr-team/seerr/-/commit/22a635bb74234ed6ce0ca3693c5200289dfe03ef))
+* **comic-ui:** search tab, ComicCard, detail page, creator page ([2761503](https://github.com/seerr-team/seerr/-/commit/2761503830c9ac5d7e57b7fede745a283aa269eb))
+* **comic:** backend routes — search / volume / creator via ComicVine ([5056187](https://github.com/seerr-team/seerr/-/commit/505618792355752377997b4f8e05490bf5fa601d))
+* **comic:** entity, permissions, quotas, MediaRequest, request route + modal ([cfc8ffd](https://github.com/seerr-team/seerr/-/commit/cfc8ffd544a00f3b7b19ec5210b94b2d45be5f6e))
+* **comicvine:** REST client for the comics integration ([5862110](https://github.com/seerr-team/seerr/-/commit/5862110b2780ef1d0385bdc833287e5bff9aaf09))
+* **manga-entity:** MangaMedia for availability + request tracking ([67e84a7](https://github.com/seerr-team/seerr/-/commit/67e84a71d512b43a0d683c835b2bfbae8269db1a))
+* **manga-request:** POST /manga/request + MangaRequestModal + detail wiring ([2933e1e](https://github.com/seerr-team/seerr/-/commit/2933e1e8446d27c5300352a308c2d45321063437))
+* **manga-settings:** metadata-providers REST + UI tab + OpenAPI ([a9f4eaf](https://github.com/seerr-team/seerr/-/commit/a9f4eaf5c39f33edb21d1ef2dfc9b2d7a83d911b))
+* **manga-suwayomi:** Suwayomi adapter + dispatcher + settings panel ([61f87f5](https://github.com/seerr-team/seerr/-/commit/61f87f50939ff89121f62f44f207dbe623e30997))
+* **manga-ui:** search tab, MangaCard, detail page, mangaka staff page ([5a848db](https://github.com/seerr-team/seerr/-/commit/5a848dbdf9f1e6a0e4ed3ccf0614cb2f5659611e))
+* **manga:** backend routes — search / detail / staff via AniList ([30db34c](https://github.com/seerr-team/seerr/-/commit/30db34c81cb7a0ffee03bc10a37d68a5dd0af089))
+* **manga:** permissions, quotas, MediaRequest relation + migrations ([69a6450](https://github.com/seerr-team/seerr/-/commit/69a6450f614b68d33817678aa3c58232e871acd1))
+* **requests:** persist + surface a "why is this request stuck" reason ([8efb3cb](https://github.com/seerr-team/seerr/-/commit/8efb3cb9a072fedec1af5827ac4808f2c933e089))
+* **requests:** Phase 3 — live status reason for movie / TV via Radarr/Sonarr ([168fd76](https://github.com/seerr-team/seerr/-/commit/168fd765590dbeb4c81b4bf5941b1f575b77eb8b))
+* **settings:** admin-defined request notices with severity, on detail pages + modals ([19cc155](https://github.com/seerr-team/seerr/-/commit/19cc155f588d0d4cc27efc9ce9bd5bd54b7c5add))
+* **settings:** comic.metadataProviders + mylar3 block ([bfa20cb](https://github.com/seerr-team/seerr/-/commit/bfa20cb05157870aeaef779929af8ebe6874637d))
+* **settings:** manga.metadataProviders + suwayomi block ([958486e](https://github.com/seerr-team/seerr/-/commit/958486e003e43b8d65725beb7f552440894fcb58))
+* **settings:** master on/off toggles for non-TMDB media types ([1f8ab75](https://github.com/seerr-team/seerr/-/commit/1f8ab75bff307346b2325e508969c7f7246df722))
+
+
+### Bug Fixes
+
+* **bookshelf:** ASIN lookup + English-title retry for localised audiobooks ([8ce4013](https://github.com/seerr-team/seerr/-/commit/8ce40136c71203148caba8d84bffaaccff931e82))
+* **bookshelf:** bump lookup timeouts to 60s + retry-once on timeout ([9cc75f8](https://github.com/seerr-team/seerr/-/commit/9cc75f8eccae4b3c0a0728808033278fbd5b3599))
+* **bookshelf:** bump POST /author timeout to 60s ([fa0cb2e](https://github.com/seerr-team/seerr/-/commit/fa0cb2e885a8407a13ef94815cb3c87e67cfe59a))
+* **bookshelf:** reuse the matched book's author candidate to skip /author/lookup ([34edd78](https://github.com/seerr-team/seerr/-/commit/34edd786616d8d3e668cd5747024616d85272741))
+* **bookshelf:** two-pass Hardcover lookup so English-title fallback actually fires ([033b6e9](https://github.com/seerr-team/seerr/-/commit/033b6e90e78096927c4a876c5b0749b0264dcb7a))
+* **bookshelf:** use audible:<asin> prefix + log every attempted key ([6fbc96f](https://github.com/seerr-team/seerr/-/commit/6fbc96f612d90bd51cb76002631bfa2ab7f584ca))
+* **bookshelf:** use canonical author from matched book for ensureAuthor ([2bdc7aa](https://github.com/seerr-team/seerr/-/commit/2bdc7aa7c840b8951699e12cf8433f4976793308))
+* **bookshelf:** use Hardcover primary author for English-title retry ([43de51f](https://github.com/seerr-team/seerr/-/commit/43de51fd1c9c81405336a3d738026d3654173478))
+* **comic:** correct creator works grid + drop credits panel ([e5c27b9](https://github.com/seerr-team/seerr/-/commit/e5c27b94cf86303ff62f78081d035b789d8bcb3a))
+* **openapi:** request-notices PUT body uses the new entry schema ([fcaec54](https://github.com/seerr-team/seerr/-/commit/fcaec5411d46de803870693008f413d9fe192ef7))
+* **requests:** drop publisher badge from comic request items ([28d0fe5](https://github.com/seerr-team/seerr/-/commit/28d0fe59d5c75558a14e63fd572a81435f834d0d))
+* **requests:** render manga + comic requests instead of crashing on null tmdbId ([83c6fe8](https://github.com/seerr-team/seerr/-/commit/83c6fe851d13e555c88532845a112622db72471a))
+* **settings,search:** relocate Suwayomi/Mylar to Services + scroll overflow tabs ([eca2cf5](https://github.com/seerr-team/seerr/-/commit/eca2cf53f0133b59ef9d64b916ef92ec91390070))
+
 ### [0.2.4](https://github.com/seerr-team/seerr/-/compare/v0.2.3...v0.2.4) (2026-04-26)
 
 
