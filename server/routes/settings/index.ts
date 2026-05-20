@@ -55,6 +55,7 @@ import notificationRoutes from './notifications';
 import oidcRoutes from './oidc';
 import radarrRoutes from './radarr';
 import requestNoticesRoutes from './requestNotices';
+import romarrRoutes from './romarr';
 import sonarrRoutes from './sonarr';
 
 const settingsRoutes = Router();
@@ -64,6 +65,7 @@ settingsRoutes.use('/radarr', radarrRoutes);
 settingsRoutes.use('/sonarr', sonarrRoutes);
 settingsRoutes.use('/bindery', binderyRoutes);
 settingsRoutes.use('/bookshelf', bookshelfRoutes);
+settingsRoutes.use('/romarr', romarrRoutes);
 settingsRoutes.use('/discover', discoverSettingRoutes);
 settingsRoutes.use('/metadatas', metadataRoutes);
 settingsRoutes.use('/oidc', oidcRoutes);

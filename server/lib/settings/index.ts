@@ -111,6 +111,30 @@ export interface BookshelfSettings extends DVRSettings {
   metadataProfileId?: number;
 }
 
+/**
+ * Romarr — the game *acquisition* service (the Radarr role for ROMs).
+ * When a game request is approved the subscriber asks the default
+ * Romarr instance to acquire it; ROMM stays the library / "Play"
+ * role and IGDB stays the metadata provider.
+ *
+ * Unlike Radarr/Sonarr/Bindery/Bookshelf, Romarr has no quality
+ * profiles or root folders to pick — it resolves its own platform
+ * and library from the IGDB id allseerr sends — so this is a slim
+ * connection-only service instance. ``apiKey`` must be a Romarr
+ * admin API key.
+ */
+export interface RomarrSettings {
+  id: number;
+  name: string;
+  hostname: string;
+  port: number;
+  apiKey: string;
+  useSsl: boolean;
+  baseUrl?: string;
+  isDefault: boolean;
+  externalUrl?: string;
+}
+
 interface Quota {
   quotaLimit?: number;
   quotaDays?: number;
@@ -532,16 +556,6 @@ export interface GameSettings {
     pollIntervalMinutes: number;
     enabled: boolean;
   };
-  // Romarr — the game *acquisition* service (the Radarr role for
-  // ROMs). When a game request is approved the subscriber asks
-  // Romarr to acquire it; ROMM above stays the library / "Play"
-  // role. ``apiKey`` must be a Romarr admin API key.
-  romarr: {
-    url: string;
-    publicUrl: string;
-    apiKey: string;
-    enabled: boolean;
-  };
 }
 
 export interface ComicSettings {
@@ -646,6 +660,7 @@ export interface AllSettings {
   sonarr: SonarrSettings[];
   bindery: BinderySettings[];
   bookshelf: BookshelfSettings[];
+  romarr: RomarrSettings[];
   public: PublicSettings;
   notifications: NotificationSettings;
   jobs: Record<JobId, JobSettings>;
@@ -738,6 +753,7 @@ class Settings {
       sonarr: [],
       bindery: [],
       bookshelf: [],
+      romarr: [],
       public: {
         initialized: false,
       },
@@ -937,12 +953,6 @@ class Settings {
           pollIntervalMinutes: 15,
           enabled: false,
         },
-        romarr: {
-          url: '',
-          publicUrl: '',
-          apiKey: '',
-          enabled: false,
-        },
       },
       book: {
         audiobookshelf: {
@@ -1132,6 +1142,14 @@ class Settings {
 
   set bookshelf(data: BookshelfSettings[]) {
     this.data.bookshelf = data;
+  }
+
+  get romarr(): RomarrSettings[] {
+    return this.data.romarr;
+  }
+
+  set romarr(data: RomarrSettings[]) {
+    this.data.romarr = data;
   }
 
   get game(): GameSettings {

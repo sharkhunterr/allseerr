@@ -45,6 +45,22 @@ export interface RomarrStatusResult {
 class RomarrAPI {
   private http: AxiosInstance;
 
+  /**
+   * Build a Romarr base URL from a stored service instance — mirrors
+   * ServarrBase.buildUrl so the routes / dispatcher can construct a
+   * client the same way the *arr services do.
+   */
+  static buildUrl(settings: {
+    hostname: string;
+    port: number;
+    useSsl: boolean;
+    baseUrl?: string;
+  }): string {
+    return `${settings.useSsl ? 'https' : 'http'}://${settings.hostname}:${
+      settings.port
+    }${settings.baseUrl ?? ''}`;
+  }
+
   constructor(config: RomarrConfig) {
     if (!config.url) {
       throw new Error('Romarr URL is required.');

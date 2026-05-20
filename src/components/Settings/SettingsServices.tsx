@@ -16,6 +16,7 @@ import SettingsSuwayomi from '@app/components/Settings/MangaComics/SettingsSuway
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
 import OverrideRuleTiles from '@app/components/Settings/OverrideRule/OverrideRuleTiles';
 import RadarrModal from '@app/components/Settings/RadarrModal';
+import RomarrModal from '@app/components/Settings/RomarrModal';
 import SonarrModal from '@app/components/Settings/SonarrModal';
 import useSettings from '@app/hooks/useSettings';
 import globalMessages from '@app/i18n/globalMessages';
@@ -25,6 +26,7 @@ import {
   BookOpenIcon,
   PencilIcon,
   PlusIcon,
+  PuzzlePieceIcon,
   TrashIcon,
 } from '@heroicons/react/24/solid';
 import type OverrideRule from '@server/entity/OverrideRule';
@@ -33,6 +35,7 @@ import type {
   BinderySettings,
   BookshelfSettings,
   RadarrSettings,
+  RomarrSettings,
   SonarrSettings,
 } from '@server/lib/settings';
 import axios from 'axios';
@@ -86,6 +89,13 @@ const messages = defineMessages('components.Settings', {
   overrideRulesDescription:
     'Override rules allow you to specify properties that will be replaced if a request matches the rule.',
   addrule: 'New Override Rule',
+  romarrsettings: 'Romarr Settings',
+  romarrSettingsDescription:
+    'Configure your Romarr server(s) below. Romarr is the game acquisition service (the Radarr role for ROMs): when a game request is approved it is sent to the default Romarr instance, which resolves the platform and library itself from the IGDB id.',
+  addromarr: 'Add Romarr Server',
+  deleteromarrserver: 'Delete Romarr Server',
+  noDefaultRomarr:
+    'At least one Romarr server must be marked as default in order for game requests to be processed.',
 });
 
 interface ServerInstanceProps {
@@ -96,9 +106,10 @@ interface ServerInstanceProps {
   port: number;
   isSSL?: boolean;
   externalUrl?: string;
-  profileName: string;
+  profileName?: string;
   isSonarr?: boolean;
   isBindery?: boolean;
+  isRomarr?: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -140,6 +151,7 @@ const ServerInstance = ({
   isSSL = false,
   isSonarr = false,
   isBindery = false,
+  isRomarr = false,
   externalUrl,
   onEdit,
   onDelete,
@@ -195,12 +207,14 @@ const ServerInstance = ({
               {internalUrl}
             </a>
           </p>
-          <p className="mt-1 truncate text-sm leading-5 text-gray-300">
-            <span className="mr-2 font-bold">
-              {intl.formatMessage(messages.activeProfile)}
-            </span>
-            {profileName}
-          </p>
+          {profileName && (
+            <p className="mt-1 truncate text-sm leading-5 text-gray-300">
+              <span className="mr-2 font-bold">
+                {intl.formatMessage(messages.activeProfile)}
+              </span>
+              {profileName}
+            </p>
+          )}
         </div>
         <a
           href={serviceUrl}
@@ -208,7 +222,9 @@ const ServerInstance = ({
           rel="noopener noreferrer"
           className="opacity-50 hover:opacity-100"
         >
-          {isBindery ? (
+          {isRomarr ? (
+            <PuzzlePieceIcon className="h-10 w-10 flex-shrink-0 text-purple-400" />
+          ) : isBindery ? (
             <BookOpenIcon className="h-10 w-10 flex-shrink-0 text-indigo-400" />
           ) : isSonarr ? (
             <SonarrLogo className="h-10 w-10 flex-shrink-0" />
@@ -863,18 +879,133 @@ const BookshelfServices = ({ mediaType }: BookshelfServicesProps) => {
   );
 };
 
+const RomarrServices = () => {
+  const intl = useIntl();
+  const {
+    data: romarrData,
+    error: romarrError,
+    mutate: revalidateRomarr,
+  } = useSWR<RomarrSettings[]>('/api/v1/settings/romarr');
+  const [editRomarrModal, setEditRomarrModal] = useState<{
+    open: boolean;
+    romarr: RomarrSettings | null;
+  }>({ open: false, romarr: null });
+  const [deleteRomarrModal, setDeleteRomarrModal] = useState<{
+    open: boolean;
+    serverId: number | null;
+  }>({ open: false, serverId: null });
+
+  const deleteServer = async () => {
+    await axios.delete(`/api/v1/settings/romarr/${deleteRomarrModal.serverId}`);
+    setDeleteRomarrModal({ open: false, serverId: null });
+    revalidateRomarr();
+    mutate('/api/v1/settings/public');
+  };
+
+  return (
+    <>
+      <div className="mb-6">
+        <h3 className="heading">
+          {intl.formatMessage(messages.romarrsettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.romarrSettingsDescription)}
+        </p>
+      </div>
+      {editRomarrModal.open && (
+        <RomarrModal
+          romarr={editRomarrModal.romarr}
+          onClose={() => setEditRomarrModal({ open: false, romarr: null })}
+          onSave={() => {
+            revalidateRomarr();
+            mutate('/api/v1/settings/public');
+            setEditRomarrModal({ open: false, romarr: null });
+          }}
+        />
+      )}
+      <Transition
+        as={Fragment}
+        show={deleteRomarrModal.open}
+        enter="transition-opacity ease-in-out duration-300"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition-opacity ease-in-out duration-300"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <Modal
+          okText={intl.formatMessage(globalMessages.delete)}
+          okButtonType="danger"
+          onOk={() => deleteServer()}
+          onCancel={() => setDeleteRomarrModal({ open: false, serverId: null })}
+          title={intl.formatMessage(messages.deleteromarrserver)}
+        >
+          {intl.formatMessage(messages.deleteserverconfirm)}
+        </Modal>
+      </Transition>
+      <div className="section">
+        {!romarrData && !romarrError && <LoadingSpinner />}
+        {romarrData && !romarrError && (
+          <>
+            {romarrData.length > 0 &&
+              !romarrData.some((romarr) => romarr.isDefault) && (
+                <Alert title={intl.formatMessage(messages.noDefaultRomarr)} />
+              )}
+            <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+              {romarrData.map((romarr) => (
+                <ServerInstance
+                  key={`romarr-config-${romarr.id}`}
+                  name={romarr.name}
+                  hostname={romarr.hostname}
+                  port={romarr.port}
+                  isSSL={romarr.useSsl}
+                  isDefault={romarr.isDefault}
+                  isRomarr
+                  externalUrl={romarr.externalUrl}
+                  onEdit={() => setEditRomarrModal({ open: true, romarr })}
+                  onDelete={() =>
+                    setDeleteRomarrModal({
+                      open: true,
+                      serverId: romarr.id,
+                    })
+                  }
+                />
+              ))}
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    className="mb-3 mt-3"
+                    onClick={() =>
+                      setEditRomarrModal({ open: true, romarr: null })
+                    }
+                  >
+                    <PlusIcon />
+                    <span>{intl.formatMessage(messages.addromarr)}</span>
+                  </Button>
+                </div>
+              </li>
+            </ul>
+          </>
+        )}
+      </div>
+    </>
+  );
+};
+
 const SettingsServices = () => {
   const intl = useIntl();
   const { currentSettings } = useSettings();
   const [activeTab, setActiveTab] = useState<
-    'movies-tv' | 'books' | 'audiobooks' | 'manga' | 'comics'
+    'movies-tv' | 'books' | 'audiobooks' | 'manga' | 'comics' | 'games'
   >('movies-tv');
 
   // Per-type tabs only show when their master toggle is on. Suwayomi
   // (manga) and Mylar3 (comic) live as the download-manager half of
   // their respective types, mirroring the existing books / audiobooks
   // tabs that host Bindery / Bookshelf / DownloadManager / Library
-  // panels.
+  // panels. The games tab hosts IGDB metadata, the ROMM library and
+  // the Romarr acquisition service.
   const tabs: { key: typeof activeTab; label: string }[] = [
     {
       key: 'movies-tv',
@@ -895,6 +1026,14 @@ const SettingsServices = () => {
           {
             key: 'comics' as const,
             label: intl.formatMessage(globalMessages.comic),
+          },
+        ]
+      : []),
+    ...(currentSettings.gameEnabled
+      ? [
+          {
+            key: 'games' as const,
+            label: intl.formatMessage(globalMessages.game),
           },
         ]
       : []),
@@ -931,6 +1070,7 @@ const SettingsServices = () => {
       )}
       {activeTab === 'manga' && <SettingsSuwayomi />}
       {activeTab === 'comics' && <SettingsMylar />}
+      {activeTab === 'games' && <RomarrServices />}
     </>
   );
 };

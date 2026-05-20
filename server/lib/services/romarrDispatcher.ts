@@ -12,12 +12,14 @@ export interface RomarrDispatchResult {
 }
 
 /**
- * Submit a game request to the configured Romarr instance. Mirrors
+ * Submit a game request to the default Romarr instance. Mirrors
  * mylarDispatcher.ts: the subscriber calls us with the try / fallback
  * pattern, we mutate `media.romarrId` / `media.romarrUrl` on success
  * but the caller is responsible for saving.
  *
- * Romarr exposes an IGDB-native integration endpoint, so allseerr
+ * Romarr is a standalone acquisition service (the Radarr role for
+ * ROMs), configured as a service instance in Settings → Services →
+ * Game. It exposes an IGDB-native integration endpoint, so allseerr
  * only needs the IGDB game + platform ids it already cached on the
  * GameMedia row — Romarr resolves its own platform and library. The
  * call is idempotent on Romarr's side.
@@ -26,13 +28,14 @@ export async function submitToRomarr(
   media: GameMedia
 ): Promise<RomarrDispatchResult> {
   const settings = getSettings();
-  const cfg = settings.game?.romarr;
+  const instance =
+    settings.romarr.find((r) => r.isDefault) ?? settings.romarr[0];
 
-  if (!cfg?.enabled || !cfg.url || !cfg.apiKey) {
+  if (!instance) {
     return {
       success: false,
       noInstance: true,
-      message: 'Romarr is not configured. Game request stays manual.',
+      message: 'No Romarr instance is configured. Game request stays manual.',
     };
   }
 
@@ -45,8 +48,8 @@ export async function submitToRomarr(
 
   try {
     const api = new RomarrAPI({
-      url: cfg.url,
-      apiKey: cfg.apiKey,
+      url: RomarrAPI.buildUrl(instance),
+      apiKey: instance.apiKey,
     });
 
     const result = await api.requestGame({
@@ -57,7 +60,10 @@ export async function submitToRomarr(
     });
 
     media.romarrId = result.game.id;
-    const base = (cfg.publicUrl || cfg.url).replace(/\/$/, '');
+    const base = (instance.externalUrl || RomarrAPI.buildUrl(instance)).replace(
+      /\/$/,
+      ''
+    );
     media.romarrUrl = `${base}/game/${result.game.id}`;
 
     const verb =
