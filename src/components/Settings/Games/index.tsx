@@ -21,7 +21,7 @@ const messages = defineMessages('components.Settings.Games', {
   games: 'Games',
   gamesSettings: 'Games Settings',
   gamesDescription:
-    'Configure IGDB metadata credentials and ROMM library server connection for game requests.',
+    'Configure IGDB metadata, the ROMM library server, and the Romarr acquisition service for game requests.',
   igdbSection: 'IGDB / Twitch API',
   igdbDescription:
     'IGDB requires a Twitch Developer API key for game metadata search.',
@@ -38,6 +38,15 @@ const messages = defineMessages('components.Settings.Games', {
   rommPassword: 'Password',
   pollInterval: 'Polling Interval (minutes)',
   pollIntervalTip: 'How often to check ROMM for new additions (default: 15)',
+  romarrSection: 'Romarr Acquisition Service',
+  romarrDescription:
+    'Connect to your Romarr instance to automatically acquire approved game requests. Romarr is the acquisition service (the Radarr role for ROMs); ROMM stays the library where games are played.',
+  romarrUrl: 'Romarr URL',
+  romarrUrlTip: 'e.g., http://romarr.local:8787',
+  romarrApiKey: 'Admin API Key',
+  romarrApiKeyTip: 'A Romarr admin API key (sent as X-Api-Key)',
+  romarrPublicUrl: 'Public URL',
+  romarrPublicUrlTip: 'Used for "Open in Romarr" links (defaults to URL)',
   testConnection: 'Test Connection',
   syncNow: 'Sync Now',
   toastSaveSuccess: 'Game settings saved!',
@@ -60,6 +69,12 @@ interface GameSettings {
     pollIntervalMinutes: number;
     enabled: boolean;
   };
+  romarr: {
+    url: string;
+    publicUrl: string;
+    apiKey: string;
+    enabled: boolean;
+  };
 }
 
 const defaultSettings: GameSettings = {
@@ -70,6 +85,12 @@ const defaultSettings: GameSettings = {
     username: '',
     password: '',
     pollIntervalMinutes: 15,
+    enabled: false,
+  },
+  romarr: {
+    url: '',
+    publicUrl: '',
+    apiKey: '',
     enabled: false,
   },
 };
@@ -85,8 +106,13 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
     success: boolean;
     message: string;
   } | null>(null);
+  const [romarrTestResult, setRomarrTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
   const [isTestingIgdb, setIsTestingIgdb] = useState(false);
   const [isTestingRomm, setIsTestingRomm] = useState(false);
+  const [isTestingRomarr, setIsTestingRomarr] = useState(false);
 
   const { data, mutate: revalidate } = useSWR<GameSettings>(
     '/api/v1/settings/game',
@@ -122,6 +148,22 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
       setRommTestResult({ success: false, message: 'Test failed.' });
     } finally {
       setIsTestingRomm(false);
+    }
+  };
+
+  const testRomarr = async (url: string, apiKey: string) => {
+    setIsTestingRomarr(true);
+    setRomarrTestResult(null);
+    try {
+      const res = await axios.post('/api/v1/settings/game/romarr/test', {
+        url,
+        apiKey,
+      });
+      setRomarrTestResult(res.data);
+    } catch {
+      setRomarrTestResult({ success: false, message: 'Test failed.' });
+    } finally {
+      setIsTestingRomarr(false);
     }
   };
 
@@ -168,6 +210,10 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
           rommPassword: '',
           rommPollInterval: data?.romm?.pollIntervalMinutes ?? 15,
           rommEnabled: data?.romm?.enabled ?? false,
+          romarrUrl: data?.romarr?.url ?? '',
+          romarrPublicUrl: data?.romarr?.publicUrl ?? '',
+          romarrApiKey: data?.romarr?.apiKey ?? '',
+          romarrEnabled: data?.romarr?.enabled ?? false,
         }}
         enableReinitialize
         onSubmit={async (values) => {
@@ -184,6 +230,12 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
                 password: values.rommPassword || undefined,
                 pollIntervalMinutes: values.rommPollInterval,
                 enabled: values.rommEnabled,
+              },
+              romarr: {
+                url: values.romarrUrl,
+                publicUrl: values.romarrPublicUrl,
+                apiKey: values.romarrApiKey,
+                enabled: values.romarrEnabled,
               },
             });
             addToast(intl.formatMessage(messages.toastSaveSuccess), {
@@ -243,9 +295,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
               {igdbTestResult && (
                 <div
                   className={`mt-3 flex items-center gap-2 rounded p-3 ${
-                    igdbTestResult.success
-                      ? 'bg-green-600/20'
-                      : 'bg-red-600/20'
+                    igdbTestResult.success ? 'bg-green-600/20' : 'bg-red-600/20'
                   }`}
                 >
                   {igdbTestResult.success ? (
@@ -255,9 +305,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
                   )}
                   <span
                     className={
-                      igdbTestResult.success
-                        ? 'text-green-300'
-                        : 'text-red-300'
+                      igdbTestResult.success ? 'text-green-300' : 'text-red-300'
                     }
                   >
                     {igdbTestResult.message}
@@ -298,11 +346,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
                   Enable ROMM
                 </label>
                 <div className="form-input-area">
-                  <Field
-                    type="checkbox"
-                    id="rommEnabled"
-                    name="rommEnabled"
-                  />
+                  <Field type="checkbox" id="rommEnabled" name="rommEnabled" />
                 </div>
               </div>
 
@@ -358,9 +402,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
               {rommTestResult && (
                 <div
                   className={`mt-3 flex items-center gap-2 rounded p-3 ${
-                    rommTestResult.success
-                      ? 'bg-green-600/20'
-                      : 'bg-red-600/20'
+                    rommTestResult.success ? 'bg-green-600/20' : 'bg-red-600/20'
                   }`}
                 >
                   {rommTestResult.success ? (
@@ -370,9 +412,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
                   )}
                   <span
                     className={
-                      rommTestResult.success
-                        ? 'text-green-300'
-                        : 'text-red-300'
+                      rommTestResult.success ? 'text-green-300' : 'text-red-300'
                     }
                   >
                     {rommTestResult.message}
@@ -394,13 +434,126 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
                     intl.formatMessage(messages.testConnection)
                   )}
                 </Button>
+                <Button buttonType="default" type="button" onClick={syncRomm}>
+                  <ArrowPathIcon className="mr-1 h-4 w-4" />
+                  {intl.formatMessage(messages.syncNow)}
+                </Button>
+              </div>
+            </div>
+
+            {/* Romarr Section */}
+            <div className="mb-8">
+              <h4 className="mb-2 text-lg font-bold text-gray-100">
+                {intl.formatMessage(messages.romarrSection)}
+              </h4>
+              <p className="mb-4 text-sm text-gray-400">
+                {intl.formatMessage(messages.romarrDescription)}
+              </p>
+
+              <div className="form-row">
+                <label htmlFor="romarrEnabled" className="checkbox-label">
+                  Enable Romarr
+                </label>
+                <div className="form-input-area">
+                  <Field
+                    type="checkbox"
+                    id="romarrEnabled"
+                    name="romarrEnabled"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <label htmlFor="romarrUrl" className="text-label">
+                  {intl.formatMessage(messages.romarrUrl)}
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.romarrUrlTip)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <Field
+                    type="text"
+                    id="romarrUrl"
+                    name="romarrUrl"
+                    placeholder="http://romarr.local:8787"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <label htmlFor="romarrPublicUrl" className="text-label">
+                  {intl.formatMessage(messages.romarrPublicUrl)}
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.romarrPublicUrlTip)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <Field
+                    type="text"
+                    id="romarrPublicUrl"
+                    name="romarrPublicUrl"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <label htmlFor="romarrApiKey" className="text-label">
+                  {intl.formatMessage(messages.romarrApiKey)}
+                  <span className="label-tip">
+                    {intl.formatMessage(messages.romarrApiKeyTip)}
+                  </span>
+                </label>
+                <div className="form-input-area">
+                  <SensitiveInput
+                    as="field"
+                    type="password"
+                    id="romarrApiKey"
+                    name="romarrApiKey"
+                    autoComplete="new-password"
+                  />
+                </div>
+              </div>
+
+              {romarrTestResult && (
+                <div
+                  className={`mt-3 flex items-center gap-2 rounded p-3 ${
+                    romarrTestResult.success
+                      ? 'bg-green-600/20'
+                      : 'bg-red-600/20'
+                  }`}
+                >
+                  {romarrTestResult.success ? (
+                    <CheckCircleIcon className="h-5 w-5 text-green-400" />
+                  ) : (
+                    <XCircleIcon className="h-5 w-5 text-red-400" />
+                  )}
+                  <span
+                    className={
+                      romarrTestResult.success
+                        ? 'text-green-300'
+                        : 'text-red-300'
+                    }
+                  >
+                    {romarrTestResult.message}
+                  </span>
+                </div>
+              )}
+
+              <div className="mt-3">
                 <Button
                   buttonType="default"
                   type="button"
-                  onClick={syncRomm}
+                  disabled={isTestingRomarr || !values.romarrUrl}
+                  onClick={() =>
+                    testRomarr(values.romarrUrl, values.romarrApiKey)
+                  }
                 >
-                  <ArrowPathIcon className="mr-1 h-4 w-4" />
-                  {intl.formatMessage(messages.syncNow)}
+                  <BeakerIcon className="mr-1 h-4 w-4" />
+                  {isTestingRomarr ? (
+                    <LoadingSpinner />
+                  ) : (
+                    intl.formatMessage(messages.testConnection)
+                  )}
                 </Button>
               </div>
             </div>

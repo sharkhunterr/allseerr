@@ -1,4 +1,5 @@
 import IgdbAPI from '@server/api/igdb';
+import RomarrAPI from '@server/api/romarr';
 import { RommAdapter } from '@server/lib/adapters/game/RommAdapter';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -24,13 +25,19 @@ gameSettingsRoutes.get('/', (_req, res) => {
       pollIntervalMinutes: settings.game.romm.pollIntervalMinutes,
       enabled: settings.game.romm.enabled,
     },
+    romarr: {
+      url: settings.game.romarr.url,
+      publicUrl: settings.game.romarr.publicUrl,
+      apiKey: settings.game.romarr.apiKey,
+      enabled: settings.game.romarr.enabled,
+    },
   });
 });
 
 gameSettingsRoutes.put('/', async (req, res) => {
   const settings = getSettings();
 
-  const { igdb, romm } = req.body;
+  const { igdb, romm, romarr } = req.body;
 
   if (igdb) {
     settings.game = {
@@ -58,6 +65,18 @@ gameSettingsRoutes.put('/', async (req, res) => {
     };
   }
 
+  if (romarr) {
+    settings.game = {
+      ...settings.game,
+      romarr: {
+        url: romarr.url ?? settings.game.romarr.url,
+        publicUrl: romarr.publicUrl ?? settings.game.romarr.publicUrl,
+        apiKey: romarr.apiKey ?? settings.game.romarr.apiKey,
+        enabled: romarr.enabled ?? settings.game.romarr.enabled,
+      },
+    };
+  }
+
   await settings.save();
 
   return res.status(200).json({
@@ -74,6 +93,12 @@ gameSettingsRoutes.put('/', async (req, res) => {
       password: '',
       pollIntervalMinutes: settings.game.romm.pollIntervalMinutes,
       enabled: settings.game.romm.enabled,
+    },
+    romarr: {
+      url: settings.game.romarr.url,
+      publicUrl: settings.game.romarr.publicUrl,
+      apiKey: settings.game.romarr.apiKey,
+      enabled: settings.game.romarr.enabled,
     },
   });
 });
@@ -116,6 +141,30 @@ gameSettingsRoutes.post('/romm/test', async (req, res) => {
     return res.status(200).json({
       success: false,
       message: e instanceof Error ? e.message : 'Invalid ROMM URL',
+    });
+  }
+});
+
+gameSettingsRoutes.post('/romarr/test', async (req, res) => {
+  const settings = getSettings();
+  const { url, apiKey } = req.body;
+
+  try {
+    const romarr = new RomarrAPI({
+      url: url || settings.game.romarr.url,
+      apiKey: apiKey || settings.game.romarr.apiKey,
+    });
+
+    const result = await romarr.testConnection();
+    return res.status(200).json(result);
+  } catch (e) {
+    logger.error('Romarr test connection failed', {
+      label: 'API',
+      errorMessage: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(200).json({
+      success: false,
+      message: e instanceof Error ? e.message : 'Romarr connection failed',
     });
   }
 });

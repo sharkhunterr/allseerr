@@ -61,6 +61,15 @@ export class GameMedia {
   @Column({ type: 'varchar', nullable: true })
   public rommUrl?: string | null;
 
+  // Set when the request is dispatched to Romarr (the game
+  // acquisition service). `romarrId` is the Game row id inside
+  // Romarr; `romarrUrl` deep-links to it for an "Open in Romarr" link.
+  @Column({ type: 'integer', nullable: true })
+  public romarrId?: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  public romarrUrl?: string | null;
+
   // Human-readable explanation of why the request is in its current
   // state — set at dispatch time by the subscriber. Null means
   // "nothing to communicate beyond what the badge already says".

@@ -532,6 +532,16 @@ export interface GameSettings {
     pollIntervalMinutes: number;
     enabled: boolean;
   };
+  // Romarr — the game *acquisition* service (the Radarr role for
+  // ROMs). When a game request is approved the subscriber asks
+  // Romarr to acquire it; ROMM above stays the library / "Play"
+  // role. ``apiKey`` must be a Romarr admin API key.
+  romarr: {
+    url: string;
+    publicUrl: string;
+    apiKey: string;
+    enabled: boolean;
+  };
 }
 
 export interface ComicSettings {
@@ -925,6 +935,12 @@ class Settings {
           username: '',
           password: '',
           pollIntervalMinutes: 15,
+          enabled: false,
+        },
+        romarr: {
+          url: '',
+          publicUrl: '',
+          apiKey: '',
           enabled: false,
         },
       },
