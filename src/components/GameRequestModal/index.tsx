@@ -24,6 +24,9 @@ const messages = defineMessages('components.GameRequestModal', {
   available: 'Available',
   requested: 'Requested',
   notrequested: 'Not Requested',
+  unavailable: 'Unavailable',
+  platformUnsupportedReason:
+    "This platform isn't supported by the game acquisition service (Romarr), so it can't be requested. Ask your administrator to add it in Romarr.",
   request: 'Request',
   requestPlatforms:
     'Request {count} {count, plural, one {Platform} other {Platforms}}',
@@ -37,6 +40,9 @@ interface Platform {
   name: string;
   abbreviation?: string;
   mediaStatus?: MediaStatus | null;
+  // false → no Romarr instance can acquire this platform; the row is
+  // shown but disabled with an explanatory toast on click.
+  romarrSupported?: boolean;
 }
 
 interface GameRequestModalProps {
@@ -98,11 +104,20 @@ const GameRequestModal = ({
     []
   );
 
-  const requestable = platforms.filter((p) => !isPlatformDisabled(p));
+  const requestable = platforms.filter(
+    (p) => !isPlatformDisabled(p) && p.romarrSupported !== false
+  );
   const allSelected =
     requestable.length > 0 && selected.length === requestable.length;
 
   const togglePlatform = (p: Platform) => {
+    if (p.romarrSupported === false) {
+      addToast(intl.formatMessage(messages.platformUnsupportedReason), {
+        appearance: 'info',
+        autoDismiss: true,
+      });
+      return;
+    }
     if (isPlatformDisabled(p)) return;
     setSelected((prev) =>
       prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id]
@@ -118,7 +133,10 @@ const GameRequestModal = ({
     setIsSubmitting(true);
 
     const selectedPlatforms = platforms.filter(
-      (p) => selected.includes(p.id) && !isPlatformDisabled(p)
+      (p) =>
+        selected.includes(p.id) &&
+        !isPlatformDisabled(p) &&
+        p.romarrSupported !== false
     );
     let success = 0;
     let failed = 0;
@@ -267,10 +285,12 @@ const GameRequestModal = ({
                   </thead>
                   <tbody className="divide-y divide-gray-700 bg-gray-600 bg-opacity-50">
                     {platforms.map((p) => {
-                      const disabled = isPlatformDisabled(p);
+                      const unsupported = p.romarrSupported === false;
+                      const statusDisabled = isPlatformDisabled(p);
+                      const disabled = statusDisabled || unsupported;
                       const isAvailable =
                         p.mediaStatus === MediaStatus.AVAILABLE;
-                      const isRequested = disabled && !isAvailable;
+                      const isRequested = statusDisabled && !isAvailable;
                       const isChecked = selected.includes(p.id);
                       const switchChecked =
                         isAvailable || isRequested || isChecked;
@@ -306,6 +326,16 @@ const GameRequestModal = ({
                               <Badge badgeType="warning">
                                 {intl.formatMessage(messages.requested)}
                               </Badge>
+                            ) : unsupported ? (
+                              <span
+                                title={intl.formatMessage(
+                                  messages.platformUnsupportedReason
+                                )}
+                              >
+                                <Badge badgeType="default">
+                                  {intl.formatMessage(messages.unavailable)}
+                                </Badge>
+                              </span>
                             ) : (
                               <Badge>
                                 {intl.formatMessage(messages.notrequested)}

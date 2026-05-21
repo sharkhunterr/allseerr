@@ -21,6 +21,9 @@ import useSWR from 'swr';
 
 const messages = defineMessages('pages.GameDetail', {
   request: 'Request',
+  requestUnavailable: 'Not requestable',
+  platformUnsupportedReason:
+    "This platform isn't supported by the game acquisition service (Romarr), so it can't be requested. Ask your administrator to add it in Romarr.",
   available: 'Available',
   partiallyAvailable: 'Partially Available',
   playOnRomm: 'Play on ROMM',
@@ -214,6 +217,22 @@ const PlatformRequestButton = ({
         >
           {isRequesting ? <Spinner /> : intl.formatMessage(messages.request)}
         </Button>
+      ) : showRequestButton && gameEnabled && !acquirable ? (
+        // Platform not handled by Romarr: a muted, still-clickable
+        // button that explains why on click rather than vanishing.
+        <Button
+          buttonType="default"
+          buttonSize="sm"
+          className="cursor-help opacity-60"
+          onClick={() =>
+            addToast(intl.formatMessage(messages.platformUnsupportedReason), {
+              appearance: 'info',
+              autoDismiss: true,
+            })
+          }
+        >
+          {intl.formatMessage(messages.requestUnavailable)}
+        </Button>
       ) : null}
     </div>
   );
@@ -271,14 +290,17 @@ const GameDetailPage: NextPage = () => {
   const isFullyAvailable =
     game.platforms.length > 0 &&
     availablePlatforms.length === game.platforms.length;
+  // Status-only requestable check. Romarr-platform support is NOT
+  // filtered out here: unsupported platforms still surface (page
+  // button + modal) so the user sees a disabled control with a
+  // reason rather than nothing.
   const requestablePlatforms = game.platforms.filter((p) => {
     const s = p.mediaStatus;
     return (
-      (s === null ||
-        s === undefined ||
-        s === MediaStatus.UNKNOWN ||
-        s === MediaStatus.DELETED) &&
-      isPlatformAcquirable(p.id)
+      s === null ||
+      s === undefined ||
+      s === MediaStatus.UNKNOWN ||
+      s === MediaStatus.DELETED
     );
   });
   const hasRequestable = requestablePlatforms.length > 0;
@@ -354,7 +376,10 @@ const GameDetailPage: NextPage = () => {
         show={showRequestModal}
         igdbId={game.igdbId}
         title={game.title}
-        platforms={game.platforms.filter((p) => isPlatformAcquirable(p.id))}
+        platforms={game.platforms.map((p) => ({
+          ...p,
+          romarrSupported: isPlatformAcquirable(p.id),
+        }))}
         releaseYear={game.releaseYear}
         developer={game.developer}
         publisher={game.publisher}
