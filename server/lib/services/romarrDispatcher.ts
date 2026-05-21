@@ -108,3 +108,50 @@ export async function submitToRomarr(
     return { success: false, message };
   }
 }
+
+// In-memory cache for Romarr's supported IGDB platform ids. The list
+// only changes when platforms are added in Romarr, so a short TTL
+// keeps the game-detail path cheap without a stale UI for long.
+let platformCache: { ids: number[]; at: number } | null = null;
+const PLATFORM_CACHE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * The IGDB platform ids the default Romarr instance can acquire
+ * games for. Returns `null` when no Romarr instance is configured,
+ * or the list can't be fetched and nothing is cached — callers treat
+ * null as "restriction not applicable" (fail open) so a transient
+ * Romarr outage never hides every request button.
+ */
+export async function getRomarrSupportedPlatformIds(): Promise<
+  number[] | null
+> {
+  const settings = getSettings();
+  const instance =
+    settings.romarr.find((r) => r.isDefault) ?? settings.romarr[0];
+  if (!instance) {
+    return null;
+  }
+
+  if (platformCache && Date.now() - platformCache.at < PLATFORM_CACHE_TTL_MS) {
+    return platformCache.ids;
+  }
+
+  try {
+    const api = new RomarrAPI({
+      url: RomarrAPI.buildUrl(instance),
+      apiKey: instance.apiKey,
+    });
+    const platforms = await api.getSupportedPlatforms();
+    const ids = platforms
+      .map((p) => p.igdb_id)
+      .filter((n): n is number => typeof n === 'number');
+    platformCache = { ids, at: Date.now() };
+    return ids;
+  } catch (e) {
+    logger.warn('Failed to fetch Romarr supported platforms', {
+      label: 'romarr',
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return platformCache?.ids ?? null;
+  }
+}

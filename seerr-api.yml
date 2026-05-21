@@ -4872,6 +4872,30 @@ paths:
                       type: string
                     abbreviation:
                       type: string
+  /game/romarr/platforms:
+    get:
+      summary: Get Romarr-supported game platforms
+      description: >-
+        Returns whether game requests are restricted to platforms a
+        configured Romarr instance can acquire, and the list of those
+        IGDB platform ids. The game UI hides the request button for
+        platforms not in the list when restrict is true.
+      tags:
+        - game
+      responses:
+        '200':
+          description: Restriction state returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  restrict:
+                    type: boolean
+                  platforms:
+                    type: array
+                    items:
+                      type: number
   /book/search:
     get:
       summary: Search for books
@@ -5259,6 +5283,8 @@ paths:
                         type: number
                       enabled:
                         type: boolean
+                  restrictToRomarrPlatforms:
+                    type: boolean
     put:
       summary: Update game settings
       description: Updates IGDB and ROMM settings.
@@ -5293,6 +5319,8 @@ paths:
                       type: number
                     enabled:
                       type: boolean
+                restrictToRomarrPlatforms:
+                  type: boolean
       responses:
         '200':
           description: Game settings updated

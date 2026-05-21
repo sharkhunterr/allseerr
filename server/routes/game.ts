@@ -10,6 +10,7 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { createRommAdapterFromSettings } from '@server/lib/adapters/game/RommAdapter';
 import { Permission, hasPermission } from '@server/lib/permissions';
+import { getRomarrSupportedPlatformIds } from '@server/lib/services/romarrDispatcher';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { isAuthenticated } from '@server/middleware/auth';
@@ -474,6 +475,25 @@ gameRoutes.get('/platforms', isAuthenticated(), async (_req, res) => {
       message: 'Failed to fetch platforms.',
     });
   }
+});
+
+/**
+ * GET /api/v1/game/romarr/platforms
+ * Tells the game UI which IGDB platforms may show a request button.
+ * `restrict` true → hide the button for platforms not in `platforms`
+ * (the IGDB ids the default Romarr instance can acquire). `restrict`
+ * is forced false when no Romarr instance is configured / reachable,
+ * so the UI fails open rather than hiding every button.
+ */
+gameRoutes.get('/romarr/platforms', isAuthenticated(), async (_req, res) => {
+  const settings = getSettings();
+  const restrictSetting = settings.game.restrictToRomarrPlatforms ?? true;
+  const ids = await getRomarrSupportedPlatformIds();
+
+  return res.status(200).json({
+    restrict: restrictSetting && ids !== null,
+    platforms: ids ?? [],
+  });
 });
 
 /**

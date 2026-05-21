@@ -132,10 +132,12 @@ interface GameDetailData {
 const PlatformRequestButton = ({
   platform,
   game,
+  acquirable,
   onRequested,
 }: {
   platform: Platform;
   game: GameDetailData;
+  acquirable: boolean;
   onRequested?: () => void;
 }) => {
   const intl = useIntl();
@@ -203,7 +205,7 @@ const PlatformRequestButton = ({
             <span>{intl.formatMessage(messages.playOnRomm)}</span>
           </Button>
         </a>
-      ) : showRequestButton && gameEnabled ? (
+      ) : showRequestButton && gameEnabled && acquirable ? (
         <Button
           buttonType="primary"
           buttonSize="sm"
@@ -230,6 +232,17 @@ const GameDetailPage: NextPage = () => {
     error,
     mutate: revalidate,
   } = useSWR<GameDetailData>(gameId ? `/api/v1/game/${gameId}` : null);
+
+  // Which IGDB platforms Romarr can acquire. When `restrict` is on,
+  // platforms outside this list get no request button.
+  const { data: romarrPlatforms } = useSWR<{
+    restrict: boolean;
+    platforms: number[];
+  }>('/api/v1/game/romarr/platforms');
+
+  const isPlatformAcquirable = (platformId: number) =>
+    !romarrPlatforms?.restrict ||
+    romarrPlatforms.platforms.includes(platformId);
 
   if (!game && !error) {
     return <LoadingSpinner />;
@@ -261,10 +274,11 @@ const GameDetailPage: NextPage = () => {
   const requestablePlatforms = game.platforms.filter((p) => {
     const s = p.mediaStatus;
     return (
-      s === null ||
-      s === undefined ||
-      s === MediaStatus.UNKNOWN ||
-      s === MediaStatus.DELETED
+      (s === null ||
+        s === undefined ||
+        s === MediaStatus.UNKNOWN ||
+        s === MediaStatus.DELETED) &&
+      isPlatformAcquirable(p.id)
     );
   });
   const hasRequestable = requestablePlatforms.length > 0;
@@ -340,7 +354,7 @@ const GameDetailPage: NextPage = () => {
         show={showRequestModal}
         igdbId={game.igdbId}
         title={game.title}
-        platforms={game.platforms}
+        platforms={game.platforms.filter((p) => isPlatformAcquirable(p.id))}
         releaseYear={game.releaseYear}
         developer={game.developer}
         publisher={game.publisher}
@@ -372,6 +386,7 @@ const GameDetailPage: NextPage = () => {
                     key={platform.id}
                     platform={platform}
                     game={game}
+                    acquirable={isPlatformAcquirable(platform.id)}
                     onRequested={revalidate}
                   />
                 ))}

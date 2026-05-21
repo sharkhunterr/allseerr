@@ -96,6 +96,9 @@ const messages = defineMessages('components.Settings', {
   deleteromarrserver: 'Delete Romarr Server',
   noDefaultRomarr:
     'At least one Romarr server must be marked as default in order for game requests to be processed.',
+  restrictPlatforms: 'Restrict requests to Romarr-supported platforms',
+  restrictPlatformsTip:
+    'When enabled, games can only be requested on platforms a Romarr instance can acquire — the request button is hidden for any other platform. Disable to allow requesting every platform.',
 });
 
 interface ServerInstanceProps {
@@ -886,6 +889,9 @@ const RomarrServices = () => {
     error: romarrError,
     mutate: revalidateRomarr,
   } = useSWR<RomarrSettings[]>('/api/v1/settings/romarr');
+  const { data: gameSettings, mutate: revalidateGame } = useSWR<{
+    restrictToRomarrPlatforms: boolean;
+  }>('/api/v1/settings/game');
   const [editRomarrModal, setEditRomarrModal] = useState<{
     open: boolean;
     romarr: RomarrSettings | null;
@@ -894,6 +900,13 @@ const RomarrServices = () => {
     open: boolean;
     serverId: number | null;
   }>({ open: false, serverId: null });
+
+  const setRestrictToRomarrPlatforms = async (value: boolean) => {
+    await axios.put('/api/v1/settings/game', {
+      restrictToRomarrPlatforms: value,
+    });
+    revalidateGame();
+  };
 
   const deleteServer = async () => {
     await axios.delete(`/api/v1/settings/romarr/${deleteRomarrModal.serverId}`);
@@ -944,6 +957,22 @@ const RomarrServices = () => {
         </Modal>
       </Transition>
       <div className="section">
+        <div className="form-row">
+          <label htmlFor="restrictToRomarrPlatforms" className="checkbox-label">
+            {intl.formatMessage(messages.restrictPlatforms)}
+            <span className="label-tip">
+              {intl.formatMessage(messages.restrictPlatformsTip)}
+            </span>
+          </label>
+          <div className="form-input-area">
+            <input
+              type="checkbox"
+              id="restrictToRomarrPlatforms"
+              checked={gameSettings?.restrictToRomarrPlatforms ?? true}
+              onChange={(e) => setRestrictToRomarrPlatforms(e.target.checked)}
+            />
+          </div>
+        </div>
         {!romarrData && !romarrError && <LoadingSpinner />}
         {romarrData && !romarrError && (
           <>

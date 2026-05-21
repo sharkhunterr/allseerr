@@ -28,6 +28,11 @@ export interface RomarrStatusResult {
   games: RomarrGame[];
 }
 
+export interface RomarrPlatform {
+  igdb_id: number;
+  name: string;
+}
+
 /**
  * Romarr client — the game *acquisition* service (the Radarr role
  * for ROMs).
@@ -150,6 +155,18 @@ class RomarrAPI {
       });
       return { present: false, games: [] };
     }
+  }
+
+  /**
+   * The IGDB platforms Romarr can acquire games for — a request
+   * manager uses this to only offer a request button for platforms
+   * Romarr can resolve.
+   */
+  async getSupportedPlatforms(): Promise<RomarrPlatform[]> {
+    const res = await this.http.get<{ platforms: RomarrPlatform[] }>(
+      '/api/v3/game/integrations/platforms'
+    );
+    return res.data.platforms ?? [];
   }
 }
 

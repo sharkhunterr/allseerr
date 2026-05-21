@@ -556,6 +556,11 @@ export interface GameSettings {
     pollIntervalMinutes: number;
     enabled: boolean;
   };
+  // When true, the game request button is only offered for platforms
+  // a configured Romarr instance can actually acquire (resolved via
+  // IGDB platform id). Default true — undeclared platforms get no
+  // request button rather than a request that would fail at dispatch.
+  restrictToRomarrPlatforms: boolean;
 }
 
 export interface ComicSettings {
@@ -953,6 +958,7 @@ class Settings {
           pollIntervalMinutes: 15,
           enabled: false,
         },
+        restrictToRomarrPlatforms: true,
       },
       book: {
         audiobookshelf: {
