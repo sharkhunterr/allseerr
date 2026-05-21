@@ -109,6 +109,48 @@ export async function submitToRomarr(
   }
 }
 
+/**
+ * Whether the game `media.romarrId` points to still exists in the
+ * default Romarr instance. `romarrId` lives on the long-lived
+ * GameMedia row, so it outlives the Romarr game when that game is
+ * deleted in Romarr and the request is re-created in allseerr — the
+ * subscriber uses this to decide whether a re-dispatch is needed.
+ *
+ * Returns true (i.e. "skip re-dispatch") when there is no Romarr
+ * instance or Romarr can't be reached: re-dispatching then would be
+ * pointless or would spam a transient outage.
+ */
+export async function romarrStillHasGame(media: GameMedia): Promise<boolean> {
+  if (!media.romarrId) {
+    return false;
+  }
+  const settings = getSettings();
+  const instance =
+    settings.romarr.find((r) => r.isDefault) ?? settings.romarr[0];
+  if (!instance) {
+    return true;
+  }
+  try {
+    const api = new RomarrAPI({
+      url: RomarrAPI.buildUrl(instance),
+      apiKey: instance.apiKey,
+    });
+    const status = await api.getGameStatus(media.igdbId);
+    return status.games.some((g) => g.id === media.romarrId);
+  } catch (e) {
+    logger.warn(
+      'Could not verify Romarr game presence; assuming still present',
+      {
+        label: 'romarr',
+        gameMediaId: media.id,
+        romarrId: media.romarrId,
+        error: e instanceof Error ? e.message : String(e),
+      }
+    );
+    return true;
+  }
+}
+
 // In-memory cache for Romarr's supported IGDB platform ids. The list
 // only changes when platforms are added in Romarr, so a short TTL
 // keeps the game-detail path cheap without a stale UI for long.

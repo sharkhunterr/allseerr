@@ -24,7 +24,10 @@ import notificationManager, { Notification } from '@server/lib/notifications';
 import { submitToBindery } from '@server/lib/services/binderyDispatcher';
 import { submitToBookshelf } from '@server/lib/services/bookshelfDispatcher';
 import { submitToMylar } from '@server/lib/services/mylarDispatcher';
-import { submitToRomarr } from '@server/lib/services/romarrDispatcher';
+import {
+  romarrStillHasGame,
+  submitToRomarr,
+} from '@server/lib/services/romarrDispatcher';
 import { submitToSuwayomi } from '@server/lib/services/suwayomiDispatcher';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -1360,9 +1363,13 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       return;
     }
 
-    // Already dispatched — Romarr is idempotent but there's no point
-    // re-submitting on every approval toggle.
-    if (media.romarrId) {
+    // Already dispatched — skip re-submitting on every approval
+    // toggle. But `romarrId` can be stale: if the game was deleted
+    // in Romarr and the request re-created here, the GameMedia row
+    // survives with its old id. Verify the game is genuinely still
+    // in Romarr before skipping; if it's gone, fall through and
+    // re-dispatch.
+    if (media.romarrId && (await romarrStillHasGame(media))) {
       return;
     }
 
