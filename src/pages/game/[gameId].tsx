@@ -1,6 +1,7 @@
 import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import MediaPageBackdrop from '@app/components/Common/MediaPageBackdrop';
 import PageTitle from '@app/components/Common/PageTitle';
 import GameRequestModal from '@app/components/GameRequestModal';
 import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
@@ -307,6 +308,7 @@ const GameDetailPage: NextPage = () => {
 
   return (
     <div className="media-page" style={{ height: 493 }}>
+      <MediaPageBackdrop src={game.coverUrl} mode="cover" />
       <PageTitle title={game.title} />
       <div className="media-header">
         <div className="media-poster">
@@ -325,18 +327,24 @@ const GameDetailPage: NextPage = () => {
         </div>
         <div className="media-title">
           <div className="media-status">
-            <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
-              Game
-            </span>
-            {hasAnyAvailable && (
-              <span className="rounded-full bg-green-500 px-3 py-1 text-xs font-bold text-white">
-                {intl.formatMessage(
-                  isFullyAvailable
-                    ? messages.available
-                    : messages.partiallyAvailable
-                )}
-              </span>
-            )}
+            {/* StatusBadge mirrors Movie/TV — same component, same
+                cyan/green palette — so the Game header reads as a
+                first-class media row instead of a custom inline pill.
+                The status we feed it is the AGGREGATE across all the
+                game's platforms: every-platform-AVAILABLE →
+                AVAILABLE; at-least-one-AVAILABLE →
+                PARTIALLY_AVAILABLE; otherwise nothing (StatusBadge
+                self-hides when status is undefined). */}
+            <StatusBadge
+              status={
+                isFullyAvailable
+                  ? MediaStatus.AVAILABLE
+                  : hasAnyAvailable
+                    ? MediaStatus.PARTIALLY_AVAILABLE
+                    : undefined
+              }
+              title={game.title}
+            />
           </div>
           <h1 data-testid="media-title">
             {game.title}{' '}
