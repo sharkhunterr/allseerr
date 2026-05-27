@@ -1228,7 +1228,10 @@ discoverRoutes.get(
           sort === 'recent'
             ? await hc.getRecentBooks(page, limit)
             : await hc.getPopularBooks(page, limit);
-        return res.status(200).json({
+        // Cascade-through when Hardcover returned nothing — fall
+        // through to the OpenLibrary block below so the operator
+        // doesn't get a blank grid for transient gateway issues.
+        if (hits.length > 0) return res.status(200).json({
           page,
           totalPages: hits.length < limit ? page : page + 1,
           totalResults: hits.length,
@@ -1332,7 +1335,14 @@ discoverRoutes.get(
           sort === 'recent'
             ? await hc.getRecentAudiobooks(page, limit)
             : await hc.getPopularAudiobooks(page, limit);
-        return res.status(200).json({
+        // Cascade-through guard: when Hardcover returns ZERO hits
+        // (rare but happens — Hasura gateway hiccup, sparse
+        // results past page 1, account without API quota) we
+        // must NOT early-return with an empty envelope. The
+        // operator expects the page to keep showing audiobooks,
+        // so fall through to Audible / OpenLibrary instead of
+        // serving them a blank grid.
+        if (hits.length > 0) return res.status(200).json({
           page,
           totalPages: hits.length < limit ? page : page + 1,
           totalResults: hits.length,
