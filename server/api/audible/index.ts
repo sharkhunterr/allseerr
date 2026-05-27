@@ -246,21 +246,24 @@ class AudibleAPI {
   }
 
   /**
-   * Popular audiobooks — Audible's
-   * ``products_sort_by=Popularity`` returns the regional
-   * storefront's catalog-wide popularity ranking. Used by
-   * ``/discover/audiobooks?sort=popular`` as the Audible-tier
-   * fallback when Hardcover isn't configured (or returns
-   * empty).
+   * Popular audiobooks — uses Audible's ``BestSellers`` sort,
+   * which IS valid catalog-wide (despite an earlier
+   * mis-diagnosis in the cascade-fix commit that claimed it
+   * needed a ``category_id``). Verified via a direct probe:
+   * ``products_sort_by=BestSellers`` returns the regional
+   * storefront's bestseller chart without any category filter.
    *
-   * Note: ``BestSellers`` is also a valid sort string but it
-   * requires a ``category_id`` filter to return meaningful
-   * data; without one Audible 200s with an empty product list.
-   * ``Popularity`` works catalog-wide, which is what we want
-   * for a generic browse surface.
+   * Note on alternatives:
+   *   * ``Popularity`` is NOT a valid Audible sort string
+   *     (Audible 400s with a validation error).
+   *   * ``AvgRating`` works but skews adult-tagged content to
+   *     the top because of small-sample-size rating inflation.
+   *   * ``Heuristic`` is Audible's default "relevance" ordering
+   *     — same as ``BestSellers`` in practice for this endpoint.
    *
-   * Same caching / podcast-filter / region rules as
-   * ``getNewReleases``; cached 1h.
+   * Used by ``/discover/audiobooks?sort=popular`` as the
+   * Audible-tier fallback when Hardcover isn't configured (or
+   * returns empty). Cached 1h.
    */
   async getPopular(
     numResults = 20,
@@ -278,7 +281,7 @@ class AudibleAPI {
         {
           params: {
             num_results: numResults,
-            products_sort_by: 'Popularity',
+            products_sort_by: 'BestSellers',
             release_time: 'past',
             page,
             response_groups:
