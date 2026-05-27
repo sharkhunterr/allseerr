@@ -246,22 +246,27 @@ class AudibleAPI {
   }
 
   /**
-   * Best-selling audiobooks — Audible's
-   * ``products_sort_by=BestSellers`` returns the regional
-   * storefront's bestseller chart (a real "popular right now"
-   * signal, different from ``ReleaseDate``'s "newest" signal).
-   * Used by the ``/discover/audiobooks?sort=popular`` surface
-   * as an alternative to Hardcover when Hardcover isn't
-   * configured.
+   * Popular audiobooks — Audible's
+   * ``products_sort_by=Popularity`` returns the regional
+   * storefront's catalog-wide popularity ranking. Used by
+   * ``/discover/audiobooks?sort=popular`` as the Audible-tier
+   * fallback when Hardcover isn't configured (or returns
+   * empty).
+   *
+   * Note: ``BestSellers`` is also a valid sort string but it
+   * requires a ``category_id`` filter to return meaningful
+   * data; without one Audible 200s with an empty product list.
+   * ``Popularity`` works catalog-wide, which is what we want
+   * for a generic browse surface.
    *
    * Same caching / podcast-filter / region rules as
    * ``getNewReleases``; cached 1h.
    */
-  async getBestSellers(
+  async getPopular(
     numResults = 20,
     page = 0
   ): Promise<{ results: AudiobookResult[]; totalResults: number }> {
-    const cacheKey = `${this.region}:bestsellers:${numResults}:${page}`;
+    const cacheKey = `${this.region}:popular:${numResults}:${page}`;
     const hit = audibleCache.get<{
       results: AudiobookResult[];
       totalResults: number;
@@ -273,7 +278,7 @@ class AudibleAPI {
         {
           params: {
             num_results: numResults,
-            products_sort_by: 'BestSellers',
+            products_sort_by: 'Popularity',
             release_time: 'past',
             page,
             response_groups:
@@ -299,7 +304,7 @@ class AudibleAPI {
       }
       return value;
     } catch (e) {
-      logger.error('Audible best-sellers failed', {
+      logger.error('Audible popular failed', {
         label: 'audible',
         error: e instanceof Error ? e.message : String(e),
       });

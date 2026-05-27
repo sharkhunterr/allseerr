@@ -1386,9 +1386,10 @@ discoverRoutes.get(
       // No Hardcover available — fall back to Audible's
       // ``/catalog/products`` with the sort that best matches
       // the operator's intent:
-      //   * ``sort=popular`` → ``BestSellers`` (the regional
-      //     storefront's bestseller chart — a real "popular
-      //     right now" signal).
+      //   * ``sort=popular`` → ``Popularity`` (catalog-wide
+      //     popularity ranking — ``BestSellers`` requires a
+      //     category_id to return data so ``Popularity`` is the
+      //     right call for a generic browse surface).
       //   * ``sort=recent`` → ``ReleaseDate`` (newest first,
       //     pre-orders filtered out).
       // Audible's catalog is free + no auth; same regional
@@ -1404,7 +1405,7 @@ discoverRoutes.get(
       const audibleResults =
         sort === 'recent'
           ? await audible.getNewReleases(limit, page - 1)
-          : await audible.getBestSellers(limit, page - 1);
+          : await audible.getPopular(limit, page - 1);
 
       if (audibleResults.results.length > 0) {
         return res.status(200).json({

@@ -588,15 +588,28 @@ class OpenLibraryAPI {
         cacheKey,
         async () => {
           const params: Record<string, string | number> = { page, limit };
-          const response = await axios.get<OpenLibrarySearchResponse>(
-            `${OPENLIBRARY_BASE}/trending/${period}.json`,
-            { params, timeout: 10000 }
-          );
+          // OpenLibrary's ``/trending/{period}.json`` endpoint
+          // returns a SHAPE-DIFFERENT response from
+          // ``/search.json`` — it uses ``works`` (or sometimes
+          // ``docs``) instead of always ``docs``, and the doc
+          // shape is leaner (no ``isbn`` array, often no
+          // ``language``). Accept both keys; the empty-array
+          // fallback prevents ``.map of undefined`` when the
+          // upstream returns an unexpected shape (which it
+          // occasionally does on heavily-cached daily feeds).
+          const response = await axios.get<
+            OpenLibrarySearchResponse & {
+              works?: OpenLibrarySearchResult[];
+            }
+          >(`${OPENLIBRARY_BASE}/trending/${period}.json`, {
+            params,
+            timeout: 10000,
+          });
+          const docs: OpenLibrarySearchResult[] =
+            response.data.works ?? response.data.docs ?? [];
           return {
-            results: response.data.docs.map((doc) =>
-              this.mapSearchResult(doc)
-            ),
-            totalResults: response.data.numFound ?? response.data.docs.length,
+            results: docs.map((doc) => this.mapSearchResult(doc)),
+            totalResults: response.data.numFound ?? docs.length,
           };
         },
         3600
