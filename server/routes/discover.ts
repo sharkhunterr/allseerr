@@ -1,3 +1,4 @@
+import type { AudibleRegion } from '@server/api/audible';
 import PlexTvAPI from '@server/api/plextv';
 import type { SortOptions } from '@server/api/themoviedb';
 import TheMovieDb from '@server/api/themoviedb';
@@ -1044,9 +1045,12 @@ discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
           ? new Date(g.first_release_date * 1000).getFullYear()
           : undefined,
         summary: g.summary,
-        rating: g.total_rating
-          ? Math.round(g.total_rating) / 10
-          : undefined,
+        // IGDB's ``total_rating`` is already 0-100 — the prior
+        // ``/10`` divisor turned 94% (GTA V tier) into 9.4 →
+        // rendered as "9%" by the shared RatingBadge. Hand the
+        // 0-100 value through directly; the badge does its own
+        // rounding.
+        rating: g.total_rating ?? undefined,
         mediaType: 'game',
       })),
     });
@@ -1347,13 +1351,56 @@ discoverRoutes.get(
         });
       }
 
-      // No Hardcover available — fall back to OpenLibrary's
-      // trending books feed as the catalogue (Audible doesn't
-      // expose a popular API without authenticated cookies).
-      // The audiobook edition of these popular titles is reachable
-      // via the detail page's edition picker. Better than a
-      // permanent empty state; the operator can always switch to
-      // /search for a query-driven flow.
+      // No Hardcover available — fall back to Audible's
+      // ``/catalog/products`` sorted by ``ReleaseDate`` (newest
+      // first). Audible's catalog is free and doesn't require
+      // auth; this is the genuine "new audiobook releases" feed,
+      // which is much more useful than the OpenLibrary trending
+      // books we used to surface here (which were mostly
+      // print-only titles that had no audio edition at all, so
+      // the cards rendered with no narrator / duration).
+      const audibleRegion =
+        (audioCfg?.audibleRegion ??
+          getSettings().metadataSettings?.audibleRegion ??
+          'us') as AudibleRegion;
+      const { default: AudibleAPI } = await import('@server/api/audible');
+      const audible = new AudibleAPI(audibleRegion);
+      // Audible uses 0-indexed paging.
+      const audibleResults = await audible.getNewReleases(limit, page - 1);
+
+      if (audibleResults.results.length > 0) {
+        return res.status(200).json({
+          page,
+          totalPages:
+            audibleResults.results.length < limit
+              ? page
+              : Math.max(
+                  page + 1,
+                  Math.ceil(audibleResults.totalResults / limit)
+                ),
+          totalResults: audibleResults.totalResults,
+          results: audibleResults.results.map((a) => ({
+            // Audiobook detail page routes by ASIN (the
+            // openLibraryId field carries that for Audible-sourced
+            // items — see ``/api/v1/audiobook/search``).
+            id: a.asin,
+            openLibraryId: a.asin,
+            title: a.title,
+            authorName: a.authorName,
+            narratorName: a.narratorName,
+            durationSeconds: a.durationSeconds,
+            coverUrl: a.coverUrl,
+            year: a.year,
+            publisher: a.publisher,
+          })),
+        });
+      }
+
+      // Audible came back empty (regional storefront / network
+      // hiccup) — last-resort fallback to OpenLibrary trending
+      // books. The audiobook edition of these popular titles is
+      // reachable via the detail page's edition picker. Better
+      // than a permanent empty state.
       const { default: OpenLibraryAPI } = await import(
         '@server/api/openlibrary'
       );

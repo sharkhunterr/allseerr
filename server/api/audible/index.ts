@@ -175,6 +175,76 @@ class AudibleAPI {
     }
   }
 
+  /**
+   * Recent / new audiobook releases — Audible's
+   * ``/catalog/products`` endpoint accepts a ``products_sort_by``
+   * parameter independent of a search query, so passing
+   * ``ReleaseDate`` (newest-first) with no ``keywords`` returns
+   * the regional storefront's release calendar in reverse
+   * chronological order. Used as the ``/discover/audiobooks``
+   * fallback when the operator hasn't configured Hardcover as
+   * the primary source.
+   *
+   * ``release_time`` filter limits to titles whose release_date
+   * is in the past — without it Audible includes pre-orders
+   * (release_date in the future) which clutter the "what's
+   * available now" surface.
+   *
+   * Cached 1h. Audible's catalog moves slower than its rate
+   * limits care about; an hour is comfortably within the window
+   * where the listing is meaningfully different.
+   */
+  async getNewReleases(
+    numResults = 20,
+    page = 0
+  ): Promise<{ results: AudiobookResult[]; totalResults: number }> {
+    const cacheKey = `${this.region}:new:${numResults}:${page}`;
+    const hit = audibleCache.get<{
+      results: AudiobookResult[];
+      totalResults: number;
+    }>(cacheKey);
+    if (hit !== undefined) return hit;
+    try {
+      const response = await axios.get<AudibleSearchApiResponse>(
+        `${this.baseUrl()}/catalog/products`,
+        {
+          params: {
+            num_results: numResults,
+            products_sort_by: 'ReleaseDate',
+            // Don't include unreleased pre-orders.
+            release_time: 'past',
+            page,
+            response_groups:
+              'media,product_attrs,product_desc,contributors,product_extended_attrs',
+          },
+          timeout: 10000,
+        }
+      );
+
+      const products = response.data.products ?? [];
+      const audiobooks = products.filter(
+        (p) =>
+          p.content_delivery_type !== 'PodcastEpisode' &&
+          p.content_type !== 'Podcast'
+      );
+
+      const value = {
+        results: audiobooks.map(toResult),
+        totalResults: response.data.total_results ?? audiobooks.length,
+      };
+      if (value.results.length > 0) {
+        audibleCache.set(cacheKey, value, 3600);
+      }
+      return value;
+    } catch (e) {
+      logger.error('Audible new-releases failed', {
+        label: 'audible',
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return { results: [], totalResults: 0 };
+    }
+  }
+
   async getProduct(asin: string): Promise<AudiobookResult | null> {
     const cacheKey = `${this.region}:product:${asin}`;
     const hit = audibleCache.get<AudiobookResult | null>(cacheKey);
