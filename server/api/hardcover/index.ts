@@ -788,6 +788,97 @@ class HardcoverAPI {
   }
 
   /**
+   * Recent books — sorted by ``release_date desc`` with a guard
+   * so unreleased titles (release_date in the future) don't
+   * dominate the listing. Backs the
+   * ``/discover/books?sort=recent`` surface.
+   *
+   * Filter notes:
+   *   * ``users_count: { _gt: 0 }`` — drops the long tail of
+   *     unrated catalogue entries that would otherwise crowd
+   *     out genuinely-popular new releases.
+   *   * ``release_date: { _lte: "${today}" }`` — server-side
+   *     guard against pre-orders. Today's date is rebuilt on
+   *     each call (the variable's not cached across days).
+   */
+  async getRecentBooks(
+    page = 1,
+    limit = 20
+  ): Promise<HardcoverSearchHit[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    const today = new Date().toISOString().slice(0, 10);
+    return cached(
+      `recent:books:${today}:${page}:${limit}`,
+      async () => {
+        const gql = `
+          query RecentBooks($limit: Int!, $offset: Int!, $today: date!) {
+            books(
+              where: {
+                users_count: { _gt: 0 },
+                release_date: { _lte: $today }
+              }
+              order_by: { release_date: desc_nulls_last }
+              limit: $limit
+              offset: $offset
+            ) {
+              ${HardcoverAPI.bookFields()}
+            }
+          }
+        `;
+        const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
+          gql,
+          { limit, offset, today }
+        );
+        return data?.books ?? [];
+      },
+      3600
+    );
+  }
+
+  /**
+   * Recent audiobooks — same release-date sort as ``getRecentBooks``,
+   * narrowed to books with at least one audiobook edition. Same
+   * server-side editions filter so the returned ``editions`` array
+   * holds only the audiobook editions (caller can render duration
+   * without an extra round-trip).
+   */
+  async getRecentAudiobooks(
+    page = 1,
+    limit = 20
+  ): Promise<HardcoverSearchHit[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    const today = new Date().toISOString().slice(0, 10);
+    return cached(
+      `recent:audiobooks:${today}:${page}:${limit}`,
+      async () => {
+        const audiobookFmtId = HARDCOVER_READING_FORMAT.audiobook;
+        const gql = `
+          query RecentAudiobooks($limit: Int!, $offset: Int!, $today: date!) {
+            books(
+              where: {
+                users_count: { _gt: 0 },
+                release_date: { _lte: $today },
+                editions: { reading_format_id: { _eq: ${audiobookFmtId} } }
+              }
+              order_by: { release_date: desc_nulls_last }
+              limit: $limit
+              offset: $offset
+            ) {
+              ${HardcoverAPI.bookFields({ editionFormat: 'audiobook' })}
+            }
+          }
+        `;
+        const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
+          gql,
+          { limit, offset, today }
+        );
+        return data?.books ?? [];
+      },
+      3600
+    );
+  }
+
+  /**
    * ASIN lookup via the book_mappings table (Audible is the canonical
    * ASIN source on Hardcover). Returns the parent book with its audio
    * editions filtered in so the UI immediately has narrator / duration.

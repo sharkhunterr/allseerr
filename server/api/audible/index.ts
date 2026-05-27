@@ -245,6 +245,68 @@ class AudibleAPI {
     }
   }
 
+  /**
+   * Best-selling audiobooks — Audible's
+   * ``products_sort_by=BestSellers`` returns the regional
+   * storefront's bestseller chart (a real "popular right now"
+   * signal, different from ``ReleaseDate``'s "newest" signal).
+   * Used by the ``/discover/audiobooks?sort=popular`` surface
+   * as an alternative to Hardcover when Hardcover isn't
+   * configured.
+   *
+   * Same caching / podcast-filter / region rules as
+   * ``getNewReleases``; cached 1h.
+   */
+  async getBestSellers(
+    numResults = 20,
+    page = 0
+  ): Promise<{ results: AudiobookResult[]; totalResults: number }> {
+    const cacheKey = `${this.region}:bestsellers:${numResults}:${page}`;
+    const hit = audibleCache.get<{
+      results: AudiobookResult[];
+      totalResults: number;
+    }>(cacheKey);
+    if (hit !== undefined) return hit;
+    try {
+      const response = await axios.get<AudibleSearchApiResponse>(
+        `${this.baseUrl()}/catalog/products`,
+        {
+          params: {
+            num_results: numResults,
+            products_sort_by: 'BestSellers',
+            release_time: 'past',
+            page,
+            response_groups:
+              'media,product_attrs,product_desc,contributors,product_extended_attrs',
+          },
+          timeout: 10000,
+        }
+      );
+
+      const products = response.data.products ?? [];
+      const audiobooks = products.filter(
+        (p) =>
+          p.content_delivery_type !== 'PodcastEpisode' &&
+          p.content_type !== 'Podcast'
+      );
+
+      const value = {
+        results: audiobooks.map(toResult),
+        totalResults: response.data.total_results ?? audiobooks.length,
+      };
+      if (value.results.length > 0) {
+        audibleCache.set(cacheKey, value, 3600);
+      }
+      return value;
+    } catch (e) {
+      logger.error('Audible best-sellers failed', {
+        label: 'audible',
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return { results: [], totalResults: 0 };
+    }
+  }
+
   async getProduct(asin: string): Promise<AudiobookResult | null> {
     const cacheKey = `${this.region}:product:${asin}`;
     const hit = audibleCache.get<AudiobookResult | null>(cacheKey);

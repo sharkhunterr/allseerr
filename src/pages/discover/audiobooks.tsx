@@ -32,6 +32,22 @@ const DiscoverAudiobooksPage: NextPage = () => {
       })}
       endpoint="/api/v1/discover/audiobooks"
       cardKey={(a) => a.openLibraryId}
+      sortOptions={[
+        {
+          value: 'popular',
+          label: intl.formatMessage({
+            id: 'pages.discover.sort.popular',
+            defaultMessage: 'Popular',
+          }),
+        },
+        {
+          value: 'recent',
+          label: intl.formatMessage({
+            id: 'pages.discover.sort.recent',
+            defaultMessage: 'Recently released',
+          }),
+        },
+      ]}
       renderCard={(a, key) => (
         <li key={key}>
           <AudiobookCard

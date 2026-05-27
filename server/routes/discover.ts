@@ -1002,6 +1002,19 @@ const PageQuery = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
 });
 
+// Sort selector for the books / audiobooks browse pages.
+//   * ``popular`` — what's hot on the chosen primary provider
+//     (Hardcover users_count, Audible BestSellers, OpenLibrary
+//     trending). The default.
+//   * ``recent`` — what was released most recently (Hardcover
+//     release_date desc, Audible ReleaseDate desc, OpenLibrary
+//     trending again as the last-resort fallback).
+// The same shape is reused on the audiobook endpoint so the UI
+// sort selector can target both pages from one component.
+const PagedSortQuery = PageQuery.extend({
+  sort: z.enum(['popular', 'recent']).optional().default('popular'),
+});
+
 discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
   try {
     const { page } = PageQuery.parse(req.query);
@@ -1190,7 +1203,7 @@ discoverRoutes.get(
   requireMediaType('book'),
   async (req, res) => {
     try {
-      const { page } = PageQuery.parse(req.query);
+      const { page, sort } = PagedSortQuery.parse(req.query);
       const limit = 20;
       const bookCfg = getSettings().book?.metadataProviders;
       // Same predicate the /book/search route uses to pick the
@@ -1211,7 +1224,10 @@ discoverRoutes.get(
         const { default: HardcoverAPI, hardcoverPrimaryAuthor } =
           await import('@server/api/hardcover');
         const hc = new HardcoverAPI(bookCfg.hardcoverApiKey);
-        const hits = await hc.getPopularBooks(page, limit);
+        const hits =
+          sort === 'recent'
+            ? await hc.getRecentBooks(page, limit)
+            : await hc.getPopularBooks(page, limit);
         return res.status(200).json({
           page,
           totalPages: hits.length < limit ? page : page + 1,
@@ -1243,10 +1259,13 @@ discoverRoutes.get(
         '@server/api/openlibrary'
       );
       const client = new OpenLibraryAPI();
-      // ``daily`` is the most volatile (truly reflects "popular
-      // right now"); for paginated browsing past page 1 we ask
-      // for ``weekly`` so the operator gets a wider catalogue.
-      const period = page === 1 ? 'daily' : 'weekly';
+      // OpenLibrary doesn't expose a "recent" feed — fall back
+      // to ``daily`` for popular AND ``weekly`` for recent
+      // (wider window so non-trending recent releases surface).
+      // It's not a perfect match but better than refusing to
+      // honor the sort param.
+      const period =
+        sort === 'recent' ? 'weekly' : page === 1 ? 'daily' : 'weekly';
       const { results, totalResults } = await client.getTrending(
         period,
         page,
@@ -1289,7 +1308,7 @@ discoverRoutes.get(
   requireMediaType('audiobook'),
   async (req, res) => {
     try {
-      const { page } = PageQuery.parse(req.query);
+      const { page, sort } = PagedSortQuery.parse(req.query);
       const limit = 20;
       const audioCfg = getSettings().audiobook?.metadataProviders;
       // Hardcover stores its API key on the BOOK settings (single
@@ -1309,7 +1328,10 @@ discoverRoutes.get(
         const { default: HardcoverAPI, hardcoverPrimaryAuthor } =
           await import('@server/api/hardcover');
         const hc = new HardcoverAPI(sharedHcKey);
-        const hits = await hc.getPopularAudiobooks(page, limit);
+        const hits =
+          sort === 'recent'
+            ? await hc.getRecentAudiobooks(page, limit)
+            : await hc.getPopularAudiobooks(page, limit);
         return res.status(200).json({
           page,
           totalPages: hits.length < limit ? page : page + 1,
@@ -1352,13 +1374,16 @@ discoverRoutes.get(
       }
 
       // No Hardcover available — fall back to Audible's
-      // ``/catalog/products`` sorted by ``ReleaseDate`` (newest
-      // first). Audible's catalog is free and doesn't require
-      // auth; this is the genuine "new audiobook releases" feed,
-      // which is much more useful than the OpenLibrary trending
-      // books we used to surface here (which were mostly
-      // print-only titles that had no audio edition at all, so
-      // the cards rendered with no narrator / duration).
+      // ``/catalog/products`` with the sort that best matches
+      // the operator's intent:
+      //   * ``sort=popular`` → ``BestSellers`` (the regional
+      //     storefront's bestseller chart — a real "popular
+      //     right now" signal).
+      //   * ``sort=recent`` → ``ReleaseDate`` (newest first,
+      //     pre-orders filtered out).
+      // Audible's catalog is free + no auth; same regional
+      // storefront the existing audiobook search already
+      // targets.
       const audibleRegion =
         (audioCfg?.audibleRegion ??
           getSettings().metadataSettings?.audibleRegion ??
@@ -1366,7 +1391,10 @@ discoverRoutes.get(
       const { default: AudibleAPI } = await import('@server/api/audible');
       const audible = new AudibleAPI(audibleRegion);
       // Audible uses 0-indexed paging.
-      const audibleResults = await audible.getNewReleases(limit, page - 1);
+      const audibleResults =
+        sort === 'recent'
+          ? await audible.getNewReleases(limit, page - 1)
+          : await audible.getBestSellers(limit, page - 1);
 
       if (audibleResults.results.length > 0) {
         return res.status(200).json({
@@ -1405,7 +1433,11 @@ discoverRoutes.get(
         '@server/api/openlibrary'
       );
       const client = new OpenLibraryAPI();
-      const period = page === 1 ? 'daily' : 'weekly';
+      // No "recent" feed on OpenLibrary either; we widen the
+      // trending window to ``weekly`` for the recent intent so
+      // less-trending newer releases have a chance to surface.
+      const period =
+        sort === 'recent' ? 'weekly' : page === 1 ? 'daily' : 'weekly';
       const { results, totalResults } = await client.getTrending(
         period,
         page,

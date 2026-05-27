@@ -26,6 +26,22 @@ const DiscoverBooksPage: NextPage = () => {
       })}
       endpoint="/api/v1/discover/books"
       cardKey={(b) => b.openLibraryId}
+      sortOptions={[
+        {
+          value: 'popular',
+          label: intl.formatMessage({
+            id: 'pages.discover.sort.popular',
+            defaultMessage: 'Popular',
+          }),
+        },
+        {
+          value: 'recent',
+          label: intl.formatMessage({
+            id: 'pages.discover.sort.recent',
+            defaultMessage: 'Recently released',
+          }),
+        },
+      ]}
       renderCard={(b, key) => (
         <li key={key}>
           <BookCard

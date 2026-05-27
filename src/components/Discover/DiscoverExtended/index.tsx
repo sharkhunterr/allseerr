@@ -27,6 +27,9 @@ import Button from '@app/components/Common/Button';
 import Header from '@app/components/Common/Header';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
+import { useUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
+import { BarsArrowDownIcon } from '@heroicons/react/24/solid';
+import { useRouter } from 'next/router';
 import { useState, type ReactElement, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 import useSWRInfinite from 'swr/infinite';
@@ -47,16 +50,32 @@ interface DiscoverExtendedProps<T> {
   /** Shown when the first page returns zero results — typical
    * fallback for providers without a real popular endpoint. */
   emptyHint?: ReactNode;
+  /** Sort-selector options. When omitted, no selector renders.
+   * Values are forwarded to the endpoint as ``?sort=<value>``
+   * and round-trip via the URL query so the choice survives
+   * a refresh. */
+  sortOptions?: { value: string; label: string }[];
 }
 
 function DiscoverExtended<T>(
   props: DiscoverExtendedProps<T>
 ): ReactElement {
   const intl = useIntl();
+  const router = useRouter();
+  const updateQueryParams = useUpdateQueryParams({});
   // Tracks how many times the operator pressed "Load more". Used
   // only to force a re-render when SWR's ``size`` change alone
   // doesn't (e.g. when the new page resolves from cache instantly).
   const [, setLoadMoreClicks] = useState(0);
+
+  // Sort param round-trips through the URL so refreshes / shared
+  // links preserve the operator's choice. Default = first option
+  // (typically "popular").
+  const sortFromUrl =
+    typeof router.query.sort === 'string' ? router.query.sort : undefined;
+  const activeSort =
+    props.sortOptions?.find((o) => o.value === sortFromUrl)?.value ??
+    props.sortOptions?.[0]?.value;
 
   const { data, error, size, setSize, isValidating } = useSWRInfinite<
     DiscoverEnvelope<T>
@@ -74,7 +93,9 @@ function DiscoverExtended<T>(
       ) {
         return null;
       }
-      return `${props.endpoint}?page=${pageIndex + 1}`;
+      const qs = new URLSearchParams({ page: String(pageIndex + 1) });
+      if (activeSort) qs.set('sort', activeSort);
+      return `${props.endpoint}?${qs.toString()}`;
     },
     { revalidateFirstPage: false, revalidateOnFocus: false }
   );
@@ -95,6 +116,33 @@ function DiscoverExtended<T>(
       <PageTitle title={props.title} />
       <div className="mb-4 flex flex-col justify-between lg:flex-row lg:items-end">
         <Header>{props.title}</Header>
+        {props.sortOptions && props.sortOptions.length > 1 && (
+          <div className="mt-2 flex flex-grow flex-col sm:flex-row lg:flex-grow-0">
+            <div className="mb-2 flex flex-grow sm:mb-0 lg:flex-grow-0">
+              {/* Same visual the DiscoverMovies sort selector
+                  uses (icon prefix on a rounded-l-md gray-800
+                  span, then the select with rounded-r-only).
+                  Keeps the catalogue's sort UX consistent
+                  between Movies/TV and the extended types. */}
+              <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-gray-100 sm:text-sm">
+                <BarsArrowDownIcon className="h-6 w-6" />
+              </span>
+              <select
+                id="sortBy"
+                name="sortBy"
+                className="rounded-r-only"
+                value={activeSort ?? ''}
+                onChange={(e) => updateQueryParams('sort', e.target.value)}
+              >
+                {props.sortOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       {isLoadingInitial ? (
