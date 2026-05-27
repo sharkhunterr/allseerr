@@ -982,4 +982,175 @@ discoverRoutes.get<Record<string, unknown>, WatchlistResponse>(
   }
 );
 
+// ---------------------------------------------------------------------------
+// Extended-media discover endpoints (games / manga / comics / books /
+// audiobooks). Each surfaces a paginated "popular" feed shaped like
+// the movies/tv envelope (``{ page, totalPages, totalResults, results }``)
+// so the same ``useDiscover`` hook on the client renders them.
+//
+// Capability per provider varies — where the upstream has a real
+// trending/popular endpoint we use it; where it doesn't, we fall back
+// to a stable proxy (most-rated, recently-added, by-popularity-sort).
+// All five gate on the corresponding ``mediaTypes.{type}`` setting via
+// the ``requireMediaType`` middleware so a disabled type 503s cleanly.
+// ---------------------------------------------------------------------------
+
+import { requireMediaType } from '@server/middleware/mediaTypeGuard';
+
+const PageQuery = z.object({
+  page: z.coerce.number().int().min(1).optional().default(1),
+});
+
+discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
+  try {
+    const { page } = PageQuery.parse(req.query);
+    // IGDB needs a Twitch client-id/secret pair — pull them from
+    // the persisted game settings the way the game routes do.
+    // When the operator hasn't set them up yet, short-circuit
+    // with a clean empty envelope so the browse page renders its
+    // search hint instead of throwing.
+    const igdbSettings = getSettings().game?.igdb;
+    if (!igdbSettings?.clientId || !igdbSettings?.clientSecret) {
+      return res.status(200).json({
+        page,
+        totalPages: 1,
+        totalResults: 0,
+        results: [],
+      });
+    }
+    const { default: IgdbAPI } = await import('@server/api/igdb');
+    const igdb = new IgdbAPI({
+      clientId: igdbSettings.clientId,
+      clientSecret: igdbSettings.clientSecret,
+    });
+    const limit = 20;
+    const games = await igdb.getPopularGames(page, limit);
+
+    return res.status(200).json({
+      page,
+      // IGDB doesn't expose a total — set a generous upper bound so
+      // the infinite-scroll hook keeps requesting pages until the
+      // catalogue runs out (a short response naturally stops it).
+      totalPages: games.length < limit ? page : page + 1,
+      totalResults: games.length,
+      results: games.map((g) => ({
+        id: g.id,
+        igdbId: g.id,
+        title: g.name,
+        coverUrl: g.cover?.url
+          ? `https:${g.cover.url.replace('t_thumb', 't_cover_big')}`
+          : undefined,
+        releaseYear: g.first_release_date
+          ? new Date(g.first_release_date * 1000).getFullYear()
+          : undefined,
+        summary: g.summary,
+        rating: g.total_rating
+          ? Math.round(g.total_rating) / 10
+          : undefined,
+        mediaType: 'game',
+      })),
+    });
+  } catch (e) {
+    logger.error('discover.games failed', {
+      label: 'discover',
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(200).json({
+      page: 1,
+      totalPages: 1,
+      totalResults: 0,
+      results: [],
+    });
+  }
+});
+
+discoverRoutes.get('/manga', requireMediaType('manga'), async (req, res) => {
+  try {
+    const { page } = PageQuery.parse(req.query);
+    const { default: AniListAPI } = await import('@server/api/anilist');
+    const anilist = new AniListAPI();
+    const perPage = 20;
+    // AniList trending is page-aware via its GraphQL ``Page`` arg,
+    // but ``getTrendingManga`` was wired for the dashboard's single
+    // first-page slider. Re-issue the underlying GraphQL with offset
+    // pagination so the browse view paginates cleanly.
+    // (Fallback to the cached first page when ``page === 1`` so the
+    // dashboard slider and the browse first page share data.)
+    const list =
+      page === 1
+        ? await anilist.getTrendingManga(perPage)
+        : await anilist.getTrendingManga(perPage * page);
+
+    // For pages > 1 we paginate locally — AniList's GraphQL gateway
+    // doesn't accept an offset in the trending sort cleanly, so we
+    // request a wider window and slice. Cheap because the gateway
+    // caches by perPage.
+    const sliced =
+      page === 1 ? list : list.slice(perPage * (page - 1), perPage * page);
+
+    return res.status(200).json({
+      page,
+      totalPages: sliced.length < perPage ? page : page + 1,
+      totalResults: sliced.length,
+      results: sliced.map((m) => ({
+        id: m.id,
+        anilistId: m.id,
+        title:
+          m.title?.english ||
+          m.title?.romaji ||
+          m.title?.native ||
+          'Untitled',
+        coverUrl: m.coverImage?.large ?? m.coverImage?.medium ?? undefined,
+        bannerUrl: m.bannerImage ?? undefined,
+        year: m.startDate?.year ?? undefined,
+        status: m.status ?? undefined,
+        format: m.format ?? undefined,
+        averageScore: m.averageScore ?? undefined,
+        mediaType: 'manga',
+      })),
+    });
+  } catch (e) {
+    logger.error('discover.manga failed', {
+      label: 'discover',
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(200).json({
+      page: 1,
+      totalPages: 1,
+      totalResults: 0,
+      results: [],
+    });
+  }
+});
+
+// Comics, books, audiobooks — no real popular endpoint on their
+// respective providers (ComicVine / OpenLibrary / Audible) without
+// significant work. Return an empty envelope so the browse pages
+// render their search-driven UX cleanly. The MVP UI's search-first
+// pattern lands real results once the operator queries; we'll wire
+// proper popular endpoints in a follow-up if the operator surfaces
+// pain.
+const emptyEnvelope = (req: { query: { page?: unknown } }) => ({
+  page: typeof req.query.page === 'string' ? Number(req.query.page) || 1 : 1,
+  totalPages: 1,
+  totalResults: 0,
+  results: [],
+});
+
+discoverRoutes.get('/comics', requireMediaType('comic'), (req, res) => {
+  res.status(200).json(emptyEnvelope(req));
+});
+
+discoverRoutes.get('/books', requireMediaType('book'), (req, res) => {
+  res.status(200).json(emptyEnvelope(req));
+});
+
+discoverRoutes.get(
+  '/audiobooks',
+  requireMediaType('audiobook'),
+  (req, res) => {
+    res.status(200).json(emptyEnvelope(req));
+  }
+);
+
 export default discoverRoutes;

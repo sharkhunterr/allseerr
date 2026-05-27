@@ -121,6 +121,43 @@ limit ${limit};`;
     }
   }
 
+  /**
+   * Popular games — IGDB's APIcalypse-style query language doesn't
+   * have a "trending" endpoint, so we sort by ``total_rating_count``
+   * (the number of user ratings the game has received). This is a
+   * stable proxy for popularity that doesn't fluctuate as wildly
+   * as a recency window would, and matches how the dashboard
+   * panels render "Popular Movies" / "Popular TV".
+   *
+   * ``where total_rating != null`` filters out the long tail of
+   * unrated entries that would otherwise dominate paginated
+   * listings (IGDB's catalogue has many low-signal stub rows).
+   */
+  async getPopularGames(
+    page = 1,
+    limit = 20
+  ): Promise<IgdbGameResult[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    const body = `fields name,platforms.name,platforms.abbreviation,first_release_date,
+  involved_companies.company.name,involved_companies.developer,
+  involved_companies.publisher,genres.name,total_rating,
+  total_rating_count,cover.url,summary;
+where total_rating != null & total_rating_count > 50;
+sort total_rating_count desc;
+limit ${limit};
+offset ${offset};`;
+
+    try {
+      return await this.query('games', body);
+    } catch (e) {
+      logger.error('IGDB popular failed', {
+        label: 'igdb',
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return [];
+    }
+  }
+
   async getGame(igdbId: number): Promise<IgdbGameResult | null> {
     try {
       const results = await this.query(

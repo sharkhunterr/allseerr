@@ -8428,6 +8428,105 @@ paths:
                         - $ref: '#/components/schemas/MovieResult'
                         - $ref: '#/components/schemas/TvResult'
                         - $ref: '#/components/schemas/PersonResult'
+  /discover/games:
+    get:
+      summary: Popular games (IGDB by total_rating_count)
+      description: Paginated popular games envelope shaped like the
+        TMDB discover endpoints. Returns 503 when the ``game``
+        media type is disabled in admin settings.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /discover/manga:
+    get:
+      summary: Trending manga (AniList TRENDING_DESC)
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /discover/comics:
+    get:
+      summary: Popular comics (placeholder — returns empty envelope until a
+        ComicVine popular feed is wired)
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /discover/books:
+    get:
+      summary: Popular books (placeholder envelope)
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /discover/audiobooks:
+    get:
+      summary: Popular audiobooks (placeholder envelope)
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
   /discover/keyword/{keywordId}/movies:
     get:
       summary: Get movies from keyword

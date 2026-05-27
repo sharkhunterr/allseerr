@@ -1,15 +1,21 @@
 import Badge from '@app/components/Common/Badge';
 import VersionStatus from '@app/components/Layout/VersionStatus';
 import useClickOutside from '@app/hooks/useClickOutside';
+import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { Transition } from '@headlessui/react';
 import {
+  BookmarkIcon,
+  BookOpenIcon,
   ClockIcon,
   CogIcon,
   ExclamationTriangleIcon,
   EyeSlashIcon,
   FilmIcon,
+  MusicalNoteIcon,
+  PuzzlePieceIcon,
+  RectangleStackIcon,
   SparklesIcon,
   TvIcon,
   UsersIcon,
@@ -25,6 +31,11 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   dashboard: 'Discover',
   browsemovies: 'Movies',
   browsetv: 'Series',
+  browsegames: 'Games',
+  browsemanga: 'Manga',
+  browsecomics: 'Comics',
+  browsebooks: 'Books',
+  browseaudiobooks: 'Audiobooks',
   requests: 'Requests',
   blocklist: 'Blocklist',
   issues: 'Issues',
@@ -50,6 +61,17 @@ interface SidebarLinkProps {
   requiredPermission?: Permission | Permission[];
   permissionType?: 'and' | 'or';
   dataTestId?: string;
+  /** When set, the link only renders if the corresponding
+   * settings flag is truthy. Lets the operator toggle a whole
+   * media type on/off without us hard-coding which integrations
+   * are configured. Mirrors how the GameRequestModal / page-level
+   * gating already work. */
+  settingsFlag?:
+    | 'gameEnabled'
+    | 'mangaEnabled'
+    | 'comicEnabled'
+    | 'bookEnabled'
+    | 'audiobookEnabled';
 }
 
 const SidebarLinks: SidebarLinkProps[] = [
@@ -70,6 +92,45 @@ const SidebarLinks: SidebarLinkProps[] = [
     messagesKey: 'browsetv',
     svgIcon: <TvIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/discover\/tv$/,
+  },
+  // Five extended-media browse routes — gated on the same
+  // ``{type}Enabled`` settings flags the detail pages already
+  // consult, so a fresh install with only Plex/Sonarr/Radarr
+  // configured sees the original 3-item nav untouched.
+  {
+    href: '/discover/games',
+    messagesKey: 'browsegames',
+    svgIcon: <PuzzlePieceIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/discover\/games$/,
+    settingsFlag: 'gameEnabled',
+  },
+  {
+    href: '/discover/manga',
+    messagesKey: 'browsemanga',
+    svgIcon: <BookmarkIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/discover\/manga$/,
+    settingsFlag: 'mangaEnabled',
+  },
+  {
+    href: '/discover/comics',
+    messagesKey: 'browsecomics',
+    svgIcon: <RectangleStackIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/discover\/comics$/,
+    settingsFlag: 'comicEnabled',
+  },
+  {
+    href: '/discover/books',
+    messagesKey: 'browsebooks',
+    svgIcon: <BookOpenIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/discover\/books$/,
+    settingsFlag: 'bookEnabled',
+  },
+  {
+    href: '/discover/audiobooks',
+    messagesKey: 'browseaudiobooks',
+    svgIcon: <MusicalNoteIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/discover\/audiobooks$/,
+    settingsFlag: 'audiobookEnabled',
   },
   {
     href: '/requests',
@@ -130,7 +191,28 @@ const Sidebar = ({
   const router = useRouter();
   const intl = useIntl();
   const { hasPermission } = useUser();
+  const { currentSettings } = useSettings();
   useClickOutside(navRef, () => setClosed());
+
+  // One filter applied to both the mobile drawer and the desktop
+  // rail below — permission gate AND ``{type}Enabled`` settings
+  // gate, so a link only shows when the operator's session can
+  // see the surface AND the corresponding media type is turned on
+  // in Settings → Services.
+  const visibleLinks = SidebarLinks.filter((link) => {
+    if (
+      link.requiredPermission &&
+      !hasPermission(link.requiredPermission, {
+        type: link.permissionType ?? 'and',
+      })
+    ) {
+      return false;
+    }
+    if (link.settingsFlag && !currentSettings[link.settingsFlag]) {
+      return false;
+    }
+    return true;
+  });
 
   useEffect(() => {
     if (openIssuesCount) {
@@ -197,13 +279,7 @@ const Sidebar = ({
                       </span>
                     </div>
                     <nav className="mt-10 flex-1 space-y-4 px-4">
-                      {SidebarLinks.filter((link) =>
-                        link.requiredPermission
-                          ? hasPermission(link.requiredPermission, {
-                              type: link.permissionType ?? 'and',
-                            })
-                          : true
-                      ).map((sidebarLink) => {
+                      {visibleLinks.map((sidebarLink) => {
                         return (
                           <Link
                             key={`mobile-${sidebarLink.messagesKey}`}
@@ -260,13 +336,7 @@ const Sidebar = ({
                 </span>
               </div>
               <nav className="mt-8 flex-1 space-y-4 px-4">
-                {SidebarLinks.filter((link) =>
-                  link.requiredPermission
-                    ? hasPermission(link.requiredPermission, {
-                        type: link.permissionType ?? 'and',
-                      })
-                    : true
-                ).map((sidebarLink) => {
+                {visibleLinks.map((sidebarLink) => {
                   return (
                     <Link
                       key={`desktop-${sidebarLink.messagesKey}`}
