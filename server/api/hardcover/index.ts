@@ -704,6 +704,90 @@ class HardcoverAPI {
   }
 
   /**
+   * Popular books — Hardcover's own activity signal
+   * (``users_count`` = number of users who have logged this title
+   * on their shelves) is a better "popular" proxy than any
+   * external rating. The book detail page already surfaces this
+   * value, so it's the same number the operator sees in-app.
+   *
+   * Cached 1h — popularity changes slowly and Hardcover's Hasura
+   * gateway is happiest with a small dedupe window.
+   *
+   * Pagination is via Hasura's standard ``offset`` + ``limit``.
+   */
+  async getPopularBooks(
+    page = 1,
+    limit = 20
+  ): Promise<HardcoverSearchHit[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    return cached(
+      `popular:books:${page}:${limit}`,
+      async () => {
+        const gql = `
+          query PopularBooks($limit: Int!, $offset: Int!) {
+            books(
+              where: { users_count: { _gt: 0 } }
+              order_by: { users_count: desc_nulls_last }
+              limit: $limit
+              offset: $offset
+            ) {
+              ${HardcoverAPI.bookFields()}
+            }
+          }
+        `;
+        const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
+          gql,
+          { limit, offset }
+        );
+        return data?.books ?? [];
+      },
+      3600
+    );
+  }
+
+  /**
+   * Popular audiobooks — same ``users_count`` signal, narrowed to
+   * books that have at least one audio edition (per the same
+   * ``editions.reading_format_id`` filter the search uses). The
+   * ``editions`` projection is filtered to audiobook editions so
+   * the card can render narrator / duration without an extra
+   * round-trip.
+   */
+  async getPopularAudiobooks(
+    page = 1,
+    limit = 20
+  ): Promise<HardcoverSearchHit[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    return cached(
+      `popular:audiobooks:${page}:${limit}`,
+      async () => {
+        const audiobookFmtId = HARDCOVER_READING_FORMAT.audiobook;
+        const gql = `
+          query PopularAudiobooks($limit: Int!, $offset: Int!) {
+            books(
+              where: {
+                users_count: { _gt: 0 },
+                editions: { reading_format_id: { _eq: ${audiobookFmtId} } }
+              }
+              order_by: { users_count: desc_nulls_last }
+              limit: $limit
+              offset: $offset
+            ) {
+              ${HardcoverAPI.bookFields({ editionFormat: 'audiobook' })}
+            }
+          }
+        `;
+        const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
+          gql,
+          { limit, offset }
+        );
+        return data?.books ?? [];
+      },
+      3600
+    );
+  }
+
+  /**
    * ASIN lookup via the book_mappings table (Audible is the canonical
    * ASIN source on Hardcover). Returns the parent book with its audio
    * editions filtered in so the UI immediately has narrator / duration.

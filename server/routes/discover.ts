@@ -1187,11 +1187,58 @@ discoverRoutes.get(
   async (req, res) => {
     try {
       const { page } = PageQuery.parse(req.query);
+      const limit = 20;
+      const bookCfg = getSettings().book?.metadataProviders;
+      // Same predicate the /book/search route uses to pick the
+      // primary identity source. When Hardcover is the operator's
+      // chosen primary AND it's enabled AND the API key is set,
+      // browse popular pulls from Hardcover's
+      // ``users_count``-sorted feed — the same number the book
+      // detail page surfaces. Otherwise fall back to
+      // OpenLibrary's free ``/trending/{period}.json`` so a
+      // fresh install with no Hardcover account still gets a
+      // useful browse experience.
+      const useHardcover =
+        bookCfg?.primarySource === 'hardcover' &&
+        bookCfg.hardcover &&
+        !!bookCfg.hardcoverApiKey;
+
+      if (useHardcover) {
+        const { default: HardcoverAPI, hardcoverPrimaryAuthor } =
+          await import('@server/api/hardcover');
+        const hc = new HardcoverAPI(bookCfg.hardcoverApiKey);
+        const hits = await hc.getPopularBooks(page, limit);
+        return res.status(200).json({
+          page,
+          totalPages: hits.length < limit ? page : page + 1,
+          totalResults: hits.length,
+          results: hits.map((h) => {
+            const topEdition = h.editions?.[0];
+            return {
+              // Same ``hardcover:<id>`` prefix the search route
+              // uses so the detail page dispatcher routes back
+              // to Hardcover on click.
+              id: `hardcover:${h.id}`,
+              openLibraryId: `hardcover:${h.id}`,
+              title: h.title,
+              authorName:
+                hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
+              coverUrl: h.image?.url?.startsWith('http')
+                ? h.image.url
+                : undefined,
+              year: h.release_date
+                ? Number(h.release_date.slice(0, 4)) || undefined
+                : undefined,
+              publisher: topEdition?.publisher?.name ?? undefined,
+            };
+          }),
+        });
+      }
+
       const { default: OpenLibraryAPI } = await import(
         '@server/api/openlibrary'
       );
       const client = new OpenLibraryAPI();
-      const limit = 20;
       // ``daily`` is the most volatile (truly reflects "popular
       // right now"); for paginated browsing past page 1 we ask
       // for ``weekly`` so the operator gets a wider catalogue.
@@ -1233,24 +1280,84 @@ discoverRoutes.get(
   }
 );
 
-// Audiobooks — OpenLibrary's trending feed is BOOK-only and there's
-// no dedicated audiobook-popular surface from Audible without
-// authenticated cookies. Re-use the OpenLibrary trending books
-// list as the catalogue (audiobook editions of those popular
-// titles are then discoverable on the detail page's edition
-// picker). Better than a permanent empty state; the operator can
-// always switch to ``/search`` for a query-driven flow.
 discoverRoutes.get(
   '/audiobooks',
   requireMediaType('audiobook'),
   async (req, res) => {
     try {
       const { page } = PageQuery.parse(req.query);
+      const limit = 20;
+      const audioCfg = getSettings().audiobook?.metadataProviders;
+      // Hardcover stores its API key on the BOOK settings (single
+      // account is shared between book + audiobook surfaces); the
+      // audiobook tab only gates "is Hardcover allowed" via its
+      // own ``hardcover`` boolean. Mirror that here so the
+      // same precondition the search routes use also drives the
+      // browse-popular surface.
+      const bookCfg = getSettings().book?.metadataProviders;
+      const sharedHcKey = bookCfg?.hardcoverApiKey;
+      const useHardcover =
+        audioCfg?.primarySource === 'hardcover' &&
+        audioCfg.hardcover &&
+        !!sharedHcKey;
+
+      if (useHardcover) {
+        const { default: HardcoverAPI, hardcoverPrimaryAuthor } =
+          await import('@server/api/hardcover');
+        const hc = new HardcoverAPI(sharedHcKey);
+        const hits = await hc.getPopularAudiobooks(page, limit);
+        return res.status(200).json({
+          page,
+          totalPages: hits.length < limit ? page : page + 1,
+          totalResults: hits.length,
+          results: hits.map((h) => {
+            // ``editions`` is pre-filtered to audiobook editions
+            // server-side via bookFields({ editionFormat:
+            // 'audiobook' }), so the first one is the canonical
+            // audiobook edition for this title.
+            const audio = h.editions?.[0];
+            return {
+              // Audiobook detail page uses the ``hcab:`` prefix to
+              // route to the audiobook-specific Hardcover lookup
+              // (server/routes/book.ts line ~1303). Match that so
+              // a click on a popular audiobook card lands on the
+              // right detail page.
+              id: `hcab:${h.id}`,
+              openLibraryId: `hcab:${h.id}`,
+              title: h.title,
+              authorName:
+                hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
+              // Hardcover's edition record doesn't expose a
+              // narrator field directly — the existing audiobook
+              // search route also omits it for Hardcover hits;
+              // narrator only surfaces once the operator opens
+              // the detail page (which fetches the richer
+              // edition+contributions graph).
+              narratorName: undefined,
+              durationSeconds: audio?.audio_seconds ?? undefined,
+              coverUrl: h.image?.url?.startsWith('http')
+                ? h.image.url
+                : undefined,
+              year: h.release_date
+                ? Number(h.release_date.slice(0, 4)) || undefined
+                : undefined,
+              publisher: audio?.publisher?.name ?? undefined,
+            };
+          }),
+        });
+      }
+
+      // No Hardcover available — fall back to OpenLibrary's
+      // trending books feed as the catalogue (Audible doesn't
+      // expose a popular API without authenticated cookies).
+      // The audiobook edition of these popular titles is reachable
+      // via the detail page's edition picker. Better than a
+      // permanent empty state; the operator can always switch to
+      // /search for a query-driven flow.
       const { default: OpenLibraryAPI } = await import(
         '@server/api/openlibrary'
       );
       const client = new OpenLibraryAPI();
-      const limit = 20;
       const period = page === 1 ? 'daily' : 'weekly';
       const { results, totalResults } = await client.getTrending(
         period,
