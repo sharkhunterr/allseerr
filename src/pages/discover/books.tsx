@@ -1,11 +1,13 @@
 import DiscoverExtended from '@app/components/Discover/DiscoverExtended';
 import BookCard from '@app/components/BookCard';
-import Link from 'next/link';
 import type { NextPage } from 'next';
 import { useIntl } from 'react-intl';
 
 interface PopularBook {
-  id: number;
+  // OpenLibrary keys are strings (``/works/OL123W``) — we keep
+  // them as-is for the ``key`` extractor and pass them to the
+  // detail page via the BookCard's ``openLibraryId`` prop.
+  id: string;
   openLibraryId: string;
   title: string;
   authorName: string;
@@ -36,26 +38,6 @@ const DiscoverBooksPage: NextPage = () => {
           />
         </li>
       )}
-      emptyHint={
-        <>
-          <p className="mb-3">
-            {intl.formatMessage({
-              id: 'pages.discover.books.empty',
-              defaultMessage:
-                'No popular books feed wired yet — use search to find titles.',
-            })}
-          </p>
-          <Link
-            href="/search"
-            className="text-indigo-400 hover:text-indigo-300 hover:underline"
-          >
-            {intl.formatMessage({
-              id: 'pages.discover.books.goSearch',
-              defaultMessage: 'Open search',
-            })}
-          </Link>
-        </>
-      }
     />
   );
 };

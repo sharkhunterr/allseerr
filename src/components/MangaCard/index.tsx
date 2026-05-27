@@ -1,3 +1,4 @@
+import RatingBadge from '@app/components/Common/RatingBadge';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import defineMessages from '@app/utils/defineMessages';
 import { BookOpenIcon } from '@heroicons/react/24/solid';
@@ -105,11 +106,7 @@ const MangaCard = ({
               )}
           </div>
 
-          {typeof averageScore === 'number' && averageScore > 0 && (
-            <div className="absolute bottom-2 right-2 z-40 rounded-full bg-black/70 px-2 py-0.5 text-xs font-bold text-yellow-300">
-              {averageScore}%
-            </div>
-          )}
+          <RatingBadge score={averageScore} />
         </div>
 
         <div className="flex flex-1 flex-col p-3">

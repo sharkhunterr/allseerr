@@ -228,6 +228,51 @@ class ComicVineAPI {
   }
 
   /**
+   * Recent / "popular" volumes — ComicVine doesn't expose a
+   * trending feed, so we fall back to ``/volumes`` sorted by
+   * ``date_last_updated desc`` (volumes whose latest issue was
+   * indexed most recently). Stable proxy for "actively-running
+   * series" which is closer to what a user browsing comics
+   * wants than alphabetical-by-id.
+   *
+   * Cached 1h — the list barely changes within an hour, and
+   * ComicVine's rate limit is aggressive (200 req/hr per key).
+   */
+  async getRecentVolumes(
+    page = 1,
+    limit = 20
+  ): Promise<ComicVineVolumeSummary[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    const key = `recent:vol:${page}:${limit}`;
+    return cached(
+      key,
+      async () => {
+        try {
+          const results = await this.get<ComicVineVolumeSummary[]>(
+            '/volumes/',
+            {
+              sort: 'date_last_updated:desc',
+              limit,
+              offset,
+              field_list:
+                'id,name,start_year,count_of_issues,publisher,image,deck,description,api_detail_url,site_detail_url',
+            }
+          );
+          return results ?? [];
+        } catch (e) {
+          logger.warn('ComicVine getRecentVolumes failed', {
+            label: 'comicvine',
+            page,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          return [];
+        }
+      },
+      3600
+    );
+  }
+
+  /**
    * Fetch a volume (series) by id, with the issue list and people
    * credits. ComicVine returns big payloads here; pinning the
    * field_list keeps the response under a few hundred KB.

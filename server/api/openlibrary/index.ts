@@ -561,6 +561,57 @@ class OpenLibraryAPI {
     });
   }
 
+  /**
+   * Trending books from OpenLibrary's public ``/trending/{period}``
+   * feed. Periods we use:
+   *   * ``daily`` — what's hot today (drives the browse page's
+   *     default "popular" surface).
+   *   * ``weekly`` / ``monthly`` / ``yearly`` are also valid for
+   *     callers that want a wider/stabler window.
+   *
+   * The feed returns the same ``OpenLibrarySearchResult`` shape
+   * the ``/search.json`` endpoint does, so the existing
+   * ``mapSearchResult`` projects them into ``BookResult``
+   * without per-trending plumbing.
+   *
+   * Cached 1h — trending shifts within a day but not within an
+   * hour; this keeps OL happy under burst paging traffic.
+   */
+  async getTrending(
+    period: 'daily' | 'weekly' | 'monthly' | 'yearly' = 'daily',
+    page = 1,
+    limit = 20
+  ): Promise<{ results: BookResult[]; totalResults: number }> {
+    const cacheKey = `trending:${period}:${page}:${limit}`;
+    try {
+      return await cached(
+        cacheKey,
+        async () => {
+          const params: Record<string, string | number> = { page, limit };
+          const response = await axios.get<OpenLibrarySearchResponse>(
+            `${OPENLIBRARY_BASE}/trending/${period}.json`,
+            { params, timeout: 10000 }
+          );
+          return {
+            results: response.data.docs.map((doc) =>
+              this.mapSearchResult(doc)
+            ),
+            totalResults: response.data.numFound ?? response.data.docs.length,
+          };
+        },
+        3600
+      );
+    } catch (e) {
+      logger.error('OpenLibrary trending failed', {
+        label: 'openlibrary',
+        period,
+        page,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return { results: [], totalResults: 0 };
+    }
+  }
+
   private mapSearchResult(doc: OpenLibrarySearchResult): BookResult {
     const isbns = doc.isbn ?? [];
     const isbn13 = isbns.find((i) => i.length === 13);

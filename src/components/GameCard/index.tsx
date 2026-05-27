@@ -1,3 +1,4 @@
+import RatingBadge from '@app/components/Common/RatingBadge';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import defineMessages from '@app/utils/defineMessages';
 import { MediaStatus } from '@server/constants/media';
@@ -94,13 +95,7 @@ const GameCard = ({
             )}
           </div>
 
-          {userRating && (
-            <div className="absolute bottom-2 right-2">
-              <span className="rounded bg-yellow-500/90 px-1.5 py-0.5 text-xs font-bold text-black">
-                {Math.round(userRating)}%
-              </span>
-            </div>
-          )}
+          <RatingBadge score={userRating} />
         </div>
 
         <div className="flex flex-1 flex-col p-3">

@@ -1,11 +1,17 @@
 import DiscoverExtended from '@app/components/Discover/DiscoverExtended';
 import AudiobookCard from '@app/components/AudiobookCard';
-import Link from 'next/link';
 import type { NextPage } from 'next';
 import { useIntl } from 'react-intl';
 
+// The Audible upstream doesn't expose a popular feed without
+// authenticated cookies, so the backend re-uses OpenLibrary's
+// trending books list — the audiobook edition of those popular
+// titles is then surface-able on the detail page's edition
+// picker. The shape lines up with PopularBook on /discover/books
+// (same OpenLibrary keys + cover) so the rendering is
+// straightforward.
 interface PopularAudiobook {
-  id: number;
+  id: string;
   openLibraryId: string;
   title: string;
   authorName: string;
@@ -40,26 +46,6 @@ const DiscoverAudiobooksPage: NextPage = () => {
           />
         </li>
       )}
-      emptyHint={
-        <>
-          <p className="mb-3">
-            {intl.formatMessage({
-              id: 'pages.discover.audiobooks.empty',
-              defaultMessage:
-                'No popular audiobooks feed wired yet — use search to find titles.',
-            })}
-          </p>
-          <Link
-            href="/search"
-            className="text-indigo-400 hover:text-indigo-300 hover:underline"
-          >
-            {intl.formatMessage({
-              id: 'pages.discover.audiobooks.goSearch',
-              defaultMessage: 'Open search',
-            })}
-          </Link>
-        </>
-      }
     />
   );
 };

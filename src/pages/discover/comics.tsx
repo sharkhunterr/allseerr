@@ -1,14 +1,13 @@
 import DiscoverExtended from '@app/components/Discover/DiscoverExtended';
 import ComicCard from '@app/components/ComicCard';
-import Link from 'next/link';
 import type { NextPage } from 'next';
 import { useIntl } from 'react-intl';
 
-// ComicVine doesn't expose a "popular" surface without significant
-// crawling work, so the backend returns an empty envelope and we
-// render a search-first hint. As soon as the popular endpoint is
-// wired up (e.g. cached "most-viewed" issues), this page renders
-// the cards exactly like the games / manga pages do.
+// ComicVine has no trending API but its ``/volumes`` endpoint
+// supports ``sort=date_last_updated:desc`` — series whose latest
+// issue was indexed most recently. Stable proxy for "actively
+// running comics", which is what an operator browsing comics
+// usually wants.
 interface PopularComic {
   id: number;
   comicVineId: number;
@@ -43,26 +42,6 @@ const DiscoverComicsPage: NextPage = () => {
           />
         </li>
       )}
-      emptyHint={
-        <>
-          <p className="mb-3">
-            {intl.formatMessage({
-              id: 'pages.discover.comics.empty',
-              defaultMessage:
-                'ComicVine has no popular feed — use search to browse.',
-            })}
-          </p>
-          <Link
-            href="/search"
-            className="text-indigo-400 hover:text-indigo-300 hover:underline"
-          >
-            {intl.formatMessage({
-              id: 'pages.discover.comics.goSearch',
-              defaultMessage: 'Open search',
-            })}
-          </Link>
-        </>
-      }
     />
   );
 };

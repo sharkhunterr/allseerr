@@ -1123,33 +1123,169 @@ discoverRoutes.get('/manga', requireMediaType('manga'), async (req, res) => {
   }
 });
 
-// Comics, books, audiobooks — no real popular endpoint on their
-// respective providers (ComicVine / OpenLibrary / Audible) without
-// significant work. Return an empty envelope so the browse pages
-// render their search-driven UX cleanly. The MVP UI's search-first
-// pattern lands real results once the operator queries; we'll wire
-// proper popular endpoints in a follow-up if the operator surfaces
-// pain.
-const emptyEnvelope = (req: { query: { page?: unknown } }) => ({
-  page: typeof req.query.page === 'string' ? Number(req.query.page) || 1 : 1,
-  totalPages: 1,
-  totalResults: 0,
-  results: [],
-});
+discoverRoutes.get(
+  '/comics',
+  requireMediaType('comic'),
+  async (req, res) => {
+    try {
+      const { page } = PageQuery.parse(req.query);
+      // ComicVine needs an API key — pull it from the persisted
+      // comic settings the way the comic routes do. Same
+      // ``metadataProviders.comicvine + apiKey`` shape as
+      // ``server/routes/comic.ts``. When the key isn't
+      // configured yet, return an empty envelope so the browse
+      // page renders its search hint cleanly.
+      const cfg = getSettings().comic?.metadataProviders;
+      const apiKey = cfg?.comicvine ? cfg.apiKey : null;
+      if (!apiKey) {
+        return res.status(200).json({
+          page,
+          totalPages: 1,
+          totalResults: 0,
+          results: [],
+        });
+      }
+      const { default: ComicVineAPI } = await import(
+        '@server/api/comicvine'
+      );
+      const client = new ComicVineAPI({ apiKey });
+      const limit = 20;
+      const volumes = await client.getRecentVolumes(page, limit);
+      return res.status(200).json({
+        page,
+        totalPages: volumes.length < limit ? page : page + 1,
+        totalResults: volumes.length,
+        results: volumes.map((v) => ({
+          id: v.id,
+          comicVineId: v.id,
+          title: v.name,
+          coverUrl: v.image?.medium_url ?? v.image?.small_url,
+          year: v.start_year ? Number(v.start_year) || undefined : undefined,
+          issueCount: v.count_of_issues,
+          publisher: v.publisher?.name,
+          deck: v.deck ?? undefined,
+        })),
+      });
+    } catch (e) {
+      logger.error('discover.comics failed', {
+        label: 'discover',
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return res.status(200).json({
+        page: 1,
+        totalPages: 1,
+        totalResults: 0,
+        results: [],
+      });
+    }
+  }
+);
 
-discoverRoutes.get('/comics', requireMediaType('comic'), (req, res) => {
-  res.status(200).json(emptyEnvelope(req));
-});
+discoverRoutes.get(
+  '/books',
+  requireMediaType('book'),
+  async (req, res) => {
+    try {
+      const { page } = PageQuery.parse(req.query);
+      const { default: OpenLibraryAPI } = await import(
+        '@server/api/openlibrary'
+      );
+      const client = new OpenLibraryAPI();
+      const limit = 20;
+      // ``daily`` is the most volatile (truly reflects "popular
+      // right now"); for paginated browsing past page 1 we ask
+      // for ``weekly`` so the operator gets a wider catalogue.
+      const period = page === 1 ? 'daily' : 'weekly';
+      const { results, totalResults } = await client.getTrending(
+        period,
+        page,
+        limit
+      );
+      return res.status(200).json({
+        page,
+        totalPages:
+          results.length < limit
+            ? page
+            : Math.max(page + 1, Math.ceil(totalResults / limit)),
+        totalResults,
+        results: results.map((b) => ({
+          id: b.openLibraryId,
+          openLibraryId: b.openLibraryId,
+          title: b.title,
+          authorName: b.authorName,
+          coverUrl: b.coverUrl,
+          year: b.year,
+          publisher: b.publisher,
+        })),
+      });
+    } catch (e) {
+      logger.error('discover.books failed', {
+        label: 'discover',
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return res.status(200).json({
+        page: 1,
+        totalPages: 1,
+        totalResults: 0,
+        results: [],
+      });
+    }
+  }
+);
 
-discoverRoutes.get('/books', requireMediaType('book'), (req, res) => {
-  res.status(200).json(emptyEnvelope(req));
-});
-
+// Audiobooks — OpenLibrary's trending feed is BOOK-only and there's
+// no dedicated audiobook-popular surface from Audible without
+// authenticated cookies. Re-use the OpenLibrary trending books
+// list as the catalogue (audiobook editions of those popular
+// titles are then discoverable on the detail page's edition
+// picker). Better than a permanent empty state; the operator can
+// always switch to ``/search`` for a query-driven flow.
 discoverRoutes.get(
   '/audiobooks',
   requireMediaType('audiobook'),
-  (req, res) => {
-    res.status(200).json(emptyEnvelope(req));
+  async (req, res) => {
+    try {
+      const { page } = PageQuery.parse(req.query);
+      const { default: OpenLibraryAPI } = await import(
+        '@server/api/openlibrary'
+      );
+      const client = new OpenLibraryAPI();
+      const limit = 20;
+      const period = page === 1 ? 'daily' : 'weekly';
+      const { results, totalResults } = await client.getTrending(
+        period,
+        page,
+        limit
+      );
+      return res.status(200).json({
+        page,
+        totalPages:
+          results.length < limit
+            ? page
+            : Math.max(page + 1, Math.ceil(totalResults / limit)),
+        totalResults,
+        results: results.map((b) => ({
+          id: b.openLibraryId,
+          openLibraryId: b.openLibraryId,
+          title: b.title,
+          authorName: b.authorName,
+          coverUrl: b.coverUrl,
+          year: b.year,
+          publisher: b.publisher,
+        })),
+      });
+    } catch (e) {
+      logger.error('discover.audiobooks failed', {
+        label: 'discover',
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return res.status(200).json({
+        page: 1,
+        totalPages: 1,
+        totalResults: 0,
+        results: [],
+      });
+    }
   }
 );
 
