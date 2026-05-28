@@ -49,14 +49,9 @@ interface ExtendedMediaSliderProps<T> {
   /** Render one item as a JSX card. The wrapper handles the
    * <li> + key extraction. */
   renderCard: (item: T) => ReactNode;
-  /** Stable per-item key extractor — used for both React's
-   * ``key`` AND for the show-more card's optional poster
-   * thumbnails (if ``getPoster`` is set). */
+  /** Stable per-item key extractor — used for React's ``key``
+   * on the per-card ``<li>``. */
   cardKey: (item: T) => string | number;
-  /** Optional thumbnail-URL extractor for the show-more card's
-   * preview mosaic. When omitted, the show-more card renders
-   * without thumbnails. */
-  getPoster?: (item: T) => string | undefined;
 }
 
 function ExtendedMediaSlider<T>(
@@ -110,18 +105,22 @@ function ExtendedMediaSlider<T>(
       </li>
     ));
 
-  // ShowMore card with the next 4 items' covers as a preview
-  // mosaic — same UX MediaSlider uses for the movie/tv rows.
+  // ShowMore card — same UX MediaSlider uses for the movie/tv
+  // rows, but WITHOUT a poster mosaic: ShowMoreCard hard-codes
+  // the TMDB image-proxy base (``image.tmdb.org/t/p/...``) in
+  // front of whatever string lands in ``posters``, so handing
+  // it our IGDB / Hardcover / AniList / ComicVine full URLs
+  // produces broken concatenations (``https://image.tmdb.org/
+  // t/p/w300_and_h450_facehttps://images.igdb.com/…``). Pass
+  // an empty array so the card renders the simple "see more"
+  // tile with no thumbnails — operator still gets the click
+  // target, no broken images.
   if (props.linkUrl && items.length > 20) {
     cards.push(
       <ShowMoreCard
         key={`${props.sliderKey}-show-more`}
         url={props.linkUrl}
-        posters={
-          props.getPoster
-            ? items.slice(20, 24).map((i) => props.getPoster?.(i))
-            : []
-        }
+        posters={[]}
       />
     );
   }

@@ -340,7 +340,6 @@ const Discover = (): JSX.Element => {
                 url="/api/v1/discover/games"
                 linkUrl="/discover/games"
                 cardKey={(g) => g.igdbId}
-                getPoster={(g) => g.coverUrl}
                 renderCard={(g) => (
                   <GameCard
                     igdbId={g.igdbId}
@@ -371,7 +370,6 @@ const Discover = (): JSX.Element => {
                 url="/api/v1/discover/manga"
                 linkUrl="/discover/manga"
                 cardKey={(m) => m.anilistId}
-                getPoster={(m) => m.coverUrl}
                 renderCard={(m) => (
                   <MangaCard
                     anilistId={m.anilistId}
@@ -402,7 +400,6 @@ const Discover = (): JSX.Element => {
                 url="/api/v1/discover/comics"
                 linkUrl="/discover/comics"
                 cardKey={(c) => c.comicVineId}
-                getPoster={(c) => c.coverUrl}
                 renderCard={(c) => (
                   <ComicCard
                     comicVineId={c.comicVineId}
@@ -432,7 +429,6 @@ const Discover = (): JSX.Element => {
                 url="/api/v1/discover/books"
                 linkUrl="/discover/books"
                 cardKey={(b) => b.openLibraryId}
-                getPoster={(b) => b.coverUrl}
                 renderCard={(b) => (
                   <BookCard
                     openLibraryId={b.openLibraryId}
@@ -463,7 +459,6 @@ const Discover = (): JSX.Element => {
                 url="/api/v1/discover/audiobooks"
                 linkUrl="/discover/audiobooks"
                 cardKey={(a) => a.openLibraryId}
-                getPoster={(a) => a.coverUrl}
                 renderCard={(a) => (
                   <AudiobookCard
                     openLibraryId={a.openLibraryId}
