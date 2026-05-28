@@ -1,15 +1,16 @@
 import DiscoverExtended from '@app/components/Discover/DiscoverExtended';
+import BooksFilterSlideover, {
+  countBooksActiveFilters,
+  type BooksFilterValues,
+} from '@app/components/Discover/ExtendedFilterSlideover/BooksFilterSlideover';
 import AudiobookCard from '@app/components/AudiobookCard';
 import type { NextPage } from 'next';
+import { useRouter } from 'next/router';
 import { useIntl } from 'react-intl';
 
-// The Audible upstream doesn't expose a popular feed without
-// authenticated cookies, so the backend re-uses OpenLibrary's
-// trending books list — the audiobook edition of those popular
-// titles is then surface-able on the detail page's edition
-// picker. The shape lines up with PopularBook on /discover/books
-// (same OpenLibrary keys + cover) so the rendering is
-// straightforward.
+// Audiobook discover uses the same shape as books (Hardcover /
+// OpenLibrary feed + Audible fallback). Both wire the BooksFilter
+// slideover but with audiobook-specific genre + endpoint.
 interface PopularAudiobook {
   id: string;
   openLibraryId: string;
@@ -23,8 +24,22 @@ interface PopularAudiobook {
   mediaStatus?: number | null;
 }
 
+const useAudiobookFilters = (): BooksFilterValues => {
+  const router = useRouter();
+  const get = (k: string) =>
+    typeof router.query[k] === 'string'
+      ? (router.query[k] as string)
+      : undefined;
+  return {
+    genre: get('genre'),
+    yearGte: get('yearGte'),
+    yearLte: get('yearLte'),
+  };
+};
+
 const DiscoverAudiobooksPage: NextPage = () => {
   const intl = useIntl();
+  const filters = useAudiobookFilters();
   return (
     <DiscoverExtended<PopularAudiobook>
       title={intl.formatMessage({
@@ -49,6 +64,15 @@ const DiscoverAudiobooksPage: NextPage = () => {
           }),
         },
       ]}
+      activeFilterCount={countBooksActiveFilters(filters)}
+      renderFilters={({ show, onClose }) => (
+        <BooksFilterSlideover
+          show={show}
+          onClose={onClose}
+          currentFilters={filters}
+          genreEndpoint="/api/v1/discover/genreslider/audiobooks"
+        />
+      )}
       renderCard={(a, key) => (
         <li key={key}>
           <AudiobookCard

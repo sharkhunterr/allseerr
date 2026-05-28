@@ -139,7 +139,14 @@ limit ${limit};`;
     page = 1,
     limit = 20,
     genreId?: number,
-    platformId?: number
+    platformId?: number,
+    opts?: {
+      // YYYY-MM-DD strings. Converted to IGDB's epoch-seconds
+      // ``first_release_date`` axis on the way out.
+      releaseDateGte?: string;
+      releaseDateLte?: string;
+      sort?: 'popularity' | 'recent' | 'oldest' | 'rating' | 'title';
+    }
   ): Promise<IgdbGameResult[]> {
     const offset = (Math.max(1, page) - 1) * limit;
     // ``where`` clauses are composed with ``&``. When the caller
@@ -149,12 +156,39 @@ limit ${limit};`;
     const filters = ['total_rating != null', 'total_rating_count > 50'];
     if (genreId) filters.push(`genres = (${genreId})`);
     if (platformId) filters.push(`platforms = (${platformId})`);
+    if (opts?.releaseDateGte) {
+      const epoch = Math.floor(new Date(opts.releaseDateGte).getTime() / 1000);
+      if (Number.isFinite(epoch)) {
+        filters.push(`first_release_date >= ${epoch}`);
+      }
+    }
+    if (opts?.releaseDateLte) {
+      const epoch = Math.floor(new Date(opts.releaseDateLte).getTime() / 1000);
+      if (Number.isFinite(epoch)) {
+        filters.push(`first_release_date <= ${epoch}`);
+      }
+    }
+    const sortClause = ((): string => {
+      switch (opts?.sort) {
+        case 'recent':
+          return 'sort first_release_date desc';
+        case 'oldest':
+          return 'sort first_release_date asc';
+        case 'rating':
+          return 'sort total_rating desc';
+        case 'title':
+          return 'sort name asc';
+        case 'popularity':
+        default:
+          return 'sort total_rating_count desc';
+      }
+    })();
     const body = `fields name,platforms.id,platforms.name,platforms.abbreviation,first_release_date,
   involved_companies.company.name,involved_companies.developer,
   involved_companies.publisher,genres.id,genres.name,total_rating,
   total_rating_count,cover.url,summary;
 where ${filters.join(' & ')};
-sort total_rating_count desc;
+${sortClause};
 limit ${limit};
 offset ${offset};`;
 

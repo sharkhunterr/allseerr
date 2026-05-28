@@ -240,23 +240,58 @@ class ComicVineAPI {
    */
   async getRecentVolumes(
     page = 1,
-    limit = 20
+    limit = 20,
+    opts?: {
+      // ComicVine's ``filter`` query param chains constraints:
+      //   filter=publisher:DC|start_year:>=2010
+      // We expose a curated subset (publisher name match,
+      // start_year window) — adequate for the discover-page
+      // filter slideover without exposing ComicVine's full
+      // filter syntax to operators.
+      publisher?: string;
+      startYearGte?: number;
+      startYearLte?: number;
+      sort?: 'recent' | 'name';
+    }
   ): Promise<ComicVineVolumeSummary[]> {
     const offset = (Math.max(1, page) - 1) * limit;
-    const key = `recent:vol:${page}:${limit}`;
+    const filterParts: string[] = [];
+    if (opts?.publisher) {
+      // Publisher matches on substring within ComicVine, so we
+      // pass the name verbatim. ComicVine returns volumes whose
+      // publisher name contains the provided string (case-
+      // insensitive on its side).
+      filterParts.push(`publisher:${opts.publisher}`);
+    }
+    if (opts?.startYearGte && opts?.startYearLte) {
+      filterParts.push(
+        `start_year:${opts.startYearGte}|${opts.startYearLte}`
+      );
+    } else if (opts?.startYearGte) {
+      filterParts.push(`start_year:${opts.startYearGte}|2100`);
+    } else if (opts?.startYearLte) {
+      filterParts.push(`start_year:1900|${opts.startYearLte}`);
+    }
+    const sortClause =
+      opts?.sort === 'name' ? 'name:asc' : 'date_last_updated:desc';
+    const key = `recent:vol:${page}:${limit}:${filterParts.join('|')}:${sortClause}`;
     return cached(
       key,
       async () => {
         try {
+          const params: Record<string, string | number> = {
+            sort: sortClause,
+            limit,
+            offset,
+            field_list:
+              'id,name,start_year,count_of_issues,publisher,image,deck,description,api_detail_url,site_detail_url',
+          };
+          if (filterParts.length > 0) {
+            params.filter = filterParts.join(',');
+          }
           const results = await this.get<ComicVineVolumeSummary[]>(
             '/volumes/',
-            {
-              sort: 'date_last_updated:desc',
-              limit,
-              offset,
-              field_list:
-                'id,name,start_year,count_of_issues,publisher,image,deck,description,api_detail_url,site_detail_url',
-            }
+            params
           );
           return results ?? [];
         } catch (e) {

@@ -1,6 +1,11 @@
 import DiscoverExtended from '@app/components/Discover/DiscoverExtended';
+import ComicsFilterSlideover, {
+  countComicsActiveFilters,
+  type ComicsFilterValues,
+} from '@app/components/Discover/ExtendedFilterSlideover/ComicsFilterSlideover';
 import ComicCard from '@app/components/ComicCard';
 import type { NextPage } from 'next';
+import { useRouter } from 'next/router';
 import { useIntl } from 'react-intl';
 
 // ComicVine has no trending API but its ``/volumes`` endpoint
@@ -21,8 +26,22 @@ interface PopularComic {
   availableIssues?: number | null;
 }
 
+const useComicsFilters = (): ComicsFilterValues => {
+  const router = useRouter();
+  const get = (k: string) =>
+    typeof router.query[k] === 'string'
+      ? (router.query[k] as string)
+      : undefined;
+  return {
+    publisher: get('publisher'),
+    startYearGte: get('startYearGte'),
+    startYearLte: get('startYearLte'),
+  };
+};
+
 const DiscoverComicsPage: NextPage = () => {
   const intl = useIntl();
+  const filters = useComicsFilters();
   return (
     <DiscoverExtended<PopularComic>
       title={intl.formatMessage({
@@ -31,6 +50,18 @@ const DiscoverComicsPage: NextPage = () => {
       })}
       endpoint="/api/v1/discover/comics"
       cardKey={(c) => c.comicVineId}
+      sortOptions={[
+        { value: 'recent', label: 'Recently updated' },
+        { value: 'name', label: 'Name (A→Z)' },
+      ]}
+      activeFilterCount={countComicsActiveFilters(filters)}
+      renderFilters={({ show, onClose }) => (
+        <ComicsFilterSlideover
+          show={show}
+          onClose={onClose}
+          currentFilters={filters}
+        />
+      )}
       renderCard={(c, key) => (
         <li key={key}>
           <ComicCard

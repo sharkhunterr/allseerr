@@ -23,14 +23,15 @@
  * message rather than a blank grid.
  */
 
+import Button from '@app/components/Common/Button';
 import Header from '@app/components/Common/Header';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import { useUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
 import useVerticalScroll from '@app/hooks/useVerticalScroll';
-import { BarsArrowDownIcon } from '@heroicons/react/24/solid';
+import { BarsArrowDownIcon, FunnelIcon } from '@heroicons/react/24/solid';
 import { useRouter } from 'next/router';
-import { type ReactElement, type ReactNode } from 'react';
+import { useState, type ReactElement, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 import useSWRInfinite from 'swr/infinite';
 
@@ -55,12 +56,26 @@ interface DiscoverExtendedProps<T> {
    * and round-trip via the URL query so the choice survives
    * a refresh. */
   sortOptions?: { value: string; label: string }[];
+  /** Optional filter slideover renderer. The render-prop receives
+   * the open/close pair so the page-level filter component can
+   * own the modal chrome (SlideOver) and decide what controls to
+   * surface — keeps DiscoverExtended generic across types.
+   * The ``activeCount`` prop drives the badge on the Filters
+   * button. */
+  renderFilters?: (args: {
+    show: boolean;
+    onClose: () => void;
+  }) => ReactNode;
+  /** Number of active filters — drives the count shown on the
+   * Filters button. Used only when ``renderFilters`` is set. */
+  activeFilterCount?: number;
 }
 
 function DiscoverExtended<T>(props: DiscoverExtendedProps<T>): ReactElement {
   const intl = useIntl();
   const router = useRouter();
   const updateQueryParams = useUpdateQueryParams({});
+  const [showFilters, setShowFilters] = useState(false);
 
   // Sort param round-trips through the URL so refreshes / shared
   // links preserve the operator's choice. Default = first option
@@ -134,33 +149,60 @@ function DiscoverExtended<T>(props: DiscoverExtendedProps<T>): ReactElement {
       <PageTitle title={props.title} />
       <div className="mb-4 flex flex-col justify-between lg:flex-row lg:items-end">
         <Header>{props.title}</Header>
-        {props.sortOptions && props.sortOptions.length > 1 && (
+        {(props.sortOptions && props.sortOptions.length > 1) ||
+        props.renderFilters ? (
           <div className="mt-2 flex flex-grow flex-col sm:flex-row lg:flex-grow-0">
-            <div className="mb-2 flex flex-grow sm:mb-0 lg:flex-grow-0">
-              {/* Same visual the DiscoverMovies sort selector
-                  uses (icon prefix on a rounded-l-md gray-800
-                  span, then the select with rounded-r-only).
-                  Keeps the catalogue's sort UX consistent
-                  between Movies/TV and the extended types. */}
-              <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-gray-100 sm:text-sm">
-                <BarsArrowDownIcon className="h-6 w-6" />
-              </span>
-              <select
-                id="sortBy"
-                name="sortBy"
-                className="rounded-r-only"
-                value={activeSort ?? ''}
-                onChange={(e) => updateQueryParams('sort', e.target.value)}
-              >
-                {props.sortOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {props.sortOptions && props.sortOptions.length > 1 && (
+              <div className="mb-2 flex flex-grow sm:mb-0 sm:mr-2 lg:flex-grow-0">
+                {/* Same visual the DiscoverMovies sort selector
+                    uses (icon prefix on a rounded-l-md gray-800
+                    span, then the select with rounded-r-only). */}
+                <span className="inline-flex cursor-default items-center rounded-l-md border border-r-0 border-gray-500 bg-gray-800 px-3 text-gray-100 sm:text-sm">
+                  <BarsArrowDownIcon className="h-6 w-6" />
+                </span>
+                <select
+                  id="sortBy"
+                  name="sortBy"
+                  className="rounded-r-only"
+                  value={activeSort ?? ''}
+                  onChange={(e) => updateQueryParams('sort', e.target.value)}
+                >
+                  {props.sortOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {props.renderFilters && (
+              <>
+                {props.renderFilters({
+                  show: showFilters,
+                  onClose: () => setShowFilters(false),
+                })}
+                <div className="mb-2 flex flex-grow sm:mb-0 lg:flex-grow-0">
+                  <Button
+                    onClick={() => setShowFilters(true)}
+                    className="w-full"
+                  >
+                    <FunnelIcon />
+                    <span>
+                      {intl.formatMessage(
+                        {
+                          id: 'components.Discover.DiscoverExtended.activefilters',
+                          defaultMessage:
+                            '{count, plural, one {# Active Filter} other {# Active Filters}}',
+                        },
+                        { count: props.activeFilterCount ?? 0 }
+                      )}
+                    </span>
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
 
       {isLoadingInitial ? (

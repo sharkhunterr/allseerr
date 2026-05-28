@@ -8434,8 +8434,9 @@ paths:
       description: Paginated popular games envelope shaped like the
         TMDB discover endpoints. Returns 503 when the ``game``
         media type is disabled in admin settings. Optional
-        ``genre`` filter narrows by IGDB genre id. Optional
-        ``platform`` filter narrows by IGDB platform id.
+        filters narrow by IGDB genre / platform / release-date
+        window; ``sort`` re-orders by popularity / recency /
+        rating / title.
       tags:
         - search
       parameters:
@@ -8452,6 +8453,24 @@ paths:
           name: platform
           schema:
             type: number
+        - in: query
+          name: releaseDateGte
+          schema:
+            type: string
+        - in: query
+          name: releaseDateLte
+          schema:
+            type: string
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - popularity
+              - recent
+              - oldest
+              - rating
+              - title
       responses:
         '200':
           description: Results
@@ -8463,8 +8482,10 @@ paths:
   /discover/manga:
     get:
       summary: Trending manga (AniList TRENDING_DESC)
-      description: Optional ``genre`` filter narrows to a single
-        AniList genre name (e.g. "Action", "Romance").
+      description: Optional filters — genre (single AniList name),
+        format (comma-separated MediaFormat), status
+        (comma-separated MediaStatus), country (single ISO code),
+        startYearGte / startYearLte, sort.
       tags:
         - search
       parameters:
@@ -8477,6 +8498,37 @@ paths:
           name: genre
           schema:
             type: string
+        - in: query
+          name: format
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: country
+          schema:
+            type: string
+        - in: query
+          name: startYearGte
+          schema:
+            type: number
+        - in: query
+          name: startYearLte
+          schema:
+            type: number
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - trending
+              - popularity
+              - score
+              - recent
+              - oldest
+              - title
       responses:
         '200':
           description: Results
@@ -8536,8 +8588,10 @@ paths:
                   additionalProperties: true
   /discover/comics:
     get:
-      summary: Popular comics (placeholder — returns empty envelope until a
-        ComicVine popular feed is wired)
+      summary: Recent comic volumes (ComicVine sort=date_last_updated)
+      description: Optional filters narrow by publisher name (substring
+        match) and start-year window; ``sort`` toggles between
+        most-recently-updated and alphabetical-by-name.
       tags:
         - search
       parameters:
@@ -8546,6 +8600,25 @@ paths:
           schema:
             type: number
             default: 1
+        - in: query
+          name: publisher
+          schema:
+            type: string
+        - in: query
+          name: startYearGte
+          schema:
+            type: number
+        - in: query
+          name: startYearLte
+          schema:
+            type: number
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - recent
+              - name
       responses:
         '200':
           description: Results
@@ -8561,6 +8634,7 @@ paths:
         trending. ``sort`` toggles between popularity and release-date.
         Optional ``genre`` filters by Hardcover Genre-tag name (only
         honoured when Hardcover is the active provider).
+        ``yearGte`` / ``yearLte`` filter by release year in-memory.
       tags:
         - search
       parameters:
@@ -8581,6 +8655,14 @@ paths:
           name: genre
           schema:
             type: string
+        - in: query
+          name: yearGte
+          schema:
+            type: number
+        - in: query
+          name: yearLte
+          schema:
+            type: number
       responses:
         '200':
           description: Results
@@ -8596,6 +8678,7 @@ paths:
         BestSellers/ReleaseDate → OpenLibrary trending fallback.
         Optional ``genre`` filters by Hardcover Genre-tag name (only
         honoured when Hardcover is the active audiobook provider).
+        ``yearGte`` / ``yearLte`` filter by release year in-memory.
       tags:
         - search
       parameters:
@@ -8616,6 +8699,14 @@ paths:
           name: genre
           schema:
             type: string
+        - in: query
+          name: yearGte
+          schema:
+            type: number
+        - in: query
+          name: yearLte
+          schema:
+            type: number
       responses:
         '200':
           description: Results

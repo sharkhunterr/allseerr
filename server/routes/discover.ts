@@ -1021,6 +1021,12 @@ const PagedSortQuery = PageQuery.extend({
   // comparable genre taxonomies, so we ignore the filter there
   // rather than serve a misleading empty grid).
   genre: z.string().optional(),
+  // Year range filter — applied client-side after the Hardcover
+  // / Audible fetch (no provider exposes a clean release-year
+  // filter on these endpoints). Cheap because we already have
+  // the year on each row.
+  yearGte: z.coerce.number().int().optional(),
+  yearLte: z.coerce.number().int().optional(),
 });
 
 // Canonical book/audiobook genre list backing the dashboard
@@ -1205,11 +1211,19 @@ const GamesQuery = PageQuery.extend({
   // the "click a platform tile on the dashboard" UX the same way
   // ``genre`` does.
   platform: z.coerce.number().int().optional(),
+  // YYYY-MM-DD strings forwarded to IGDB's
+  // ``first_release_date`` axis after epoch conversion.
+  releaseDateGte: z.string().optional(),
+  releaseDateLte: z.string().optional(),
+  sort: z
+    .enum(['popularity', 'recent', 'oldest', 'rating', 'title'])
+    .optional(),
 });
 
 discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
   try {
-    const { page, genre, platform } = GamesQuery.parse(req.query);
+    const { page, genre, platform, releaseDateGte, releaseDateLte, sort } =
+      GamesQuery.parse(req.query);
     // IGDB needs a Twitch client-id/secret pair — pull them from
     // the persisted game settings the way the game routes do.
     // When the operator hasn't set them up yet, short-circuit
@@ -1230,7 +1244,11 @@ discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
       clientSecret: igdbSettings.clientSecret,
     });
     const limit = 20;
-    const games = await igdb.getPopularGames(page, limit, genre, platform);
+    const games = await igdb.getPopularGames(page, limit, genre, platform, {
+      releaseDateGte,
+      releaseDateLte,
+      sort,
+    });
 
     // Per-platform availability map so each result can ship the
     // FULL set of IGDB platforms with their individual statuses.
@@ -1310,13 +1328,46 @@ discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
 // Manga discover accepts an optional ``?genre=NAME`` (AniList
 // genre string, e.g. ``Action``, ``Romance``) to narrow the
 // trending feed to a single genre.
+// Comma-separated string → string[] coercer for multi-value
+// query params. Empty string drops the filter (so a stale "?x=" in
+// the URL after the user clears a chip selector is a no-op rather
+// than an empty-array filter that would zero out results).
+const csv = z
+  .string()
+  .optional()
+  .transform((s) =>
+    s
+      ? s
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean)
+      : undefined
+  );
+
 const MangaQuery = PageQuery.extend({
   genre: z.string().optional(),
+  format: csv,
+  status: csv,
+  country: z.string().optional(),
+  startYearGte: z.coerce.number().int().optional(),
+  startYearLte: z.coerce.number().int().optional(),
+  sort: z
+    .enum(['trending', 'popularity', 'score', 'recent', 'oldest', 'title'])
+    .optional(),
 });
 
 discoverRoutes.get('/manga', requireMediaType('manga'), async (req, res) => {
   try {
-    const { page, genre } = MangaQuery.parse(req.query);
+    const {
+      page,
+      genre,
+      format,
+      status,
+      country,
+      startYearGte,
+      startYearLte,
+      sort,
+    } = MangaQuery.parse(req.query);
     const { default: AniListAPI } = await import('@server/api/anilist');
     const anilist = new AniListAPI();
     const perPage = 20;
@@ -1326,10 +1377,18 @@ discoverRoutes.get('/manga', requireMediaType('manga'), async (req, res) => {
     // pagination so the browse view paginates cleanly.
     // (Fallback to the cached first page when ``page === 1`` so the
     // dashboard slider and the browse first page share data.)
+    const filterOpts = {
+      formats: format,
+      statuses: status,
+      country,
+      startYearGte,
+      startYearLte,
+      sort,
+    };
     const list =
       page === 1
-        ? await anilist.getTrendingManga(perPage, genre)
-        : await anilist.getTrendingManga(perPage * page, genre);
+        ? await anilist.getTrendingManga(perPage, genre, filterOpts)
+        : await anilist.getTrendingManga(perPage * page, genre, filterOpts);
 
     // For pages > 1 we paginate locally — AniList's GraphQL gateway
     // doesn't accept an offset in the trending sort cleanly, so we
@@ -1386,9 +1445,17 @@ discoverRoutes.get('/manga', requireMediaType('manga'), async (req, res) => {
   }
 });
 
+const ComicsQuery = PageQuery.extend({
+  publisher: z.string().optional(),
+  startYearGte: z.coerce.number().int().optional(),
+  startYearLte: z.coerce.number().int().optional(),
+  sort: z.enum(['recent', 'name']).optional(),
+});
+
 discoverRoutes.get('/comics', requireMediaType('comic'), async (req, res) => {
   try {
-    const { page } = PageQuery.parse(req.query);
+    const { page, publisher, startYearGte, startYearLte, sort } =
+      ComicsQuery.parse(req.query);
     // ComicVine needs an API key — pull it from the persisted
     // comic settings the way the comic routes do. Same
     // ``metadataProviders.comicvine + apiKey`` shape as
@@ -1408,7 +1475,12 @@ discoverRoutes.get('/comics', requireMediaType('comic'), async (req, res) => {
     const { default: ComicVineAPI } = await import('@server/api/comicvine');
     const client = new ComicVineAPI({ apiKey });
     const limit = 20;
-    const volumes = await client.getRecentVolumes(page, limit);
+    const volumes = await client.getRecentVolumes(page, limit, {
+      publisher,
+      startYearGte,
+      startYearLte,
+      sort,
+    });
     const statusMap = await loadComicStatusMap(volumes.map((v) => v.id));
     return res.status(200).json({
       page,
@@ -1444,9 +1516,30 @@ discoverRoutes.get('/comics', requireMediaType('comic'), async (req, res) => {
   }
 });
 
+// Helper for the books / audiobooks year-range filter. Applied
+// post-fetch because no provider supports a clean ``year`` range
+// filter; we already have the year per row. Returns the array
+// unchanged when no bound is set.
+const filterByYear = <T extends { year?: number | null }>(
+  items: T[],
+  yearGte?: number,
+  yearLte?: number
+): T[] => {
+  if (yearGte == null && yearLte == null) return items;
+  return items.filter((it) => {
+    const y = it.year ?? null;
+    if (y == null) return false;
+    if (yearGte != null && y < yearGte) return false;
+    if (yearLte != null && y > yearLte) return false;
+    return true;
+  });
+};
+
 discoverRoutes.get('/books', requireMediaType('book'), async (req, res) => {
   try {
-    const { page, sort, genre } = PagedSortQuery.parse(req.query);
+    const { page, sort, genre, yearGte, yearLte } = PagedSortQuery.parse(
+      req.query
+    );
     const limit = 20;
     const bookCfg = getSettings().book?.metadataProviders;
     // Same predicate the /book/search route uses to pick the
@@ -1488,33 +1581,35 @@ discoverRoutes.get('/books', requireMediaType('book'), async (req, res) => {
       if (genre) {
         const ids = hits.map((h) => `hardcover:${h.id}`);
         const statusMap = await loadBookStatusMap(ids);
+        const mapped = hits.map((h) => {
+          const topEdition = h.editions?.[0];
+          const olId = `hardcover:${h.id}`;
+          return {
+            id: olId,
+            openLibraryId: olId,
+            title: h.title,
+            authorName:
+              hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
+            coverUrl: h.image?.url?.startsWith('http')
+              ? h.image.url
+              : undefined,
+            year: h.release_date
+              ? Number(h.release_date.slice(0, 4)) || undefined
+              : undefined,
+            publisher: topEdition?.publisher?.name ?? undefined,
+            mediaStatus: statusMap.get(olId) ?? null,
+          };
+        });
+        const filtered = filterByYear(mapped, yearGte, yearLte);
         return res.status(200).json({
           page,
           // Genre-filtered totals are unknown without a count
           // query — optimistically bump totalPages so infinite
           // scroll continues fetching until the upstream
           // returns a short page.
-          totalPages: hits.length < limit ? page : page + 1,
-          totalResults: hits.length,
-          results: hits.map((h) => {
-            const topEdition = h.editions?.[0];
-            const olId = `hardcover:${h.id}`;
-            return {
-              id: olId,
-              openLibraryId: olId,
-              title: h.title,
-              authorName:
-                hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
-              coverUrl: h.image?.url?.startsWith('http')
-                ? h.image.url
-                : undefined,
-              year: h.release_date
-                ? Number(h.release_date.slice(0, 4)) || undefined
-                : undefined,
-              publisher: topEdition?.publisher?.name ?? undefined,
-              mediaStatus: statusMap.get(olId) ?? null,
-            };
-          }),
+          totalPages: filtered.length < limit ? page : page + 1,
+          totalResults: filtered.length,
+          results: filtered,
         });
       }
       if (hits.length > 0) {
@@ -1523,29 +1618,31 @@ discoverRoutes.get('/books', requireMediaType('book'), async (req, res) => {
         // ``openLibraryId``.
         const ids = hits.map((h) => `hardcover:${h.id}`);
         const statusMap = await loadBookStatusMap(ids);
+        const mapped = hits.map((h) => {
+          const topEdition = h.editions?.[0];
+          const olId = `hardcover:${h.id}`;
+          return {
+            id: olId,
+            openLibraryId: olId,
+            title: h.title,
+            authorName:
+              hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
+            coverUrl: h.image?.url?.startsWith('http')
+              ? h.image.url
+              : undefined,
+            year: h.release_date
+              ? Number(h.release_date.slice(0, 4)) || undefined
+              : undefined,
+            publisher: topEdition?.publisher?.name ?? undefined,
+            mediaStatus: statusMap.get(olId) ?? null,
+          };
+        });
+        const filtered = filterByYear(mapped, yearGte, yearLte);
         return res.status(200).json({
           page,
-          totalPages: hits.length < limit ? page : page + 1,
-          totalResults: hits.length,
-          results: hits.map((h) => {
-            const topEdition = h.editions?.[0];
-            const olId = `hardcover:${h.id}`;
-            return {
-              id: olId,
-              openLibraryId: olId,
-              title: h.title,
-              authorName:
-                hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
-              coverUrl: h.image?.url?.startsWith('http')
-                ? h.image.url
-                : undefined,
-              year: h.release_date
-                ? Number(h.release_date.slice(0, 4)) || undefined
-                : undefined,
-              publisher: topEdition?.publisher?.name ?? undefined,
-              mediaStatus: statusMap.get(olId) ?? null,
-            };
-          }),
+          totalPages: filtered.length < limit ? page : page + 1,
+          totalResults: filtered.length,
+          results: filtered,
         });
       }
     }
@@ -1567,23 +1664,25 @@ discoverRoutes.get('/books', requireMediaType('book'), async (req, res) => {
     const statusMap = await loadBookStatusMap(
       results.map((b) => b.openLibraryId)
     );
+    const mapped = results.map((b) => ({
+      id: b.openLibraryId,
+      openLibraryId: b.openLibraryId,
+      title: b.title,
+      authorName: b.authorName,
+      coverUrl: b.coverUrl,
+      year: b.year,
+      publisher: b.publisher,
+      mediaStatus: statusMap.get(b.openLibraryId) ?? null,
+    }));
+    const filtered = filterByYear(mapped, yearGte, yearLte);
     return res.status(200).json({
       page,
       totalPages:
-        results.length < limit
+        filtered.length < limit
           ? page
           : Math.max(page + 1, Math.ceil(totalResults / limit)),
-      totalResults,
-      results: results.map((b) => ({
-        id: b.openLibraryId,
-        openLibraryId: b.openLibraryId,
-        title: b.title,
-        authorName: b.authorName,
-        coverUrl: b.coverUrl,
-        year: b.year,
-        publisher: b.publisher,
-        mediaStatus: statusMap.get(b.openLibraryId) ?? null,
-      })),
+      totalResults: filtered.length,
+      results: filtered,
     });
   } catch (e) {
     logger.error('discover.books failed', {
@@ -1604,7 +1703,9 @@ discoverRoutes.get(
   requireMediaType('audiobook'),
   async (req, res) => {
     try {
-      const { page, sort, genre } = PagedSortQuery.parse(req.query);
+      const { page, sort, genre, yearGte, yearLte } = PagedSortQuery.parse(
+        req.query
+      );
       const limit = 20;
       const audioCfg = getSettings().audiobook?.metadataProviders;
       // Hardcover stores its API key on the BOOK settings (single
@@ -1640,22 +1741,24 @@ discoverRoutes.get(
         const statusMap = await loadAudiobookStatusMap(
           out.results.map((a) => a.asin)
         );
+        const mapped = out.results.map((a) => ({
+          id: a.asin,
+          openLibraryId: a.asin,
+          title: a.title,
+          authorName: a.authorName,
+          narratorName: a.narratorName,
+          durationSeconds: a.durationSeconds,
+          coverUrl: a.coverUrl,
+          year: a.year,
+          publisher: a.publisher,
+          mediaStatus: statusMap.get(a.asin) ?? null,
+        }));
+        const filtered = filterByYear(mapped, yearGte, yearLte);
         return res.status(200).json({
           page,
-          totalPages: out.results.length < limit ? page : page + 1,
-          totalResults: out.totalResults,
-          results: out.results.map((a) => ({
-            id: a.asin,
-            openLibraryId: a.asin,
-            title: a.title,
-            authorName: a.authorName,
-            narratorName: a.narratorName,
-            durationSeconds: a.durationSeconds,
-            coverUrl: a.coverUrl,
-            year: a.year,
-            publisher: a.publisher,
-            mediaStatus: statusMap.get(a.asin) ?? null,
-          })),
+          totalPages: filtered.length < limit ? page : page + 1,
+          totalResults: filtered.length,
+          results: filtered,
         });
       }
       if (genre && sharedHcKey && audioCfg?.primarySource === 'hardcover') {
@@ -1666,31 +1769,33 @@ discoverRoutes.get(
           const hits = await hc.getAudiobooksByGenre(genre, page, limit, sort);
           const ids = hits.map((h) => `hcab:${h.id}`);
           const statusMap = await loadBookStatusMap(ids);
+          const mapped = hits.map((h) => {
+            const audio = h.editions?.[0];
+            const olId = `hcab:${h.id}`;
+            return {
+              id: olId,
+              openLibraryId: olId,
+              title: h.title,
+              authorName:
+                hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
+              narratorName: undefined,
+              durationSeconds: audio?.audio_seconds ?? undefined,
+              coverUrl: h.image?.url?.startsWith('http')
+                ? h.image.url
+                : undefined,
+              year: h.release_date
+                ? Number(h.release_date.slice(0, 4)) || undefined
+                : undefined,
+              publisher: audio?.publisher?.name ?? undefined,
+              mediaStatus: statusMap.get(olId) ?? null,
+            };
+          });
+          const filtered = filterByYear(mapped, yearGte, yearLte);
           return res.status(200).json({
             page,
-            totalPages: hits.length < limit ? page : page + 1,
-            totalResults: hits.length,
-            results: hits.map((h) => {
-              const audio = h.editions?.[0];
-              const olId = `hcab:${h.id}`;
-              return {
-                id: olId,
-                openLibraryId: olId,
-                title: h.title,
-                authorName:
-                  hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
-                narratorName: undefined,
-                durationSeconds: audio?.audio_seconds ?? undefined,
-                coverUrl: h.image?.url?.startsWith('http')
-                  ? h.image.url
-                  : undefined,
-                year: h.release_date
-                  ? Number(h.release_date.slice(0, 4)) || undefined
-                  : undefined,
-                publisher: audio?.publisher?.name ?? undefined,
-                mediaStatus: statusMap.get(olId) ?? null,
-              };
-            }),
+            totalPages: filtered.length < limit ? page : page + 1,
+            totalResults: filtered.length,
+            results: filtered,
           });
         } catch (e) {
           logger.error('discover.audiobooks hardcover genre query failed', {
@@ -1729,31 +1834,33 @@ discoverRoutes.get(
           // that.
           const ids = hits.map((h) => `hcab:${h.id}`);
           const statusMap = await loadBookStatusMap(ids);
+          const mapped = hits.map((h) => {
+            const audio = h.editions?.[0];
+            const olId = `hcab:${h.id}`;
+            return {
+              id: olId,
+              openLibraryId: olId,
+              title: h.title,
+              authorName:
+                hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
+              narratorName: undefined,
+              durationSeconds: audio?.audio_seconds ?? undefined,
+              coverUrl: h.image?.url?.startsWith('http')
+                ? h.image.url
+                : undefined,
+              year: h.release_date
+                ? Number(h.release_date.slice(0, 4)) || undefined
+                : undefined,
+              publisher: audio?.publisher?.name ?? undefined,
+              mediaStatus: statusMap.get(olId) ?? null,
+            };
+          });
+          const filtered = filterByYear(mapped, yearGte, yearLte);
           return res.status(200).json({
             page,
-            totalPages: hits.length < limit ? page : page + 1,
-            totalResults: hits.length,
-            results: hits.map((h) => {
-              const audio = h.editions?.[0];
-              const olId = `hcab:${h.id}`;
-              return {
-                id: olId,
-                openLibraryId: olId,
-                title: h.title,
-                authorName:
-                  hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
-                narratorName: undefined,
-                durationSeconds: audio?.audio_seconds ?? undefined,
-                coverUrl: h.image?.url?.startsWith('http')
-                  ? h.image.url
-                  : undefined,
-                year: h.release_date
-                  ? Number(h.release_date.slice(0, 4)) || undefined
-                  : undefined,
-                publisher: audio?.publisher?.name ?? undefined,
-                mediaStatus: statusMap.get(olId) ?? null,
-              };
-            }),
+            totalPages: filtered.length < limit ? page : page + 1,
+            totalResults: filtered.length,
+            results: filtered,
           });
         }
       }
@@ -1789,31 +1896,33 @@ discoverRoutes.get(
         const statusMap = await loadAudiobookStatusMap(
           audibleResults.results.map((a) => a.asin)
         );
+        const mapped = audibleResults.results.map((a) => ({
+          // Audiobook detail page routes by ASIN (the
+          // openLibraryId field carries that for Audible-sourced
+          // items — see ``/api/v1/audiobook/search``).
+          id: a.asin,
+          openLibraryId: a.asin,
+          title: a.title,
+          authorName: a.authorName,
+          narratorName: a.narratorName,
+          durationSeconds: a.durationSeconds,
+          coverUrl: a.coverUrl,
+          year: a.year,
+          publisher: a.publisher,
+          mediaStatus: statusMap.get(a.asin) ?? null,
+        }));
+        const filtered = filterByYear(mapped, yearGte, yearLte);
         return res.status(200).json({
           page,
           totalPages:
-            audibleResults.results.length < limit
+            filtered.length < limit
               ? page
               : Math.max(
                   page + 1,
                   Math.ceil(audibleResults.totalResults / limit)
                 ),
-          totalResults: audibleResults.totalResults,
-          results: audibleResults.results.map((a) => ({
-            // Audiobook detail page routes by ASIN (the
-            // openLibraryId field carries that for Audible-sourced
-            // items — see ``/api/v1/audiobook/search``).
-            id: a.asin,
-            openLibraryId: a.asin,
-            title: a.title,
-            authorName: a.authorName,
-            narratorName: a.narratorName,
-            durationSeconds: a.durationSeconds,
-            coverUrl: a.coverUrl,
-            year: a.year,
-            publisher: a.publisher,
-            mediaStatus: statusMap.get(a.asin) ?? null,
-          })),
+          totalResults: filtered.length,
+          results: filtered,
         });
       }
 
@@ -1843,23 +1952,25 @@ discoverRoutes.get(
       const statusMap = await loadBookStatusMap(
         results.map((b) => b.openLibraryId)
       );
+      const mapped = results.map((b) => ({
+        id: b.openLibraryId,
+        openLibraryId: b.openLibraryId,
+        title: b.title,
+        authorName: b.authorName,
+        coverUrl: b.coverUrl,
+        year: b.year,
+        publisher: b.publisher,
+        mediaStatus: statusMap.get(b.openLibraryId) ?? null,
+      }));
+      const filtered = filterByYear(mapped, yearGte, yearLte);
       return res.status(200).json({
         page,
         totalPages:
-          results.length < limit
+          filtered.length < limit
             ? page
             : Math.max(page + 1, Math.ceil(totalResults / limit)),
-        totalResults,
-        results: results.map((b) => ({
-          id: b.openLibraryId,
-          openLibraryId: b.openLibraryId,
-          title: b.title,
-          authorName: b.authorName,
-          coverUrl: b.coverUrl,
-          year: b.year,
-          publisher: b.publisher,
-          mediaStatus: statusMap.get(b.openLibraryId) ?? null,
-        })),
+        totalResults: filtered.length,
+        results: filtered,
       });
     } catch (e) {
       logger.error('discover.audiobooks failed', {

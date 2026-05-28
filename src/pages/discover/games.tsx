@@ -1,6 +1,11 @@
 import DiscoverExtended from '@app/components/Discover/DiscoverExtended';
+import GamesFilterSlideover, {
+  countGamesActiveFilters,
+  type GamesFilterValues,
+} from '@app/components/Discover/ExtendedFilterSlideover/GamesFilterSlideover';
 import GameCard from '@app/components/GameCard';
 import type { NextPage } from 'next';
+import { useRouter } from 'next/router';
 import { useIntl } from 'react-intl';
 
 interface PopularGame {
@@ -24,8 +29,27 @@ interface PopularGame {
   }[];
 }
 
+// Pull the URL-shaped filter values from router.query. Strings
+// only — DiscoverExtended already forwards them to the endpoint
+// verbatim, so we don't need to coerce here (the server-side zod
+// schema does the int coercion for ids).
+const useGamesFilters = (): GamesFilterValues => {
+  const router = useRouter();
+  const get = (k: string) =>
+    typeof router.query[k] === 'string'
+      ? (router.query[k] as string)
+      : undefined;
+  return {
+    genre: get('genre'),
+    platform: get('platform'),
+    releaseDateGte: get('releaseDateGte'),
+    releaseDateLte: get('releaseDateLte'),
+  };
+};
+
 const DiscoverGamesPage: NextPage = () => {
   const intl = useIntl();
+  const filters = useGamesFilters();
   return (
     <DiscoverExtended<PopularGame>
       title={intl.formatMessage({
@@ -34,6 +58,21 @@ const DiscoverGamesPage: NextPage = () => {
       })}
       endpoint="/api/v1/discover/games"
       cardKey={(g) => g.igdbId}
+      sortOptions={[
+        { value: 'popularity', label: 'Popularity' },
+        { value: 'recent', label: 'Release date (newest)' },
+        { value: 'oldest', label: 'Release date (oldest)' },
+        { value: 'rating', label: 'Rating' },
+        { value: 'title', label: 'Title (A→Z)' },
+      ]}
+      activeFilterCount={countGamesActiveFilters(filters)}
+      renderFilters={({ show, onClose }) => (
+        <GamesFilterSlideover
+          show={show}
+          onClose={onClose}
+          currentFilters={filters}
+        />
+      )}
       renderCard={(g, key) => (
         <li key={key}>
           <GameCard
