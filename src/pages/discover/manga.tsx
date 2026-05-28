@@ -13,6 +13,7 @@ interface PopularManga {
   status?: string;
   format?: string;
   averageScore?: number;
+  mediaStatus?: number | null;
 }
 
 const DiscoverMangaPage: NextPage = () => {
@@ -35,6 +36,7 @@ const DiscoverMangaPage: NextPage = () => {
             status={m.status}
             format={m.format}
             averageScore={m.averageScore}
+            mediaStatus={m.mediaStatus as never}
           />
         </li>
       )}

@@ -14,6 +14,7 @@ interface PopularBook {
   coverUrl?: string;
   year?: number;
   publisher?: string;
+  mediaStatus?: number | null;
 }
 
 const DiscoverBooksPage: NextPage = () => {
@@ -51,6 +52,7 @@ const DiscoverBooksPage: NextPage = () => {
             coverUrl={b.coverUrl}
             year={b.year}
             publisher={b.publisher}
+            mediaStatus={b.mediaStatus as never}
           />
         </li>
       )}

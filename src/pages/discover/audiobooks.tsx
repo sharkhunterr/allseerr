@@ -20,6 +20,7 @@ interface PopularAudiobook {
   coverUrl?: string;
   year?: number;
   publisher?: string;
+  mediaStatus?: number | null;
 }
 
 const DiscoverAudiobooksPage: NextPage = () => {
@@ -59,6 +60,7 @@ const DiscoverAudiobooksPage: NextPage = () => {
             coverUrl={a.coverUrl}
             year={a.year}
             publisher={a.publisher}
+            mediaStatus={a.mediaStatus as never}
           />
         </li>
       )}

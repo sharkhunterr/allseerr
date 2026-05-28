@@ -11,6 +11,10 @@ interface PopularGame {
   releaseYear?: number;
   summary?: string;
   rating?: number;
+  /** Aggregate local availability (max status across the title's
+   * platforms). NULL when the operator hasn't requested or
+   * downloaded the title yet. */
+  mediaStatus?: number | null;
 }
 
 const DiscoverGamesPage: NextPage = () => {
@@ -29,9 +33,22 @@ const DiscoverGamesPage: NextPage = () => {
             igdbId={g.igdbId}
             title={g.title}
             // The popular-by-rating-count IGDB endpoint doesn't
-            // include platforms in its trimmed shape; an empty
-            // array is fine — GameCard guards on length.
-            platforms={[]}
+            // include per-platform statuses, so we synthesise a
+            // single placeholder entry carrying the aggregate
+            // status. GameCard's aggregator picks the MAX across
+            // entries so a one-platform synthetic still drives
+            // the badge correctly.
+            platforms={
+              g.mediaStatus
+                ? [
+                    {
+                      id: 0,
+                      name: '',
+                      mediaStatus: g.mediaStatus as never,
+                    },
+                  ]
+                : []
+            }
             releaseYear={g.releaseYear}
             coverUrl={g.coverUrl}
             summary={g.summary}

@@ -334,6 +334,7 @@ const Discover = (): JSX.Element => {
                 releaseYear?: number;
                 summary?: string;
                 rating?: number;
+                mediaStatus?: number | null;
               }>
                 sliderKey="popular-games"
                 title={intl.formatMessage(sliderTitles.populargames)}
@@ -344,7 +345,23 @@ const Discover = (): JSX.Element => {
                   <GameCard
                     igdbId={g.igdbId}
                     title={g.title}
-                    platforms={[]}
+                    platforms={
+                      // No per-platform statuses on the dashboard
+                      // shape, but a synthetic placeholder with
+                      // the AGGREGATE mediaStatus lets the
+                      // aggregator inside GameCard surface the
+                      // right badge (it OR's mediaStatus across
+                      // entries; one entry is enough).
+                      g.mediaStatus
+                        ? [
+                            {
+                              id: 0,
+                              name: '',
+                              mediaStatus: g.mediaStatus as never,
+                            },
+                          ]
+                        : []
+                    }
                     releaseYear={g.releaseYear}
                     coverUrl={g.coverUrl}
                     summary={g.summary}
@@ -364,6 +381,7 @@ const Discover = (): JSX.Element => {
                 status?: string;
                 format?: string;
                 averageScore?: number;
+                mediaStatus?: number | null;
               }>
                 sliderKey="popular-manga"
                 title={intl.formatMessage(sliderTitles.popularmanga)}
@@ -379,6 +397,7 @@ const Discover = (): JSX.Element => {
                     status={m.status}
                     format={m.format}
                     averageScore={m.averageScore}
+                    mediaStatus={m.mediaStatus as never}
                   />
                 )}
               />
@@ -394,6 +413,7 @@ const Discover = (): JSX.Element => {
                 issueCount?: number;
                 publisher?: string;
                 deck?: string;
+                mediaStatus?: number | null;
               }>
                 sliderKey="popular-comics"
                 title={intl.formatMessage(sliderTitles.popularcomics)}
@@ -409,6 +429,7 @@ const Discover = (): JSX.Element => {
                     issueCount={c.issueCount}
                     publisher={c.publisher}
                     deck={c.deck}
+                    mediaStatus={c.mediaStatus as never}
                   />
                 )}
               />
@@ -423,6 +444,7 @@ const Discover = (): JSX.Element => {
                 coverUrl?: string;
                 year?: number;
                 publisher?: string;
+                mediaStatus?: number | null;
               }>
                 sliderKey="popular-books"
                 title={intl.formatMessage(sliderTitles.popularbooks)}
@@ -437,6 +459,7 @@ const Discover = (): JSX.Element => {
                     coverUrl={b.coverUrl}
                     year={b.year}
                     publisher={b.publisher}
+                    mediaStatus={b.mediaStatus as never}
                   />
                 )}
               />
@@ -453,6 +476,7 @@ const Discover = (): JSX.Element => {
                 coverUrl?: string;
                 year?: number;
                 publisher?: string;
+                mediaStatus?: number | null;
               }>
                 sliderKey="popular-audiobooks"
                 title={intl.formatMessage(sliderTitles.popularaudiobooks)}
@@ -469,6 +493,7 @@ const Discover = (): JSX.Element => {
                     coverUrl={a.coverUrl}
                     year={a.year}
                     publisher={a.publisher}
+                    mediaStatus={a.mediaStatus as never}
                   />
                 )}
               />

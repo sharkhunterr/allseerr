@@ -1015,6 +1015,103 @@ const PagedSortQuery = PageQuery.extend({
   sort: z.enum(['popular', 'recent']).optional().default('popular'),
 });
 
+// ---------------------------------------------------------------------------
+// Status-enrichment helpers
+//
+// The TMDB /discover endpoints overlay local availability via
+// ``Media.getRelatedMedia()`` so the dashboard cards can show
+// the "downloaded" / "requested" / "processing" badges. The
+// extended-media types use their own per-type entities
+// (BookMedia / GameMedia / MangaMedia / ComicMedia /
+// AudiobookMedia) keyed by their respective provider id, so we
+// need a parallel batch lookup per type. Each helper takes the
+// raw provider hits, batches a single ``WHERE id IN (…)``
+// against the per-type repo, and returns a Map keyed by the
+// provider id so the route handler can attach the status to
+// every result with O(N) lookups instead of N round trips.
+// ---------------------------------------------------------------------------
+
+async function loadGameStatusMap(
+  igdbIds: number[]
+): Promise<Map<number, number>> {
+  if (igdbIds.length === 0) return new Map();
+  const { In } = await import('typeorm');
+  const { GameMedia } = await import('@server/entity/GameMedia');
+  const rows = await getRepository(GameMedia).find({
+    where: { igdbId: In(igdbIds) },
+    select: ['igdbId', 'status'],
+  });
+  // ``status`` is an integer enum; one Game can have multiple
+  // GameMedia rows (one per platform), so we MAX so the badge
+  // reflects the most-progressed platform (AVAILABLE > PENDING > UNKNOWN).
+  const map = new Map<number, number>();
+  for (const r of rows) {
+    const prev = map.get(r.igdbId) ?? 0;
+    if (r.status > prev) map.set(r.igdbId, r.status);
+  }
+  return map;
+}
+
+async function loadMangaStatusMap(
+  anilistIds: number[]
+): Promise<Map<number, number>> {
+  if (anilistIds.length === 0) return new Map();
+  const { In } = await import('typeorm');
+  const { MangaMedia } = await import('@server/entity/MangaMedia');
+  const rows = await getRepository(MangaMedia).find({
+    where: { anilistId: In(anilistIds) },
+    select: ['anilistId', 'status'],
+  });
+  return new Map(rows.map((r) => [r.anilistId, r.status]));
+}
+
+async function loadComicStatusMap(
+  comicVineIds: number[]
+): Promise<Map<number, number>> {
+  if (comicVineIds.length === 0) return new Map();
+  const { In } = await import('typeorm');
+  const { ComicMedia } = await import('@server/entity/ComicMedia');
+  const rows = await getRepository(ComicMedia).find({
+    where: { comicVineId: In(comicVineIds) },
+    select: ['comicVineId', 'status'],
+  });
+  return new Map(rows.map((r) => [r.comicVineId, r.status]));
+}
+
+async function loadBookStatusMap(
+  openLibraryIds: string[]
+): Promise<Map<string, number>> {
+  if (openLibraryIds.length === 0) return new Map();
+  const { In } = await import('typeorm');
+  const BookMediaMod = await import('@server/entity/BookMedia');
+  const rows = await getRepository(BookMediaMod.default).find({
+    where: { openLibraryId: In(openLibraryIds) },
+    select: ['openLibraryId', 'status'],
+  });
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    if (r.openLibraryId) map.set(r.openLibraryId, r.status);
+  }
+  return map;
+}
+
+async function loadAudiobookStatusMap(
+  asins: string[]
+): Promise<Map<string, number>> {
+  if (asins.length === 0) return new Map();
+  const { In } = await import('typeorm');
+  const AudiobookMediaMod = await import('@server/entity/AudiobookMedia');
+  const rows = await getRepository(AudiobookMediaMod.default).find({
+    where: { asin: In(asins) },
+    select: ['asin', 'status'],
+  });
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    if (r.asin) map.set(r.asin, r.status);
+  }
+  return map;
+}
+
 discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
   try {
     const { page } = PageQuery.parse(req.query);
@@ -1040,6 +1137,11 @@ discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
     const limit = 20;
     const games = await igdb.getPopularGames(page, limit);
 
+    // Batch-load the per-game local status so the dashboard cards
+    // can render the "downloaded" / "requested" / "processing"
+    // badges (same UX TMDB rows get via Media.getRelatedMedia).
+    const statusMap = await loadGameStatusMap(games.map((g) => g.id));
+
     return res.status(200).json({
       page,
       // IGDB doesn't expose a total — set a generous upper bound so
@@ -1051,6 +1153,7 @@ discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
         id: g.id,
         igdbId: g.id,
         title: g.name,
+        mediaStatus: statusMap.get(g.id) ?? null,
         coverUrl: g.cover?.url
           ? `https:${g.cover.url.replace('t_thumb', 't_cover_big')}`
           : undefined,
@@ -1105,6 +1208,8 @@ discoverRoutes.get('/manga', requireMediaType('manga'), async (req, res) => {
     const sliced =
       page === 1 ? list : list.slice(perPage * (page - 1), perPage * page);
 
+    const statusMap = await loadMangaStatusMap(sliced.map((m) => m.id));
+
     return res.status(200).json({
       page,
       totalPages: sliced.length < perPage ? page : page + 1,
@@ -1123,6 +1228,7 @@ discoverRoutes.get('/manga', requireMediaType('manga'), async (req, res) => {
         status: m.status ?? undefined,
         format: m.format ?? undefined,
         averageScore: m.averageScore ?? undefined,
+        mediaStatus: statusMap.get(m.id) ?? null,
         mediaType: 'manga',
       })),
     });
@@ -1168,6 +1274,7 @@ discoverRoutes.get(
       const client = new ComicVineAPI({ apiKey });
       const limit = 20;
       const volumes = await client.getRecentVolumes(page, limit);
+      const statusMap = await loadComicStatusMap(volumes.map((v) => v.id));
       return res.status(200).json({
         page,
         totalPages: volumes.length < limit ? page : page + 1,
@@ -1181,6 +1288,7 @@ discoverRoutes.get(
           issueCount: v.count_of_issues,
           publisher: v.publisher?.name,
           deck: v.deck ?? undefined,
+          mediaStatus: statusMap.get(v.id) ?? null,
         })),
       });
     } catch (e) {
@@ -1231,31 +1339,37 @@ discoverRoutes.get(
         // Cascade-through when Hardcover returned nothing — fall
         // through to the OpenLibrary block below so the operator
         // doesn't get a blank grid for transient gateway issues.
-        if (hits.length > 0) return res.status(200).json({
-          page,
-          totalPages: hits.length < limit ? page : page + 1,
-          totalResults: hits.length,
-          results: hits.map((h) => {
-            const topEdition = h.editions?.[0];
-            return {
-              // Same ``hardcover:<id>`` prefix the search route
-              // uses so the detail page dispatcher routes back
-              // to Hardcover on click.
-              id: `hardcover:${h.id}`,
-              openLibraryId: `hardcover:${h.id}`,
-              title: h.title,
-              authorName:
-                hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
-              coverUrl: h.image?.url?.startsWith('http')
-                ? h.image.url
-                : undefined,
-              year: h.release_date
-                ? Number(h.release_date.slice(0, 4)) || undefined
-                : undefined,
-              publisher: topEdition?.publisher?.name ?? undefined,
-            };
-          }),
-        });
+        if (hits.length > 0) {
+          // Batch the BookMedia lookup against the ``hardcover:<id>``
+          // shape the detail-page dispatcher persists into
+          // ``openLibraryId``.
+          const ids = hits.map((h) => `hardcover:${h.id}`);
+          const statusMap = await loadBookStatusMap(ids);
+          return res.status(200).json({
+            page,
+            totalPages: hits.length < limit ? page : page + 1,
+            totalResults: hits.length,
+            results: hits.map((h) => {
+              const topEdition = h.editions?.[0];
+              const olId = `hardcover:${h.id}`;
+              return {
+                id: olId,
+                openLibraryId: olId,
+                title: h.title,
+                authorName:
+                  hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
+                coverUrl: h.image?.url?.startsWith('http')
+                  ? h.image.url
+                  : undefined,
+                year: h.release_date
+                  ? Number(h.release_date.slice(0, 4)) || undefined
+                  : undefined,
+                publisher: topEdition?.publisher?.name ?? undefined,
+                mediaStatus: statusMap.get(olId) ?? null,
+              };
+            }),
+          });
+        }
       }
 
       const { default: OpenLibraryAPI } = await import(
@@ -1274,6 +1388,9 @@ discoverRoutes.get(
         page,
         limit
       );
+      const statusMap = await loadBookStatusMap(
+        results.map((b) => b.openLibraryId)
+      );
       return res.status(200).json({
         page,
         totalPages:
@@ -1289,6 +1406,7 @@ discoverRoutes.get(
           coverUrl: b.coverUrl,
           year: b.year,
           publisher: b.publisher,
+          mediaStatus: statusMap.get(b.openLibraryId) ?? null,
         })),
       });
     } catch (e) {
@@ -1342,45 +1460,40 @@ discoverRoutes.get(
         // operator expects the page to keep showing audiobooks,
         // so fall through to Audible / OpenLibrary instead of
         // serving them a blank grid.
-        if (hits.length > 0) return res.status(200).json({
-          page,
-          totalPages: hits.length < limit ? page : page + 1,
-          totalResults: hits.length,
-          results: hits.map((h) => {
-            // ``editions`` is pre-filtered to audiobook editions
-            // server-side via bookFields({ editionFormat:
-            // 'audiobook' }), so the first one is the canonical
-            // audiobook edition for this title.
-            const audio = h.editions?.[0];
-            return {
-              // Audiobook detail page uses the ``hcab:`` prefix to
-              // route to the audiobook-specific Hardcover lookup
-              // (server/routes/book.ts line ~1303). Match that so
-              // a click on a popular audiobook card lands on the
-              // right detail page.
-              id: `hcab:${h.id}`,
-              openLibraryId: `hcab:${h.id}`,
-              title: h.title,
-              authorName:
-                hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
-              // Hardcover's edition record doesn't expose a
-              // narrator field directly — the existing audiobook
-              // search route also omits it for Hardcover hits;
-              // narrator only surfaces once the operator opens
-              // the detail page (which fetches the richer
-              // edition+contributions graph).
-              narratorName: undefined,
-              durationSeconds: audio?.audio_seconds ?? undefined,
-              coverUrl: h.image?.url?.startsWith('http')
-                ? h.image.url
-                : undefined,
-              year: h.release_date
-                ? Number(h.release_date.slice(0, 4)) || undefined
-                : undefined,
-              publisher: audio?.publisher?.name ?? undefined,
-            };
-          }),
-        });
+        if (hits.length > 0) {
+          // BookMedia rows for Hardcover-sourced audiobooks land
+          // with ``openLibraryId = 'hcab:<id>'`` (the detail-page
+          // dispatcher's audiobook prefix). Batch the lookup on
+          // that.
+          const ids = hits.map((h) => `hcab:${h.id}`);
+          const statusMap = await loadBookStatusMap(ids);
+          return res.status(200).json({
+            page,
+            totalPages: hits.length < limit ? page : page + 1,
+            totalResults: hits.length,
+            results: hits.map((h) => {
+              const audio = h.editions?.[0];
+              const olId = `hcab:${h.id}`;
+              return {
+                id: olId,
+                openLibraryId: olId,
+                title: h.title,
+                authorName:
+                  hardcoverPrimaryAuthor(h.contributions) ?? 'Unknown Author',
+                narratorName: undefined,
+                durationSeconds: audio?.audio_seconds ?? undefined,
+                coverUrl: h.image?.url?.startsWith('http')
+                  ? h.image.url
+                  : undefined,
+                year: h.release_date
+                  ? Number(h.release_date.slice(0, 4)) || undefined
+                  : undefined,
+                publisher: audio?.publisher?.name ?? undefined,
+                mediaStatus: statusMap.get(olId) ?? null,
+              };
+            }),
+          });
+        }
       }
 
       // No Hardcover available — fall back to Audible's
@@ -1408,6 +1521,13 @@ discoverRoutes.get(
           : await audible.getPopular(limit, page - 1);
 
       if (audibleResults.results.length > 0) {
+        // Audible-sourced rows live in AudiobookMedia keyed by
+        // ``asin``; batch the lookup so the dashboard cards
+        // show "downloaded" / "requested" badges for titles
+        // already on the operator's library.
+        const statusMap = await loadAudiobookStatusMap(
+          audibleResults.results.map((a) => a.asin)
+        );
         return res.status(200).json({
           page,
           totalPages:
@@ -1431,6 +1551,7 @@ discoverRoutes.get(
             coverUrl: a.coverUrl,
             year: a.year,
             publisher: a.publisher,
+            mediaStatus: statusMap.get(a.asin) ?? null,
           })),
         });
       }
@@ -1454,6 +1575,14 @@ discoverRoutes.get(
         page,
         limit
       );
+      // Last-resort OpenLibrary fallback for audiobooks reuses
+      // the BOOK-keyed BookMedia table (these are print-trending
+      // titles that we surface here as audiobook candidates;
+      // the audiobook edition lives behind the detail page's
+      // edition picker).
+      const statusMap = await loadBookStatusMap(
+        results.map((b) => b.openLibraryId)
+      );
       return res.status(200).json({
         page,
         totalPages:
@@ -1469,6 +1598,7 @@ discoverRoutes.get(
           coverUrl: b.coverUrl,
           year: b.year,
           publisher: b.publisher,
+          mediaStatus: statusMap.get(b.openLibraryId) ?? null,
         })),
       });
     } catch (e) {
