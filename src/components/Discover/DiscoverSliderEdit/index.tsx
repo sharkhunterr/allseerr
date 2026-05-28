@@ -169,6 +169,26 @@ const DiscoverSliderEdit = ({
         return intl.formatMessage(sliderTitles.tmdbmoviestreamingservices);
       case DiscoverSliderType.TMDB_TV_STREAMING_SERVICES:
         return intl.formatMessage(sliderTitles.tmdbtvstreamingservices);
+      case DiscoverSliderType.POPULAR_GAMES:
+        return intl.formatMessage(sliderTitles.populargames);
+      case DiscoverSliderType.POPULAR_MANGA:
+        return intl.formatMessage(sliderTitles.popularmanga);
+      case DiscoverSliderType.POPULAR_COMICS:
+        return intl.formatMessage(sliderTitles.popularcomics);
+      case DiscoverSliderType.POPULAR_BOOKS:
+        return intl.formatMessage(sliderTitles.popularbooks);
+      case DiscoverSliderType.POPULAR_AUDIOBOOKS:
+        return intl.formatMessage(sliderTitles.popularaudiobooks);
+      case DiscoverSliderType.GAME_GENRES:
+        return intl.formatMessage(sliderTitles.gamegenres);
+      case DiscoverSliderType.GAME_PLATFORMS:
+        return intl.formatMessage(sliderTitles.gameplatforms);
+      case DiscoverSliderType.MANGA_GENRES:
+        return intl.formatMessage(sliderTitles.mangagenres);
+      case DiscoverSliderType.BOOK_GENRES:
+        return intl.formatMessage(sliderTitles.bookgenres);
+      case DiscoverSliderType.AUDIOBOOK_GENRES:
+        return intl.formatMessage(sliderTitles.audiobookgenres);
       default:
         return 'Unknown Slider';
     }

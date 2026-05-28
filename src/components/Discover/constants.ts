@@ -88,6 +88,16 @@ export const sliderTitles = defineMessages('components.Discover', {
   tmdbsearch: 'TMDB Search',
   tmdbmoviestreamingservices: 'TMDB Movie Streaming Services',
   tmdbtvstreamingservices: 'TMDB TV Streaming Services',
+  populargames: 'Popular Games',
+  popularmanga: 'Popular Manga',
+  popularcomics: 'Popular Comics',
+  popularbooks: 'Popular Books',
+  popularaudiobooks: 'Popular Audiobooks',
+  gamegenres: 'Game Genres',
+  gameplatforms: 'Game Platforms',
+  mangagenres: 'Manga Genres',
+  bookgenres: 'Book Genres',
+  audiobookgenres: 'Audiobook Genres',
 });
 
 export const QueryFilterOptions = z.object({

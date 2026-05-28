@@ -9,8 +9,10 @@ import {
   jellyfinRecentScanner,
 } from '@server/lib/scanners/jellyfin';
 import { audiobookshelfScanner } from '@server/lib/scanners/audiobookshelf';
+import { comicAvailabilityScanner } from '@server/lib/services/ComicAvailabilityScanner';
 import { grimmoryScanner } from '@server/lib/scanners/grimmory';
 import { komgaScanner } from '@server/lib/scanners/komga';
+import { mangaAvailabilityScanner } from '@server/lib/services/MangaAvailabilityScanner';
 import { plexFullScanner, plexRecentScanner } from '@server/lib/scanners/plex';
 import { radarrScanner } from '@server/lib/scanners/radarr';
 import { rommScanner } from '@server/lib/scanners/romm';
@@ -352,6 +354,47 @@ export const startJobs = (): void => {
     }),
     running: () => grimmoryScanner.status().running,
     cancelFn: () => grimmoryScanner.cancel(),
+  });
+
+  // Poll Suwayomi / Mylar for per-media download progress so the
+  // dashboard cards flip from PROCESSING → PARTIALLY_AVAILABLE →
+  // AVAILABLE without operator intervention. Both scanners
+  // early-return when their respective download manager isn't
+  // configured, so leaving them scheduled by default is safe.
+  scheduledJobs.push({
+    id: 'manga-availability-scan',
+    name: 'Manga Availability Scan',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['manga-availability-scan'].schedule,
+    job: schedule.scheduleJob(
+      jobs['manga-availability-scan'].schedule,
+      () => {
+        logger.info('Starting scheduled job: Manga Availability Scan', {
+          label: 'Jobs',
+        });
+        mangaAvailabilityScanner.run();
+      }
+    ),
+    running: () => mangaAvailabilityScanner.isRunning(),
+  });
+
+  scheduledJobs.push({
+    id: 'comic-availability-scan',
+    name: 'Comic Availability Scan',
+    type: 'process',
+    interval: 'minutes',
+    cronSchedule: jobs['comic-availability-scan'].schedule,
+    job: schedule.scheduleJob(
+      jobs['comic-availability-scan'].schedule,
+      () => {
+        logger.info('Starting scheduled job: Comic Availability Scan', {
+          label: 'Jobs',
+        });
+        comicAvailabilityScanner.run();
+      }
+    ),
+    running: () => comicAvailabilityScanner.isRunning(),
   });
 
   logger.info('Scheduled jobs loaded', { label: 'Jobs' });

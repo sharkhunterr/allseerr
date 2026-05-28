@@ -1,25 +1,35 @@
 import Badge from '@app/components/Common/Badge';
+import GameControllerIcon from '@app/components/Common/Icons/GameControllerIcon';
 import { menuMessages } from '@app/components/Layout/Sidebar';
 import useClickOutside from '@app/hooks/useClickOutside';
+import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
 import { Transition } from '@headlessui/react';
 import {
+  BookmarkIcon,
+  BookOpenIcon,
   ClockIcon,
   CogIcon,
   EllipsisHorizontalIcon,
   ExclamationTriangleIcon,
   EyeSlashIcon,
   FilmIcon,
+  MusicalNoteIcon,
+  RectangleStackIcon,
   SparklesIcon,
   TvIcon,
   UsersIcon,
 } from '@heroicons/react/24/outline';
 import {
+  BookmarkIcon as FilledBookmarkIcon,
+  BookOpenIcon as FilledBookOpenIcon,
   ClockIcon as FilledClockIcon,
   CogIcon as FilledCogIcon,
   ExclamationTriangleIcon as FilledExclamationTriangleIcon,
   EyeSlashIcon as FilledEyeSlashIcon,
   FilmIcon as FilledFilmIcon,
+  MusicalNoteIcon as FilledMusicalNoteIcon,
+  RectangleStackIcon as FilledRectangleStackIcon,
   SparklesIcon as FilledSparklesIcon,
   TvIcon as FilledTvIcon,
   UsersIcon as FilledUsersIcon,
@@ -47,6 +57,15 @@ interface MenuLink {
   requiredPermission?: Permission | Permission[];
   permissionType?: 'and' | 'or';
   dataTestId?: string;
+  /** Same gating contract as the Sidebar — hide the link when
+   * the operator has the corresponding media type turned off in
+   * Settings → Services. */
+  settingsFlag?:
+    | 'gameEnabled'
+    | 'mangaEnabled'
+    | 'comicEnabled'
+    | 'bookEnabled'
+    | 'audiobookEnabled';
 }
 
 const MobileMenu = ({
@@ -59,6 +78,7 @@ const MobileMenu = ({
   const intl = useIntl();
   const [isOpen, setIsOpen] = useState(false);
   const { hasPermission } = useUser();
+  const { currentSettings } = useSettings();
   const router = useRouter();
   useClickOutside(ref, () => {
     setTimeout(() => {
@@ -91,6 +111,49 @@ const MobileMenu = ({
       svgIcon: <TvIcon className="h-6 w-6" />,
       svgIconSelected: <FilledTvIcon className="h-6 w-6" />,
       activeRegExp: /^\/discover\/tv$/,
+    },
+    {
+      href: '/discover/games',
+      content: intl.formatMessage(menuMessages.browsegames),
+      // Custom inline controller SVG — same component for active
+      // and inactive (no filled variant needed; the icon's
+      // dot-buttons are already filled).
+      svgIcon: <GameControllerIcon className="h-6 w-6" />,
+      svgIconSelected: <GameControllerIcon className="h-6 w-6" />,
+      activeRegExp: /^\/discover\/games$/,
+      settingsFlag: 'gameEnabled',
+    },
+    {
+      href: '/discover/manga',
+      content: intl.formatMessage(menuMessages.browsemanga),
+      svgIcon: <BookmarkIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledBookmarkIcon className="h-6 w-6" />,
+      activeRegExp: /^\/discover\/manga$/,
+      settingsFlag: 'mangaEnabled',
+    },
+    {
+      href: '/discover/comics',
+      content: intl.formatMessage(menuMessages.browsecomics),
+      svgIcon: <RectangleStackIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledRectangleStackIcon className="h-6 w-6" />,
+      activeRegExp: /^\/discover\/comics$/,
+      settingsFlag: 'comicEnabled',
+    },
+    {
+      href: '/discover/books',
+      content: intl.formatMessage(menuMessages.browsebooks),
+      svgIcon: <BookOpenIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledBookOpenIcon className="h-6 w-6" />,
+      activeRegExp: /^\/discover\/books$/,
+      settingsFlag: 'bookEnabled',
+    },
+    {
+      href: '/discover/audiobooks',
+      content: intl.formatMessage(menuMessages.browseaudiobooks),
+      svgIcon: <MusicalNoteIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledMusicalNoteIcon className="h-6 w-6" />,
+      activeRegExp: /^\/discover\/audiobooks$/,
+      settingsFlag: 'audiobookEnabled',
     },
     {
       href: '/requests',
@@ -144,13 +207,22 @@ const MobileMenu = ({
     },
   ];
 
-  const filteredLinks = menuLinks.filter(
-    (link) =>
-      !link.requiredPermission ||
-      hasPermission(link.requiredPermission, {
+  const filteredLinks = menuLinks.filter((link) => {
+    if (
+      link.requiredPermission &&
+      !hasPermission(link.requiredPermission, {
         type: link.permissionType ?? 'and',
       })
-  );
+    ) {
+      return false;
+    }
+    // Settings-flag gate — keeps the bottom-bar uncluttered for
+    // users who don't have the corresponding integration enabled.
+    if (link.settingsFlag && !currentSettings[link.settingsFlag]) {
+      return false;
+    }
+    return true;
+  });
 
   useEffect(() => {
     if (openIssuesCount) {

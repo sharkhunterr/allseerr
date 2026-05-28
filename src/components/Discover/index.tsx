@@ -1,20 +1,32 @@
+import AudiobookCard from '@app/components/AudiobookCard';
+import BookCard from '@app/components/BookCard';
+import ComicCard from '@app/components/ComicCard';
 import Button from '@app/components/Common/Button';
 import ConfirmButton from '@app/components/Common/ConfirmButton';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
-import { sliderTitles } from '@app/components/Discover/constants';
+import AudiobookGenreSlider from '@app/components/Discover/AudiobookGenreSlider';
+import BookGenreSlider from '@app/components/Discover/BookGenreSlider';
 import CreateSlider from '@app/components/Discover/CreateSlider';
 import DiscoverSliderEdit from '@app/components/Discover/DiscoverSliderEdit';
+import ExtendedMediaSlider from '@app/components/Discover/ExtendedMediaSlider';
+import GameGenreSlider from '@app/components/Discover/GameGenreSlider';
+import GamePlatformSlider from '@app/components/Discover/GamePlatformSlider';
+import MangaGenreSlider from '@app/components/Discover/MangaGenreSlider';
 import MovieGenreSlider from '@app/components/Discover/MovieGenreSlider';
 import NetworkSlider from '@app/components/Discover/NetworkSlider';
 import PlexWatchlistSlider from '@app/components/Discover/PlexWatchlistSlider';
-import RecentlyAddedSlider from '@app/components/Discover/RecentlyAddedSlider';
 import RecentRequestsSlider from '@app/components/Discover/RecentRequestsSlider';
+import RecentlyAddedSlider from '@app/components/Discover/RecentlyAddedSlider';
 import StudioSlider from '@app/components/Discover/StudioSlider';
 import TvGenreSlider from '@app/components/Discover/TvGenreSlider';
+import { sliderTitles } from '@app/components/Discover/constants';
+import GameCard from '@app/components/GameCard';
+import MangaCard from '@app/components/MangaCard';
 import MediaSlider from '@app/components/MediaSlider';
 import { encodeURIExtraParams } from '@app/hooks/useDiscover';
+import useSettings from '@app/hooks/useSettings';
 import { Permission, useUser } from '@app/hooks/useUser';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
@@ -52,9 +64,40 @@ const messages = defineMessages('components.Discover', {
   createnewslider: 'Create New Slider',
 });
 
-const Discover = () => {
+/**
+ * Helper — type-narrow the per-type ``{type}Enabled`` setting
+ * flag without sprinkling ``as`` casts through the JSX. The
+ * extended-media sliders short-circuit on this so a slider for
+ * a disabled media type never renders, even if it's enabled in
+ * the discover-slider preferences (the per-type ``Enabled``
+ * setting is the operator's master switch).
+ */
+const useMediaTypeEnabled = (): Record<
+  | 'gameEnabled'
+  | 'mangaEnabled'
+  | 'comicEnabled'
+  | 'bookEnabled'
+  | 'audiobookEnabled',
+  boolean
+> => {
+  const { currentSettings } = useSettings();
+  return {
+    gameEnabled: !!currentSettings.gameEnabled,
+    mangaEnabled: !!currentSettings.mangaEnabled,
+    comicEnabled: !!currentSettings.comicEnabled,
+    bookEnabled: !!currentSettings.bookEnabled,
+    audiobookEnabled: !!currentSettings.audiobookEnabled,
+  };
+};
+
+const Discover = (): JSX.Element => {
   const intl = useIntl();
   const { hasPermission } = useUser();
+  // Per-type master switches from the global settings. The
+  // extended-media slider cases below short-circuit on these so
+  // a row for a disabled media type never renders, regardless
+  // of the slider's own ``enabled`` flag in the discover prefs.
+  const mediaTypeEnabled = useMediaTypeEnabled();
   const { addToast } = useToasts();
   const {
     data: discoverData,
@@ -282,6 +325,213 @@ const Discover = () => {
             break;
           case DiscoverSliderType.NETWORKS:
             sliderComponent = <NetworkSlider />;
+            break;
+          // Extended-media sliders. Each is gated on the
+          // corresponding ``{type}Enabled`` setting so the
+          // dashboard doesn't render a row for a media type
+          // that isn't configured. The slider itself also
+          // self-hides when the upstream returns zero results
+          // (e.g. ComicVine without an API key), so a
+          // configured-but-empty surface won't leave a dead
+          // row either.
+          case DiscoverSliderType.POPULAR_GAMES:
+            sliderComponent = mediaTypeEnabled.gameEnabled ? (
+              <ExtendedMediaSlider<{
+                igdbId: number;
+                title: string;
+                coverUrl?: string;
+                releaseYear?: number;
+                summary?: string;
+                rating?: number;
+                platforms?: {
+                  id: number;
+                  name: string;
+                  abbreviation?: string;
+                  mediaStatus?: number | null;
+                  gameMediaId?: number | null;
+                }[];
+              }>
+                sliderKey="popular-games"
+                title={intl.formatMessage(sliderTitles.populargames)}
+                url="/api/v1/discover/games"
+                linkUrl="/discover/games"
+                cardKey={(g) => g.igdbId}
+                renderCard={(g) => (
+                  <GameCard
+                    igdbId={g.igdbId}
+                    title={g.title}
+                    platforms={(g.platforms ?? []) as never}
+                    releaseYear={g.releaseYear}
+                    coverUrl={g.coverUrl}
+                    summary={g.summary}
+                    userRating={g.rating}
+                  />
+                )}
+              />
+            ) : null;
+            break;
+          case DiscoverSliderType.POPULAR_MANGA:
+            sliderComponent = mediaTypeEnabled.mangaEnabled ? (
+              <ExtendedMediaSlider<{
+                anilistId: number;
+                title: string;
+                coverUrl?: string;
+                year?: number;
+                status?: string;
+                format?: string;
+                averageScore?: number;
+                mediaStatus?: number | null;
+                chapters?: number | null;
+                volumes?: number | null;
+                availableChapters?: number | null;
+                availableVolumes?: number | null;
+              }>
+                sliderKey="popular-manga"
+                title={intl.formatMessage(sliderTitles.popularmanga)}
+                url="/api/v1/discover/manga"
+                linkUrl="/discover/manga"
+                cardKey={(m) => m.anilistId}
+                renderCard={(m) => (
+                  <MangaCard
+                    anilistId={m.anilistId}
+                    title={m.title}
+                    coverUrl={m.coverUrl}
+                    year={m.year}
+                    status={m.status}
+                    format={m.format}
+                    averageScore={m.averageScore}
+                    mediaStatus={m.mediaStatus as never}
+                    chapters={m.chapters ?? undefined}
+                    volumes={m.volumes ?? undefined}
+                    availableChapters={m.availableChapters ?? undefined}
+                    availableVolumes={m.availableVolumes ?? undefined}
+                  />
+                )}
+              />
+            ) : null;
+            break;
+          case DiscoverSliderType.POPULAR_COMICS:
+            sliderComponent = mediaTypeEnabled.comicEnabled ? (
+              <ExtendedMediaSlider<{
+                comicVineId: number;
+                title: string;
+                coverUrl?: string;
+                year?: number;
+                issueCount?: number;
+                publisher?: string;
+                deck?: string;
+                mediaStatus?: number | null;
+                availableIssues?: number | null;
+              }>
+                sliderKey="popular-comics"
+                title={intl.formatMessage(sliderTitles.popularcomics)}
+                url="/api/v1/discover/comics"
+                linkUrl="/discover/comics"
+                cardKey={(c) => c.comicVineId}
+                renderCard={(c) => (
+                  <ComicCard
+                    comicVineId={c.comicVineId}
+                    title={c.title}
+                    coverUrl={c.coverUrl}
+                    year={c.year}
+                    issueCount={c.issueCount}
+                    publisher={c.publisher}
+                    deck={c.deck}
+                    mediaStatus={c.mediaStatus as never}
+                    availableIssues={c.availableIssues ?? undefined}
+                  />
+                )}
+              />
+            ) : null;
+            break;
+          case DiscoverSliderType.POPULAR_BOOKS:
+            sliderComponent = mediaTypeEnabled.bookEnabled ? (
+              <ExtendedMediaSlider<{
+                openLibraryId: string;
+                title: string;
+                authorName: string;
+                coverUrl?: string;
+                year?: number;
+                publisher?: string;
+                mediaStatus?: number | null;
+              }>
+                sliderKey="popular-books"
+                title={intl.formatMessage(sliderTitles.popularbooks)}
+                url="/api/v1/discover/books"
+                linkUrl="/discover/books"
+                cardKey={(b) => b.openLibraryId}
+                renderCard={(b) => (
+                  <BookCard
+                    openLibraryId={b.openLibraryId}
+                    title={b.title}
+                    authorName={b.authorName}
+                    coverUrl={b.coverUrl}
+                    year={b.year}
+                    publisher={b.publisher}
+                    mediaStatus={b.mediaStatus as never}
+                  />
+                )}
+              />
+            ) : null;
+            break;
+          case DiscoverSliderType.POPULAR_AUDIOBOOKS:
+            sliderComponent = mediaTypeEnabled.audiobookEnabled ? (
+              <ExtendedMediaSlider<{
+                openLibraryId: string;
+                title: string;
+                authorName: string;
+                narratorName?: string;
+                durationSeconds?: number;
+                coverUrl?: string;
+                year?: number;
+                publisher?: string;
+                mediaStatus?: number | null;
+              }>
+                sliderKey="popular-audiobooks"
+                title={intl.formatMessage(sliderTitles.popularaudiobooks)}
+                url="/api/v1/discover/audiobooks"
+                linkUrl="/discover/audiobooks"
+                cardKey={(a) => a.openLibraryId}
+                renderCard={(a) => (
+                  <AudiobookCard
+                    openLibraryId={a.openLibraryId}
+                    title={a.title}
+                    authorName={a.authorName}
+                    narratorName={a.narratorName}
+                    durationSeconds={a.durationSeconds}
+                    coverUrl={a.coverUrl}
+                    year={a.year}
+                    publisher={a.publisher}
+                    mediaStatus={a.mediaStatus as never}
+                  />
+                )}
+              />
+            ) : null;
+            break;
+          case DiscoverSliderType.GAME_GENRES:
+            sliderComponent = mediaTypeEnabled.gameEnabled ? (
+              <GameGenreSlider />
+            ) : null;
+            break;
+          case DiscoverSliderType.GAME_PLATFORMS:
+            sliderComponent = mediaTypeEnabled.gameEnabled ? (
+              <GamePlatformSlider />
+            ) : null;
+            break;
+          case DiscoverSliderType.MANGA_GENRES:
+            sliderComponent = mediaTypeEnabled.mangaEnabled ? (
+              <MangaGenreSlider />
+            ) : null;
+            break;
+          case DiscoverSliderType.BOOK_GENRES:
+            sliderComponent = mediaTypeEnabled.bookEnabled ? (
+              <BookGenreSlider />
+            ) : null;
+            break;
+          case DiscoverSliderType.AUDIOBOOK_GENRES:
+            sliderComponent = mediaTypeEnabled.audiobookEnabled ? (
+              <AudiobookGenreSlider />
+            ) : null;
             break;
           case DiscoverSliderType.TMDB_MOVIE_KEYWORD:
             sliderComponent = (

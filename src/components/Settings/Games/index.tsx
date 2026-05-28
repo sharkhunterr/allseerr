@@ -243,9 +243,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
               {igdbTestResult && (
                 <div
                   className={`mt-3 flex items-center gap-2 rounded p-3 ${
-                    igdbTestResult.success
-                      ? 'bg-green-600/20'
-                      : 'bg-red-600/20'
+                    igdbTestResult.success ? 'bg-green-600/20' : 'bg-red-600/20'
                   }`}
                 >
                   {igdbTestResult.success ? (
@@ -255,9 +253,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
                   )}
                   <span
                     className={
-                      igdbTestResult.success
-                        ? 'text-green-300'
-                        : 'text-red-300'
+                      igdbTestResult.success ? 'text-green-300' : 'text-red-300'
                     }
                   >
                     {igdbTestResult.message}
@@ -298,11 +294,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
                   Enable ROMM
                 </label>
                 <div className="form-input-area">
-                  <Field
-                    type="checkbox"
-                    id="rommEnabled"
-                    name="rommEnabled"
-                  />
+                  <Field type="checkbox" id="rommEnabled" name="rommEnabled" />
                 </div>
               </div>
 
@@ -358,9 +350,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
               {rommTestResult && (
                 <div
                   className={`mt-3 flex items-center gap-2 rounded p-3 ${
-                    rommTestResult.success
-                      ? 'bg-green-600/20'
-                      : 'bg-red-600/20'
+                    rommTestResult.success ? 'bg-green-600/20' : 'bg-red-600/20'
                   }`}
                 >
                   {rommTestResult.success ? (
@@ -370,9 +360,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
                   )}
                   <span
                     className={
-                      rommTestResult.success
-                        ? 'text-green-300'
-                        : 'text-red-300'
+                      rommTestResult.success ? 'text-green-300' : 'text-red-300'
                     }
                   >
                     {rommTestResult.message}
@@ -394,11 +382,7 @@ const SettingsGames = ({ embedded }: { embedded?: boolean }) => {
                     intl.formatMessage(messages.testConnection)
                   )}
                 </Button>
-                <Button
-                  buttonType="default"
-                  type="button"
-                  onClick={syncRomm}
-                >
+                <Button buttonType="default" type="button" onClick={syncRomm}>
                   <ArrowPathIcon className="mr-1 h-4 w-4" />
                   {intl.formatMessage(messages.syncNow)}
                 </Button>

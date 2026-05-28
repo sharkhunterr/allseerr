@@ -24,6 +24,10 @@ import notificationManager, { Notification } from '@server/lib/notifications';
 import { submitToBindery } from '@server/lib/services/binderyDispatcher';
 import { submitToBookshelf } from '@server/lib/services/bookshelfDispatcher';
 import { submitToMylar } from '@server/lib/services/mylarDispatcher';
+import {
+  romarrStillHasGame,
+  submitToRomarr,
+} from '@server/lib/services/romarrDispatcher';
 import { submitToSuwayomi } from '@server/lib/services/suwayomiDispatcher';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
@@ -1334,6 +1338,63 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
     }
   }
 
+  /**
+   * Dispatches game requests to a configured Romarr instance on
+   * approval. Skips silently when Romarr isn't enabled — that's the
+   * manual workflow. Romarr is the *acquisition* service (the Radarr
+   * role for ROMs); ROMM stays the library ("Play") side and the two
+   * coexist.
+   */
+  public async sendToRomarr(entity: MediaRequest): Promise<void> {
+    if (entity.status !== MediaRequestStatus.APPROVED) {
+      return;
+    }
+    if (entity.type !== MediaType.GAME) {
+      return;
+    }
+
+    const requestRepo = getRepository(MediaRequest);
+    const fullRequest = await requestRepo.findOne({
+      where: { id: entity.id },
+      relations: ['gameMedia'],
+    });
+    const media = fullRequest?.gameMedia;
+    if (!media) {
+      return;
+    }
+
+    // Already dispatched — skip re-submitting on every approval
+    // toggle. But `romarrId` can be stale: if the game was deleted
+    // in Romarr and the request re-created here, the GameMedia row
+    // survives with its old id. Verify the game is genuinely still
+    // in Romarr before skipping; if it's gone, fall through and
+    // re-dispatch.
+    if (media.romarrId && (await romarrStillHasGame(media))) {
+      return;
+    }
+
+    const result = await submitToRomarr(media);
+    const { GameMedia } = await import('@server/entity/GameMedia');
+    if (result.success) {
+      media.statusReason = null;
+      await getRepository(GameMedia).save(media as GameMediaType);
+    } else if (result.noInstance) {
+      media.statusReason =
+        'No game acquisition service is configured. Romarr can be enabled in Settings → Services → Games, or this request can be fulfilled manually.';
+      await getRepository(GameMedia).save(media as GameMediaType);
+    } else {
+      media.statusReason = result.message
+        ? `Dispatch to Romarr failed: ${result.message}`
+        : 'Dispatch to Romarr failed.';
+      await getRepository(GameMedia).save(media as GameMediaType);
+      logger.warn('Romarr dispatch did not succeed', {
+        label: 'Media Request',
+        requestId: entity.id,
+        message: result.message,
+      });
+    }
+  }
+
   public async afterUpdate(event: UpdateEvent<MediaRequest>): Promise<void> {
     if (!event.entity) {
       return;
@@ -1346,6 +1407,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToBookshelf(event.entity as MediaRequest);
       await this.sendToSuwayomi(event.entity as MediaRequest);
       await this.sendToMylar(event.entity as MediaRequest);
+      await this.sendToRomarr(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterUpdate subscriber', {
         label: 'Media Request',
@@ -1389,6 +1451,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToBookshelf(event.entity as MediaRequest);
       await this.sendToSuwayomi(event.entity as MediaRequest);
       await this.sendToMylar(event.entity as MediaRequest);
+      await this.sendToRomarr(event.entity as MediaRequest);
     } catch (e) {
       logger.error('Error while sending to *arr in afterInsert subscriber', {
         label: 'Media Request',

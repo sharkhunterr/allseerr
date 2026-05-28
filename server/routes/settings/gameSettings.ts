@@ -24,13 +24,14 @@ gameSettingsRoutes.get('/', (_req, res) => {
       pollIntervalMinutes: settings.game.romm.pollIntervalMinutes,
       enabled: settings.game.romm.enabled,
     },
+    restrictToRomarrPlatforms: settings.game.restrictToRomarrPlatforms ?? true,
   });
 });
 
 gameSettingsRoutes.put('/', async (req, res) => {
   const settings = getSettings();
 
-  const { igdb, romm } = req.body;
+  const { igdb, romm, restrictToRomarrPlatforms } = req.body;
 
   if (igdb) {
     settings.game = {
@@ -58,6 +59,13 @@ gameSettingsRoutes.put('/', async (req, res) => {
     };
   }
 
+  if (typeof restrictToRomarrPlatforms === 'boolean') {
+    settings.game = {
+      ...settings.game,
+      restrictToRomarrPlatforms,
+    };
+  }
+
   await settings.save();
 
   return res.status(200).json({
@@ -66,6 +74,7 @@ gameSettingsRoutes.put('/', async (req, res) => {
       clientSecret: '',
       clientSecretSet: !!settings.game.igdb.clientSecret,
     },
+    restrictToRomarrPlatforms: settings.game.restrictToRomarrPlatforms ?? true,
     romm: {
       url: settings.game.romm.url,
       publicUrl: settings.game.romm.publicUrl,

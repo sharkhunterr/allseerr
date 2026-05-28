@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import MediaPageBackdrop from '@app/components/Common/MediaPageBackdrop';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tag from '@app/components/Common/Tag';
 import BookRequestModal from '@app/components/RequestModal/BookRequestModal';
@@ -375,7 +376,10 @@ const BookDetailPage: NextPage = () => {
     data.mediaStatus === MediaStatus.DELETED;
 
   const attributes: React.ReactNode[] = [];
-  if (displayedYear) attributes.push(<span>{displayedYear}</span>);
+  // Lead with Audiobook vs Book — they share this page route + the
+  // pill at the top of the header was removed for visual alignment
+  // with Movie/TV, so the distinction surfaces here instead.
+  attributes.push(<span>{isAudiobook ? 'Audiobook' : 'Book'}</span>);
   if (data.durationSeconds) {
     attributes.push(<span>{formatDuration(data.durationSeconds)}</span>);
   }
@@ -385,6 +389,7 @@ const BookDetailPage: NextPage = () => {
 
   return (
     <div className="media-page" style={{ height: 493 }}>
+      <MediaPageBackdrop src={coverUrl} mode="cover" />
       <PageTitle title={data.title} />
       <div className="media-header">
         <div className="media-poster">
@@ -407,15 +412,10 @@ const BookDetailPage: NextPage = () => {
         </div>
         <div className="media-title">
           <div className="media-status">
-            <span
-              className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-md ${
-                isAudiobook
-                  ? 'border-pink-500 bg-pink-600/80'
-                  : 'border-orange-500 bg-orange-600/80'
-              }`}
-            >
-              {isAudiobook ? 'Audiobook' : 'Book'}
-            </span>
+            {/* The Audiobook/Book distinction was previously a
+                pink/orange pill here; it now reads as the leading
+                ``.media-attributes`` entry so the status row stays
+                identical to Movie/TV (StatusBadge only). */}
             <StatusBadge
               status={data.mediaStatus ?? undefined}
               title={data.title}

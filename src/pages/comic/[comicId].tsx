@@ -1,5 +1,6 @@
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import MediaPageBackdrop from '@app/components/Common/MediaPageBackdrop';
 import PageTitle from '@app/components/Common/PageTitle';
 import ComicRequestModal from '@app/components/RequestModal/ComicRequestModal';
 import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
@@ -170,6 +171,7 @@ const ComicDetailPage: NextPage = () => {
 
   return (
     <div className="media-page" style={{ height: 493 }}>
+      <MediaPageBackdrop src={data.coverUrl} mode="cover" />
       <PageTitle title={data.title} />
 
       <div className="media-header">
@@ -188,49 +190,53 @@ const ComicDetailPage: NextPage = () => {
           )}
         </div>
         <div className="media-title">
-          <div className="media-status flex items-center gap-2">
-            <span className="rounded-full border border-amber-500 bg-amber-600/80 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-md">
-              Comic
-            </span>
+          <div className="media-status">
             <StatusBadge
               status={data.mediaStatus ?? undefined}
               title={data.title}
             />
             <StatusReason reason={data.mediaStatusReason} />
           </div>
-          <h1>{data.title}</h1>
+          <h1 data-testid="media-title">
+            {data.title}{' '}
+            {data.year && <span className="media-year">({data.year})</span>}
+          </h1>
           {data.aliases && (
             <p className="text-sm text-gray-400">{data.aliases}</p>
           )}
           <span className="media-attributes">
-            {data.year && <span>{data.year}</span>}
-            {data.publisher && (
-              <>
-                <span>·</span>
-                <span>{data.publisher}</span>
-              </>
-            )}
-            {typeof data.issueCount === 'number' && data.issueCount > 0 && (
-              <>
-                <span>·</span>
-                <span>
-                  {intl.formatMessage(messages.issueCount)}: {data.issueCount}
-                </span>
-              </>
-            )}
+            {[
+              data.publisher ?? null,
+              typeof data.issueCount === 'number' && data.issueCount > 0
+                ? `${intl.formatMessage(messages.issueCount)}: ${data.issueCount}`
+                : null,
+            ]
+              .filter((v): v is string => Boolean(v))
+              .map((label, k) => <span key={k}>{label}</span>)
+              .reduce<React.ReactNode>(
+                (prev, curr, idx) =>
+                  idx === 0 ? curr : (
+                    <>
+                      {prev}
+                      <span>|</span>
+                      {curr}
+                    </>
+                  ),
+                null,
+              )}
           </span>
-          {canRequest && (
-            <div className="media-actions mt-4">
-              <Button
-                buttonType="primary"
-                onClick={() => setShowRequestModal(true)}
-              >
-                <BookOpenIcon />
-                <span>{intl.formatMessage(messages.request)}</span>
-              </Button>
-            </div>
-          )}
         </div>
+        {canRequest && (
+          <div className="media-actions">
+            <Button
+              buttonType="primary"
+              onClick={() => setShowRequestModal(true)}
+            >
+              <BookOpenIcon />
+              <span>{intl.formatMessage(messages.request)}</span>
+            </Button>
+          </div>
+        )}
       </div>
 
       <RequestNoticesAlert scope="comic" className="my-4" />

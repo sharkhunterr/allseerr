@@ -1,4 +1,6 @@
+import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import MediaPageBackdrop from '@app/components/Common/MediaPageBackdrop';
 import PageTitle from '@app/components/Common/PageTitle';
 import MangaRequestModal from '@app/components/RequestModal/MangaRequestModal';
 import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
@@ -146,16 +148,11 @@ const MangaDetailPage: NextPage = () => {
 
   return (
     <div className="media-page" style={{ height: 493 }}>
+      <MediaPageBackdrop
+        src={data.bannerUrl ?? data.coverUrl}
+        mode={data.bannerUrl ? 'banner' : 'cover'}
+      />
       <PageTitle title={data.title} />
-
-      {data.bannerUrl && (
-        <div
-          className="media-page-bg-image"
-          style={{
-            backgroundImage: `linear-gradient(180deg, rgba(17, 24, 39, 0.47) 0%, rgba(17, 24, 39, 1) 100%), url(${data.bannerUrl})`,
-          }}
-        />
-      )}
 
       <div className="media-header">
         <div className="media-poster">
@@ -173,52 +170,53 @@ const MangaDetailPage: NextPage = () => {
           )}
         </div>
         <div className="media-title">
-          <div className="media-status flex items-center gap-2">
-            <span className="rounded-full border border-fuchsia-500 bg-fuchsia-600/80 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-md">
-              {(data.countryOfOrigin ?? 'jp').toUpperCase() === 'KR'
-                ? 'Manhwa'
-                : (data.countryOfOrigin ?? 'jp').toUpperCase() === 'CN'
-                  ? 'Manhua'
-                  : 'Manga'}
-            </span>
+          <div className="media-status">
             <StatusBadge
               status={data.mediaStatus ?? undefined}
               title={data.title}
             />
             <StatusReason reason={data.mediaStatusReason} />
           </div>
-          <h1>{data.title}</h1>
+          <h1 data-testid="media-title">
+            {data.title}{' '}
+            {data.year && <span className="media-year">({data.year})</span>}
+          </h1>
           {data.titleNative && data.titleNative !== data.title && (
             <p className="text-sm text-gray-400">{data.titleNative}</p>
           )}
           <span className="media-attributes">
-            {data.year && <span>{data.year}</span>}
-            {data.format && (
-              <>
-                <span>·</span>
-                <span>{data.format.replace(/_/g, ' ')}</span>
-              </>
-            )}
-            {data.status && (
-              <>
-                <span>·</span>
-                <span>{data.status.replace(/_/g, ' ').toLowerCase()}</span>
-              </>
-            )}
+            {[
+              data.format ? data.format.replace(/_/g, ' ') : null,
+              data.status
+                ? data.status.replace(/_/g, ' ').toLowerCase()
+                : null,
+            ]
+              .filter((v): v is string => Boolean(v))
+              .map((label, k) => <span key={k}>{label}</span>)
+              .reduce<React.ReactNode>(
+                (prev, curr, idx) =>
+                  idx === 0 ? curr : (
+                    <>
+                      {prev}
+                      <span>|</span>
+                      {curr}
+                    </>
+                  ),
+                null,
+              )}
           </span>
-          {canRequest && (
-            <div className="media-actions mt-4">
-              <button
-                type="button"
-                onClick={() => setShowRequestModal(true)}
-                className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-              >
-                <BookOpenIcon className="mr-2 h-5 w-5" />
-                {intl.formatMessage(messages.request)}
-              </button>
-            </div>
-          )}
         </div>
+        {canRequest && (
+          <div className="media-actions">
+            <Button
+              buttonType="primary"
+              onClick={() => setShowRequestModal(true)}
+            >
+              <BookOpenIcon />
+              <span>{intl.formatMessage(messages.request)}</span>
+            </Button>
+          </div>
+        )}
       </div>
 
       <RequestNoticesAlert scope="manga" className="my-4" />

@@ -443,14 +443,109 @@ class AniListAPI {
    * forum posts) — much more useful than POPULARITY_DESC which is
    * lifetime cumulative.
    */
-  async getTrendingManga(limit = 20): Promise<AniListMediaSummary[]> {
+  async getTrendingManga(
+    limit = 20,
+    genre?: string,
+    opts?: {
+      // Multi-value filters — passed as AniList's ``*_in`` /
+      // ``*_not_in`` array operators when the caller supplies them.
+      formats?: string[]; // MANGA, MANHWA, MANHUA, NOVEL, ONE_SHOT, ...
+      statuses?: string[]; // RELEASING, FINISHED, HIATUS, CANCELLED
+      // AniList exposes ``countryOfOrigin`` as a single
+      // ``CountryCode`` argument — no ``_in`` array variant — so
+      // we only support a single ISO 3166-1 alpha-2 here
+      // (JP / KR / CN).
+      country?: string;
+      startYearGte?: number;
+      startYearLte?: number;
+      sort?:
+        | 'trending'
+        | 'popularity'
+        | 'score'
+        | 'recent'
+        | 'oldest'
+        | 'title';
+    }
+  ): Promise<AniListMediaSummary[]> {
+    // All filters fold into the cache key — different filter
+    // combos shouldn't share an envelope.
+    const cacheKey = `manga:trending:${limit}:${genre ?? ''}:${
+      opts?.formats?.join(',') ?? ''
+    }:${opts?.statuses?.join(',') ?? ''}:${opts?.country ?? ''}:${
+      opts?.startYearGte ?? ''
+    }:${opts?.startYearLte ?? ''}:${opts?.sort ?? ''}`;
     return cached(
-      `manga:trending:${limit}`,
+      cacheKey,
       async () => {
+        const sortMap: Record<string, string> = {
+          trending: 'TRENDING_DESC',
+          popularity: 'POPULARITY_DESC',
+          score: 'SCORE_DESC',
+          recent: 'START_DATE_DESC',
+          oldest: 'START_DATE',
+          title: 'TITLE_ROMAJI',
+        };
+        const sortKey = sortMap[opts?.sort ?? 'trending'] ?? 'TRENDING_DESC';
+        // AniList's ``startDate_greater`` / ``_lesser`` accepts a
+        // FuzzyDateInt encoded as ``YYYYMMDD``. ``2020`` becomes
+        // ``20200000`` for "anything in 2020 or later". Clamp the
+        // upper bound to Dec 31 of the year so the filter is
+        // intuitive (the operator picks 2024, includes all of 2024).
+        const startGte = opts?.startYearGte
+          ? opts.startYearGte * 10000
+          : undefined;
+        const startLte = opts?.startYearLte
+          ? opts.startYearLte * 10000 + 1231
+          : undefined;
+        // AniList returns 500 when ``_in`` array filters are
+        // passed as ``null`` — they must be OMITTED from both the
+        // variable map AND the query. Build the query + variables
+        // dynamically so we only declare the args we're actually
+        // supplying.
+        const args: string[] = ['$perPage: Int!', '$sort: [MediaSort]'];
+        const mediaArgs: string[] = [
+          'type: MANGA',
+          'sort: $sort',
+          'isAdult: false',
+        ];
+        const vars: Record<string, unknown> = {
+          perPage: limit,
+          sort: [sortKey],
+        };
+        if (genre) {
+          args.push('$genres: [String]');
+          mediaArgs.push('genre_in: $genres');
+          vars.genres = [genre];
+        }
+        if (opts?.formats?.length) {
+          args.push('$formats: [MediaFormat]');
+          mediaArgs.push('format_in: $formats');
+          vars.formats = opts.formats;
+        }
+        if (opts?.statuses?.length) {
+          args.push('$statuses: [MediaStatus]');
+          mediaArgs.push('status_in: $statuses');
+          vars.statuses = opts.statuses;
+        }
+        if (opts?.country) {
+          args.push('$country: CountryCode');
+          mediaArgs.push('countryOfOrigin: $country');
+          vars.country = opts.country;
+        }
+        if (startGte != null) {
+          args.push('$startGte: FuzzyDateInt');
+          mediaArgs.push('startDate_greater: $startGte');
+          vars.startGte = startGte;
+        }
+        if (startLte != null) {
+          args.push('$startLte: FuzzyDateInt');
+          mediaArgs.push('startDate_lesser: $startLte');
+          vars.startLte = startLte;
+        }
         const gqlQuery = `
-          query Trending($perPage: Int!) {
+          query Trending(${args.join(', ')}) {
             Page(perPage: $perPage) {
-              media(type: MANGA, sort: TRENDING_DESC, isAdult: false) {
+              media(${mediaArgs.join(', ')}) {
                 ${MEDIA_FRAGMENT_SUMMARY}
               }
             }
@@ -458,12 +553,74 @@ class AniListAPI {
         `;
         const { data } = await this.gql<{
           Page: { media: AniListMediaSummary[] };
-        }>(gqlQuery, { perPage: limit });
+        }>(gqlQuery, vars);
         return data?.Page?.media ?? [];
       },
       // Trending changes faster than the per-id detail; refresh every
       // 30 minutes so the home page doesn't go stale.
       30 * 60
+    );
+  }
+
+  /**
+   * Variant of ``getTrendingManga`` that also pulls the
+   * ``genres`` field per item — used by the genre-slider
+   * endpoint to bucket popular covers per genre in a single
+   * GraphQL call rather than N (one per genre).
+   *
+   * Kept separate from ``getTrendingManga`` because the regular
+   * trending feed (used by the Popular Manga slider) doesn't
+   * need the genres payload, and AniList's complexity budget
+   * adds up when ``genres`` is selected at high ``perPage``.
+   */
+  async getTrendingMangaWithGenres(
+    limit = 100
+  ): Promise<(AniListMediaSummary & { genres?: string[] | null })[]> {
+    return cached(
+      `manga:trending-with-genres:${limit}`,
+      async () => {
+        const gqlQuery = `
+          query TrendingWithGenres($perPage: Int!) {
+            Page(perPage: $perPage) {
+              media(type: MANGA, sort: TRENDING_DESC, isAdult: false) {
+                ${MEDIA_FRAGMENT_SUMMARY}
+                genres
+              }
+            }
+          }
+        `;
+        const { data } = await this.gql<{
+          Page: {
+            media: (AniListMediaSummary & { genres?: string[] | null })[];
+          };
+        }>(gqlQuery, { perPage: limit });
+        return data?.Page?.media ?? [];
+      },
+      30 * 60
+    );
+  }
+
+  /**
+   * Available manga genres for the dashboard genre slider.
+   * AniList exposes them via the ``GenreCollection`` root
+   * query — small, stable, cheap. ``Hentai`` is filtered out
+   * so the dashboard doesn't surface an adult bucket; the
+   * detail-page + search-config ``hideAdult`` toggle handles
+   * per-title adult filtering separately.
+   */
+  async getGenres(): Promise<string[]> {
+    return cached(
+      'manga:genres',
+      async () => {
+        const { data } = await this.gql<{ GenreCollection: string[] }>(
+          'query { GenreCollection }'
+        );
+        const ADULT_GENRES = new Set(['Hentai']);
+        return (data?.GenreCollection ?? []).filter(
+          (g) => !ADULT_GENRES.has(g)
+        );
+      },
+      24 * 60 * 60
     );
   }
 

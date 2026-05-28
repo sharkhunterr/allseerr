@@ -228,6 +228,86 @@ class ComicVineAPI {
   }
 
   /**
+   * Recent / "popular" volumes — ComicVine doesn't expose a
+   * trending feed, so we fall back to ``/volumes`` sorted by
+   * ``date_last_updated desc`` (volumes whose latest issue was
+   * indexed most recently). Stable proxy for "actively-running
+   * series" which is closer to what a user browsing comics
+   * wants than alphabetical-by-id.
+   *
+   * Cached 1h — the list barely changes within an hour, and
+   * ComicVine's rate limit is aggressive (200 req/hr per key).
+   */
+  async getRecentVolumes(
+    page = 1,
+    limit = 20,
+    opts?: {
+      // ComicVine's ``filter`` query param chains constraints:
+      //   filter=publisher:DC|start_year:>=2010
+      // We expose a curated subset (publisher name match,
+      // start_year window) — adequate for the discover-page
+      // filter slideover without exposing ComicVine's full
+      // filter syntax to operators.
+      publisher?: string;
+      startYearGte?: number;
+      startYearLte?: number;
+      sort?: 'recent' | 'name';
+    }
+  ): Promise<ComicVineVolumeSummary[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    const filterParts: string[] = [];
+    if (opts?.publisher) {
+      // Publisher matches on substring within ComicVine, so we
+      // pass the name verbatim. ComicVine returns volumes whose
+      // publisher name contains the provided string (case-
+      // insensitive on its side).
+      filterParts.push(`publisher:${opts.publisher}`);
+    }
+    if (opts?.startYearGte && opts?.startYearLte) {
+      filterParts.push(
+        `start_year:${opts.startYearGte}|${opts.startYearLte}`
+      );
+    } else if (opts?.startYearGte) {
+      filterParts.push(`start_year:${opts.startYearGte}|2100`);
+    } else if (opts?.startYearLte) {
+      filterParts.push(`start_year:1900|${opts.startYearLte}`);
+    }
+    const sortClause =
+      opts?.sort === 'name' ? 'name:asc' : 'date_last_updated:desc';
+    const key = `recent:vol:${page}:${limit}:${filterParts.join('|')}:${sortClause}`;
+    return cached(
+      key,
+      async () => {
+        try {
+          const params: Record<string, string | number> = {
+            sort: sortClause,
+            limit,
+            offset,
+            field_list:
+              'id,name,start_year,count_of_issues,publisher,image,deck,description,api_detail_url,site_detail_url',
+          };
+          if (filterParts.length > 0) {
+            params.filter = filterParts.join(',');
+          }
+          const results = await this.get<ComicVineVolumeSummary[]>(
+            '/volumes/',
+            params
+          );
+          return results ?? [];
+        } catch (e) {
+          logger.warn('ComicVine getRecentVolumes failed', {
+            label: 'comicvine',
+            page,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          return [];
+        }
+      },
+      3600
+    );
+  }
+
+  /**
    * Fetch a volume (series) by id, with the issue list and people
    * credits. ComicVine returns big payloads here; pinning the
    * field_list keeps the response under a few hundred KB.

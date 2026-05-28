@@ -88,8 +88,7 @@ export const HARDCOVER_READING_FORMAT = {
   ebook: 4,
 } as const;
 
-export type HardcoverReadingFormat =
-  keyof typeof HARDCOVER_READING_FORMAT;
+export type HardcoverReadingFormat = keyof typeof HARDCOVER_READING_FORMAT;
 
 /**
  * Fallback mapping when Hardcover's `country.code2` is null — common
@@ -172,7 +171,10 @@ export interface HardcoverSearchHit {
     contribution?: string | null;
     author?: { id?: number; name?: string } | null;
   }[];
-  book_series?: { series?: { id: number; name: string } | null; position?: number }[];
+  book_series?: {
+    series?: { id: number; name: string } | null;
+    position?: number;
+  }[];
   book_characters?: HardcoverCharacter[];
   book_mappings?: HardcoverBookMapping[];
   editions?: HardcoverEdition[];
@@ -218,16 +220,16 @@ export interface HardcoverAuthorDetail {
   books_count?: number;
   birth_date?: string;
   death_date?: string;
-  works: Array<{
+  works: {
     id: number;
     title: string;
     image_url?: string;
-  }>;
-  series: Array<{
+  }[];
+  series: {
     id: number;
     name: string;
     coverUrl?: string;
-  }>;
+  }[];
 }
 
 export interface HardcoverSeriesMember {
@@ -402,9 +404,7 @@ class HardcoverAPI {
     // currently-printed edition at the top of the dropdown. Search
     // paths (no filter) keep release_date ASC so enrichment picks up
     // the canonical / original edition.
-    const order = lang
-      ? 'desc_nulls_last'
-      : 'asc_nulls_last';
+    const order = lang ? 'desc_nulls_last' : 'asc_nulls_last';
     return `
       id
       title
@@ -522,9 +522,9 @@ class HardcoverAPI {
         }
       `;
       const { data } = await this.gql<{
-        editions: Array<{
+        editions: {
           country?: { name?: string | null; code2?: string | null } | null;
-        }>;
+        }[];
       }>(gqlQuery, { id });
       const c = data?.editions?.[0]?.country;
       if (!c) return null;
@@ -540,9 +540,7 @@ class HardcoverAPI {
    * Typesense-backed `search` query (public API blocks Hasura `_ilike`);
    * we take the first hit and then fetch the full book by id.
    */
-  async searchBook(
-    query: string
-  ): Promise<HardcoverSearchHit | null> {
+  async searchBook(query: string): Promise<HardcoverSearchHit | null> {
     // Typesense search cached shorter (1h) since results evolve; the
     // subsequent getBookById is cached at the default 12h TTL.
     return cached(
@@ -577,10 +575,7 @@ class HardcoverAPI {
    * query → follow-up `books(where: {id: {_in}})` batch → full metadata
    * (incl. OpenLibrary mapping) for every hit in a single GraphQL call.
    */
-  async searchBooks(
-    query: string,
-    limit = 10
-  ): Promise<HardcoverSearchHit[]> {
+  async searchBooks(query: string, limit = 10): Promise<HardcoverSearchHit[]> {
     return cached(
       `search-books:${query.toLowerCase()}:${limit}`,
       async () => {
@@ -616,9 +611,7 @@ class HardcoverAPI {
           books: HardcoverSearchHit[];
         }>(batchGql, { ids });
         // Preserve Typesense score ordering (books(where:_in) returns by id).
-        const byId = new Map(
-          (batch?.books ?? []).map((b) => [b.id, b])
-        );
+        const byId = new Map((batch?.books ?? []).map((b) => [b.id, b]));
         return ids
           .map((id) => byId.get(id))
           .filter((b): b is HardcoverSearchHit => !!b);
@@ -691,13 +684,305 @@ class HardcoverAPI {
         }>(batchGql, { ids });
         // Preserve Typesense ordering, and drop the over-fetched extras
         // so callers get at most `limit` hits.
-        const byId = new Map(
-          (batch?.books ?? []).map((b) => [b.id, b])
-        );
+        const byId = new Map((batch?.books ?? []).map((b) => [b.id, b]));
         return ids
           .map((id) => byId.get(id))
           .filter((b): b is HardcoverSearchHit => !!b)
           .slice(0, limit);
+      },
+      3600
+    );
+  }
+
+  /**
+   * Popular books — Hardcover's own activity signal
+   * (``users_count`` = number of users who have logged this title
+   * on their shelves) is a better "popular" proxy than any
+   * external rating. The book detail page already surfaces this
+   * value, so it's the same number the operator sees in-app.
+   *
+   * Cached 1h — popularity changes slowly and Hardcover's Hasura
+   * gateway is happiest with a small dedupe window.
+   *
+   * Pagination is via Hasura's standard ``offset`` + ``limit``.
+   */
+  async getPopularBooks(page = 1, limit = 20): Promise<HardcoverSearchHit[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    return cached(
+      `popular:books:${page}:${limit}`,
+      async () => {
+        const gql = `
+          query PopularBooks($limit: Int!, $offset: Int!) {
+            books(
+              where: { users_count: { _gt: 0 } }
+              order_by: { users_count: desc_nulls_last }
+              limit: $limit
+              offset: $offset
+            ) {
+              ${HardcoverAPI.bookFields()}
+            }
+          }
+        `;
+        const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(gql, {
+          limit,
+          offset,
+        });
+        return data?.books ?? [];
+      },
+      3600
+    );
+  }
+
+  /**
+   * Popular books filtered by a Genre tag at the database level.
+   * Uses Hasura's JSONB ``_contains`` operator on ``cached_tags``
+   * which the gateway can index — much cheaper than fetching a
+   * wide popular feed and filtering in-memory (the latter timed
+   * out at limit 200 because the full bookFields() payload is
+   * heavy per row).
+   *
+   * Same ``sort`` semantics as ``getPopularBooks`` /
+   * ``getRecentBooks`` so the route can swap a filtered query in
+   * without changing its envelope.
+   */
+  async getBooksByGenre(
+    genre: string,
+    page = 1,
+    limit = 20,
+    sort: 'popular' | 'recent' = 'popular'
+  ): Promise<HardcoverSearchHit[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    const today = new Date().toISOString().slice(0, 10);
+    return cached(
+      `bygenre:books:${sort}:${genre.toLowerCase()}:${page}:${limit}`,
+      async () => {
+        const orderBy =
+          sort === 'recent'
+            ? `{ release_date: desc_nulls_last }`
+            : `{ users_count: desc_nulls_last }`;
+        // ``recent`` adds the same pre-order guard ``getRecentBooks``
+        // uses so unreleased titles don't dominate.
+        const dateGuard =
+          sort === 'recent' ? `, release_date: { _lte: $today }` : '';
+        const variables: Record<string, unknown> = {
+          limit,
+          offset,
+          genre,
+        };
+        if (sort === 'recent') variables.today = today;
+        const gql = `
+          query BooksByGenre($limit: Int!, $offset: Int!, $genre: String!${
+            sort === 'recent' ? ', $today: date!' : ''
+          }) {
+            books(
+              where: {
+                users_count: { _gt: 0 },
+                cached_tags: { _contains: { Genre: [{ tag: $genre }] } }${dateGuard}
+              }
+              order_by: ${orderBy}
+              limit: $limit
+              offset: $offset
+            ) {
+              ${HardcoverAPI.bookFields()}
+            }
+          }
+        `;
+        const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
+          gql,
+          variables
+        );
+        return data?.books ?? [];
+      },
+      3600
+    );
+  }
+
+  /**
+   * Audiobook flavour of ``getBooksByGenre`` — same JSONB contains
+   * filter plus the same ``editions.reading_format_id`` narrow the
+   * regular popular-audiobooks query uses, so the response holds
+   * books that have at least one audio edition AND carry the
+   * requested Genre tag.
+   */
+  async getAudiobooksByGenre(
+    genre: string,
+    page = 1,
+    limit = 20,
+    sort: 'popular' | 'recent' = 'popular'
+  ): Promise<HardcoverSearchHit[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    const today = new Date().toISOString().slice(0, 10);
+    return cached(
+      `bygenre:audiobooks:${sort}:${genre.toLowerCase()}:${page}:${limit}`,
+      async () => {
+        const audiobookFmtId = HARDCOVER_READING_FORMAT.audiobook;
+        const orderBy =
+          sort === 'recent'
+            ? `{ release_date: desc_nulls_last }`
+            : `{ users_count: desc_nulls_last }`;
+        const dateGuard =
+          sort === 'recent' ? `, release_date: { _lte: $today }` : '';
+        const variables: Record<string, unknown> = {
+          limit,
+          offset,
+          genre,
+        };
+        if (sort === 'recent') variables.today = today;
+        const gql = `
+          query AudiobooksByGenre($limit: Int!, $offset: Int!, $genre: String!${
+            sort === 'recent' ? ', $today: date!' : ''
+          }) {
+            books(
+              where: {
+                users_count: { _gt: 0 },
+                editions: { reading_format_id: { _eq: ${audiobookFmtId} } },
+                cached_tags: { _contains: { Genre: [{ tag: $genre }] } }${dateGuard}
+              }
+              order_by: ${orderBy}
+              limit: $limit
+              offset: $offset
+            ) {
+              ${HardcoverAPI.bookFields({ editionFormat: 'audiobook' })}
+            }
+          }
+        `;
+        const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(
+          gql,
+          variables
+        );
+        return data?.books ?? [];
+      },
+      3600
+    );
+  }
+
+  /**
+   * Popular audiobooks — same ``users_count`` signal, narrowed to
+   * books that have at least one audio edition (per the same
+   * ``editions.reading_format_id`` filter the search uses). The
+   * ``editions`` projection is filtered to audiobook editions so
+   * the card can render narrator / duration without an extra
+   * round-trip.
+   */
+  async getPopularAudiobooks(
+    page = 1,
+    limit = 20
+  ): Promise<HardcoverSearchHit[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    return cached(
+      `popular:audiobooks:${page}:${limit}`,
+      async () => {
+        const audiobookFmtId = HARDCOVER_READING_FORMAT.audiobook;
+        const gql = `
+          query PopularAudiobooks($limit: Int!, $offset: Int!) {
+            books(
+              where: {
+                users_count: { _gt: 0 },
+                editions: { reading_format_id: { _eq: ${audiobookFmtId} } }
+              }
+              order_by: { users_count: desc_nulls_last }
+              limit: $limit
+              offset: $offset
+            ) {
+              ${HardcoverAPI.bookFields({ editionFormat: 'audiobook' })}
+            }
+          }
+        `;
+        const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(gql, {
+          limit,
+          offset,
+        });
+        return data?.books ?? [];
+      },
+      3600
+    );
+  }
+
+  /**
+   * Recent books — sorted by ``release_date desc`` with a guard
+   * so unreleased titles (release_date in the future) don't
+   * dominate the listing. Backs the
+   * ``/discover/books?sort=recent`` surface.
+   *
+   * Filter notes:
+   *   * ``users_count: { _gt: 0 }`` — drops the long tail of
+   *     unrated catalogue entries that would otherwise crowd
+   *     out genuinely-popular new releases.
+   *   * ``release_date: { _lte: "${today}" }`` — server-side
+   *     guard against pre-orders. Today's date is rebuilt on
+   *     each call (the variable's not cached across days).
+   */
+  async getRecentBooks(page = 1, limit = 20): Promise<HardcoverSearchHit[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    const today = new Date().toISOString().slice(0, 10);
+    return cached(
+      `recent:books:${today}:${page}:${limit}`,
+      async () => {
+        const gql = `
+          query RecentBooks($limit: Int!, $offset: Int!, $today: date!) {
+            books(
+              where: {
+                users_count: { _gt: 0 },
+                release_date: { _lte: $today }
+              }
+              order_by: { release_date: desc_nulls_last }
+              limit: $limit
+              offset: $offset
+            ) {
+              ${HardcoverAPI.bookFields()}
+            }
+          }
+        `;
+        const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(gql, {
+          limit,
+          offset,
+          today,
+        });
+        return data?.books ?? [];
+      },
+      3600
+    );
+  }
+
+  /**
+   * Recent audiobooks — same release-date sort as ``getRecentBooks``,
+   * narrowed to books with at least one audiobook edition. Same
+   * server-side editions filter so the returned ``editions`` array
+   * holds only the audiobook editions (caller can render duration
+   * without an extra round-trip).
+   */
+  async getRecentAudiobooks(
+    page = 1,
+    limit = 20
+  ): Promise<HardcoverSearchHit[]> {
+    const offset = (Math.max(1, page) - 1) * limit;
+    const today = new Date().toISOString().slice(0, 10);
+    return cached(
+      `recent:audiobooks:${today}:${page}:${limit}`,
+      async () => {
+        const audiobookFmtId = HARDCOVER_READING_FORMAT.audiobook;
+        const gql = `
+          query RecentAudiobooks($limit: Int!, $offset: Int!, $today: date!) {
+            books(
+              where: {
+                users_count: { _gt: 0 },
+                release_date: { _lte: $today },
+                editions: { reading_format_id: { _eq: ${audiobookFmtId} } }
+              }
+              order_by: { release_date: desc_nulls_last }
+              limit: $limit
+              offset: $offset
+            ) {
+              ${HardcoverAPI.bookFields({ editionFormat: 'audiobook' })}
+            }
+          }
+        `;
+        const { data } = await this.gql<{ books: HardcoverSearchHit[] }>(gql, {
+          limit,
+          offset,
+          today,
+        });
+        return data?.books ?? [];
       },
       3600
     );
@@ -729,10 +1014,10 @@ class HardcoverAPI {
         }
       `;
       const { data } = await this.gql<{
-        book_mappings: Array<{
+        book_mappings: {
           book_id?: number | null;
           platform?: { name?: string | null } | null;
-        }>;
+        }[];
       }>(gqlQuery, { asin });
       const rows = data?.book_mappings ?? [];
       // Prefer the Audible-tagged row when present, otherwise the
@@ -770,7 +1055,13 @@ class HardcoverAPI {
   async findAuthorByExactName(
     name: string
   ): Promise<
-    Array<{ id: number; name: string; bio?: string; photoUrl?: string; booksCount?: number }>
+    {
+      id: number;
+      name: string;
+      bio?: string;
+      photoUrl?: string;
+      booksCount?: number;
+    }[]
   > {
     return cached(
       `author:eq:${name.toLowerCase()}`,
@@ -791,20 +1082,20 @@ class HardcoverAPI {
           }
         `;
         const { data } = await this.gql<{
-          authors: Array<{
+          authors: {
             id: number;
             name: string;
             bio?: string | null;
             cached_image?: string | { url?: string } | null;
             books_count?: number | null;
-          }>;
+          }[];
         }>(gqlQuery, { name });
         return (data?.authors ?? []).map((a) => {
           const photoRaw = a.cached_image;
           const photo =
             typeof photoRaw === 'string'
               ? photoRaw
-              : photoRaw?.url ?? undefined;
+              : (photoRaw?.url ?? undefined);
           return {
             id: a.id,
             name: a.name,
@@ -827,7 +1118,13 @@ class HardcoverAPI {
     query: string,
     limit = 3
   ): Promise<
-    Array<{ id: number; name: string; bio?: string; photoUrl?: string; booksCount?: number }>
+    {
+      id: number;
+      name: string;
+      bio?: string;
+      photoUrl?: string;
+      booksCount?: number;
+    }[]
   > {
     return cached(
       `search-authors:${query.toLowerCase()}:${limit}`,
@@ -865,17 +1162,15 @@ class HardcoverAPI {
           }
         `;
         const { data: batch } = await this.gql<{
-          authors: Array<{
+          authors: {
             id: number;
             name: string;
             bio?: string | null;
             cached_image?: string | { url?: string } | null;
             books_count?: number | null;
-          }>;
+          }[];
         }>(batchGql, { ids });
-        const byId = new Map(
-          (batch?.authors ?? []).map((a) => [a.id, a])
-        );
+        const byId = new Map((batch?.authors ?? []).map((a) => [a.id, a]));
         return ids
           .map((id) => byId.get(id))
           .filter((a): a is NonNullable<typeof a> => !!a)
@@ -884,7 +1179,7 @@ class HardcoverAPI {
             const photo =
               typeof photoRaw === 'string'
                 ? photoRaw
-                : photoRaw?.url ?? undefined;
+                : (photoRaw?.url ?? undefined);
             return {
               id: a.id,
               name: a.name,
@@ -945,7 +1240,7 @@ class HardcoverAPI {
           }
         `;
         const { data: batch } = await this.gql<{
-          series: Array<{
+          series: {
             id: number;
             name: string;
             description?: string | null;
@@ -954,11 +1249,9 @@ class HardcoverAPI {
             book_series?: {
               book?: { image?: { url?: string } | null } | null;
             }[];
-          }>;
+          }[];
         }>(batchGql, { ids });
-        const byId = new Map(
-          (batch?.series ?? []).map((s) => [s.id, s])
-        );
+        const byId = new Map((batch?.series ?? []).map((s) => [s.id, s]));
         return ids
           .map((id) => byId.get(id))
           .filter((s): s is NonNullable<typeof s> => !!s)
@@ -968,8 +1261,7 @@ class HardcoverAPI {
             description: s.description ?? undefined,
             booksCount: s.books_count ?? undefined,
             authorName: s.author?.name ?? undefined,
-            coverUrl:
-              s.book_series?.[0]?.book?.image?.url ?? undefined,
+            coverUrl: s.book_series?.[0]?.book?.image?.url ?? undefined,
           }));
       },
       3600
@@ -1009,9 +1301,7 @@ class HardcoverAPI {
     return cached(`series:${id}`, async () => this._getSeries(id));
   }
 
-  private async _getSeries(
-    id: number
-  ): Promise<HardcoverSeriesDetail | null> {
+  private async _getSeries(id: number): Promise<HardcoverSeriesDetail | null> {
     const gqlQuery = `
       query SeriesById($id: Int!) {
         series(where: { id: { _eq: $id } }, limit: 1) {
@@ -1116,7 +1406,7 @@ class HardcoverAPI {
         }
       `;
       const { data } = await this.gql<{
-        authors: Array<{
+        authors: {
           id: number;
           name: string;
           bio?: string | null;
@@ -1124,19 +1414,19 @@ class HardcoverAPI {
           books_count?: number | null;
           born_date?: string | null;
           death_date?: string | null;
-          contributions?: Array<{
+          contributions?: {
             contribution?: string | null;
             book?: {
               id: number;
               title: string;
               users_count?: number | null;
               image?: { url?: string } | null;
-              book_series?: Array<{
+              book_series?: {
                 series?: { id: number; name: string } | null;
-              }>;
+              }[];
             } | null;
-          }>;
-        }>;
+          }[];
+        }[];
       }>(gqlQuery, { id });
       const a = data?.authors?.[0];
       if (!a) return null;
@@ -1144,9 +1434,7 @@ class HardcoverAPI {
       // URL string depending on Hardcover's internal state.
       const photoRaw = a.cached_image;
       const photo =
-        typeof photoRaw === 'string'
-          ? photoRaw
-          : photoRaw?.url ?? undefined;
+        typeof photoRaw === 'string' ? photoRaw : (photoRaw?.url ?? undefined);
       const authoredContribs = (a.contributions ?? []).filter(
         (c) =>
           c.book &&
@@ -1213,13 +1501,13 @@ class HardcoverAPI {
     authorId: number,
     opts?: { editionLanguage?: string }
   ): Promise<
-    Array<{
+    {
       bookId: number;
       title: string;
       coverUrl?: string;
       asin?: string;
       audioSeconds?: number;
-    }>
+    }[]
   > {
     const lang = opts?.editionLanguage?.toLowerCase().trim();
     return cached(
@@ -1258,21 +1546,21 @@ class HardcoverAPI {
           }
         `;
         const { data } = await this.gql<{
-          contributions: Array<{
+          contributions: {
             contribution?: string | null;
             book?: {
               id: number;
               title: string;
               image?: { url?: string } | null;
-              editions?: Array<{
+              editions?: {
                 title?: string | null;
                 asin?: string | null;
                 audio_seconds?: number | null;
                 image?: { url?: string } | null;
                 language?: { code2?: string | null } | null;
-              }>;
+              }[];
             } | null;
-          }>;
+          }[];
         }>(gqlQuery, { id: authorId });
         const rows = (data?.contributions ?? [])
           .filter(
@@ -1286,13 +1574,13 @@ class HardcoverAPI {
         // Dedupe — a translator/author double contribution on the same
         // book would surface twice otherwise.
         const seen = new Set<number>();
-        const result: Array<{
+        const result: {
           bookId: number;
           title: string;
           coverUrl?: string;
           asin?: string;
           audioSeconds?: number;
-        }> = [];
+        }[] = [];
         for (const book of rows) {
           if (seen.has(book.id)) continue;
           seen.add(book.id);

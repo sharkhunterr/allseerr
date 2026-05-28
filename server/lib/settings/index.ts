@@ -111,6 +111,30 @@ export interface BookshelfSettings extends DVRSettings {
   metadataProfileId?: number;
 }
 
+/**
+ * Romarr — the game *acquisition* service (the Radarr role for ROMs).
+ * When a game request is approved the subscriber asks the default
+ * Romarr instance to acquire it; ROMM stays the library / "Play"
+ * role and IGDB stays the metadata provider.
+ *
+ * Unlike Radarr/Sonarr/Bindery/Bookshelf, Romarr has no quality
+ * profiles or root folders to pick — it resolves its own platform
+ * and library from the IGDB id allseerr sends — so this is a slim
+ * connection-only service instance. ``apiKey`` must be a Romarr
+ * admin API key.
+ */
+export interface RomarrSettings {
+  id: number;
+  name: string;
+  hostname: string;
+  port: number;
+  apiKey: string;
+  useSsl: boolean;
+  baseUrl?: string;
+  isDefault: boolean;
+  externalUrl?: string;
+}
+
 interface Quota {
   quotaLimit?: number;
   quotaDays?: number;
@@ -391,7 +415,9 @@ export type JobId =
   | 'romm-collections-scan'
   | 'audiobookshelf-scan'
   | 'komga-scan'
-  | 'grimmory-scan';
+  | 'grimmory-scan'
+  | 'manga-availability-scan'
+  | 'comic-availability-scan';
 
 export interface OidcGroupMapping {
   oidcGroup: string;
@@ -532,6 +558,11 @@ export interface GameSettings {
     pollIntervalMinutes: number;
     enabled: boolean;
   };
+  // When true, the game request button is only offered for platforms
+  // a configured Romarr instance can actually acquire (resolved via
+  // IGDB platform id). Default true — undeclared platforms get no
+  // request button rather than a request that would fail at dispatch.
+  restrictToRomarrPlatforms: boolean;
 }
 
 export interface ComicSettings {
@@ -636,6 +667,7 @@ export interface AllSettings {
   sonarr: SonarrSettings[];
   bindery: BinderySettings[];
   bookshelf: BookshelfSettings[];
+  romarr: RomarrSettings[];
   public: PublicSettings;
   notifications: NotificationSettings;
   jobs: Record<JobId, JobSettings>;
@@ -728,6 +760,7 @@ class Settings {
       sonarr: [],
       bindery: [],
       bookshelf: [],
+      romarr: [],
       public: {
         initialized: false,
       },
@@ -891,6 +924,19 @@ class Settings {
         'grimmory-scan': {
           schedule: '0 */15 * * * *',
         },
+        // Poll Suwayomi / Mylar for download progress every 5
+        // minutes so the dashboard cards flip from PROCESSING
+        // → PARTIALLY_AVAILABLE → AVAILABLE without operator
+        // intervention. Frequent enough to feel responsive while
+        // the download is actively running; cheap enough that
+        // running with an unconfigured Suwayomi / Mylar is a
+        // no-op early-return.
+        'manga-availability-scan': {
+          schedule: '0 */5 * * * *',
+        },
+        'comic-availability-scan': {
+          schedule: '0 */5 * * * *',
+        },
       },
       network: {
         csrfProtection: false,
@@ -927,6 +973,7 @@ class Settings {
           pollIntervalMinutes: 15,
           enabled: false,
         },
+        restrictToRomarrPlatforms: true,
       },
       book: {
         audiobookshelf: {
@@ -1116,6 +1163,14 @@ class Settings {
 
   set bookshelf(data: BookshelfSettings[]) {
     this.data.bookshelf = data;
+  }
+
+  get romarr(): RomarrSettings[] {
+    return this.data.romarr;
+  }
+
+  set romarr(data: RomarrSettings[]) {
+    this.data.romarr = data;
   }
 
   get game(): GameSettings {

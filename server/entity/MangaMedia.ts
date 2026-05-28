@@ -55,6 +55,19 @@ export class MangaMedia {
   @Column({ type: 'integer', nullable: true })
   public volumes?: number | null;
 
+  // Library-side download progress, kept in sync by the
+  // ``MangaAvailabilityScanner`` polling Suwayomi (or whichever
+  // download manager dispatched the request). Drives the
+  // PARTIALLY_AVAILABLE badge: 0 < available < total → partial,
+  // available >= total → AVAILABLE. Null when the scanner
+  // hasn't run yet (e.g. manual workflow without a wired
+  // library) — we then fall back to the static ``status`` column.
+  @Column({ type: 'integer', nullable: true })
+  public availableChapters?: number | null;
+
+  @Column({ type: 'integer', nullable: true })
+  public availableVolumes?: number | null;
+
   @Column({ type: 'varchar', nullable: true })
   public countryOfOrigin?: string | null;
 

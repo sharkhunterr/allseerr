@@ -770,6 +770,43 @@ components:
         - activeDirectory
         - mediaType
         - isDefault
+    RomarrSettings:
+      type: object
+      properties:
+        id:
+          type: number
+          example: 0
+          readOnly: true
+        name:
+          type: string
+          example: 'Romarr Main'
+        hostname:
+          type: string
+          example: '127.0.0.1'
+        port:
+          type: number
+          example: 8585
+        apiKey:
+          type: string
+          example: 'exampleapikey'
+        useSsl:
+          type: boolean
+          example: false
+        baseUrl:
+          type: string
+        isDefault:
+          type: boolean
+          example: false
+        externalUrl:
+          type: string
+          example: http://romarr.example.com
+      required:
+        - name
+        - hostname
+        - port
+        - apiKey
+        - useSsl
+        - isDefault
     BookshelfSettings:
       type: object
       properties:
@@ -3358,6 +3395,128 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ServiceProfile'
+  /settings/romarr:
+    get:
+      summary: Get Romarr settings
+      description: Returns all Romarr settings in a JSON array.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: 'Values were returned'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RomarrSettings'
+    post:
+      summary: Create Romarr instance
+      description: Creates a new Romarr instance from the request body.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RomarrSettings'
+      responses:
+        '201':
+          description: 'New Romarr instance created'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RomarrSettings'
+  /settings/romarr/test:
+    post:
+      summary: Test Romarr configuration
+      description: Tests if the Romarr configuration is valid.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                  example: '127.0.0.1'
+                port:
+                  type: number
+                  example: 8585
+                apiKey:
+                  type: string
+                  example: yourapikey
+                useSsl:
+                  type: boolean
+                  example: false
+                baseUrl:
+                  type: string
+              required:
+                - hostname
+                - port
+                - apiKey
+                - useSsl
+      responses:
+        '200':
+          description: Successfully connected to Romarr instance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+  /settings/romarr/{romarrId}:
+    put:
+      summary: Update Romarr instance
+      description: Updates an existing Romarr instance with the provided values.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: romarrId
+          required: true
+          schema:
+            type: integer
+          description: Romarr instance ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RomarrSettings'
+      responses:
+        '200':
+          description: 'Romarr instance updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RomarrSettings'
+    delete:
+      summary: Delete Romarr instance
+      description: Deletes an existing Romarr instance based on the romarrId parameter.
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: romarrId
+          required: true
+          schema:
+            type: integer
+          description: Romarr instance ID
+      responses:
+        '200':
+          description: 'Romarr instance deleted'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RomarrSettings'
   /settings/public:
     get:
       summary: Get public settings
@@ -4713,6 +4872,30 @@ paths:
                       type: string
                     abbreviation:
                       type: string
+  /game/romarr/platforms:
+    get:
+      summary: Get Romarr-supported game platforms
+      description: >-
+        Returns whether game requests are restricted to platforms a
+        configured Romarr instance can acquire, and the list of those
+        IGDB platform ids. The game UI hides the request button for
+        platforms not in the list when restrict is true.
+      tags:
+        - game
+      responses:
+        '200':
+          description: Restriction state returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  restrict:
+                    type: boolean
+                  platforms:
+                    type: array
+                    items:
+                      type: number
   /book/search:
     get:
       summary: Search for books
@@ -5100,6 +5283,8 @@ paths:
                         type: number
                       enabled:
                         type: boolean
+                  restrictToRomarrPlatforms:
+                    type: boolean
     put:
       summary: Update game settings
       description: Updates IGDB and ROMM settings.
@@ -5134,6 +5319,8 @@ paths:
                       type: number
                     enabled:
                       type: boolean
+                restrictToRomarrPlatforms:
+                  type: boolean
       responses:
         '200':
           description: Game settings updated
@@ -8241,6 +8428,328 @@ paths:
                         - $ref: '#/components/schemas/MovieResult'
                         - $ref: '#/components/schemas/TvResult'
                         - $ref: '#/components/schemas/PersonResult'
+  /discover/games:
+    get:
+      summary: Popular games (IGDB by total_rating_count)
+      description: Paginated popular games envelope shaped like the
+        TMDB discover endpoints. Returns 503 when the ``game``
+        media type is disabled in admin settings. Optional
+        filters narrow by IGDB genre / platform / release-date
+        window; ``sort`` re-orders by popularity / recency /
+        rating / title.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+        - in: query
+          name: genre
+          schema:
+            type: number
+        - in: query
+          name: platform
+          schema:
+            type: number
+        - in: query
+          name: releaseDateGte
+          schema:
+            type: string
+        - in: query
+          name: releaseDateLte
+          schema:
+            type: string
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - popularity
+              - recent
+              - oldest
+              - rating
+              - title
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /discover/manga:
+    get:
+      summary: Trending manga (AniList TRENDING_DESC)
+      description: Optional filters — genre (single AniList name),
+        format (comma-separated MediaFormat), status
+        (comma-separated MediaStatus), country (single ISO code),
+        startYearGte / startYearLte, sort.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+        - in: query
+          name: genre
+          schema:
+            type: string
+        - in: query
+          name: format
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: country
+          schema:
+            type: string
+        - in: query
+          name: startYearGte
+          schema:
+            type: number
+        - in: query
+          name: startYearLte
+          schema:
+            type: number
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - trending
+              - popularity
+              - score
+              - recent
+              - oldest
+              - title
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /discover/genreslider/games:
+    get:
+      summary: List of game genres for the dashboard genre slider
+      tags:
+        - search
+      responses:
+        '200':
+          description: Genres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /discover/platformslider/games:
+    get:
+      summary: List of game platforms for the dashboard platform slider
+      description: Derived from the top popular games so the dashboard
+        surfaces consoles operators actually have content for.
+        Each tile carries a small pool of game-cover URLs the
+        client picks one of as the tile backdrop.
+      tags:
+        - search
+      responses:
+        '200':
+          description: Platforms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /discover/genreslider/manga:
+    get:
+      summary: List of manga genres for the dashboard genre slider
+      tags:
+        - search
+      responses:
+        '200':
+          description: Genres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /discover/comics:
+    get:
+      summary: Recent comic volumes (ComicVine sort=date_last_updated)
+      description: Optional filters narrow by publisher name (substring
+        match) and start-year window; ``sort`` toggles between
+        most-recently-updated and alphabetical-by-name.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+        - in: query
+          name: publisher
+          schema:
+            type: string
+        - in: query
+          name: startYearGte
+          schema:
+            type: number
+        - in: query
+          name: startYearLte
+          schema:
+            type: number
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - recent
+              - name
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /discover/books:
+    get:
+      summary: Popular or recently-released books
+      description: Cascade — Hardcover (when configured) → OpenLibrary
+        trending. ``sort`` toggles between popularity and release-date.
+        Optional ``genre`` filters by Hardcover Genre-tag name (only
+        honoured when Hardcover is the active provider).
+        ``yearGte`` / ``yearLte`` filter by release year in-memory.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - popular
+              - recent
+            default: popular
+        - in: query
+          name: genre
+          schema:
+            type: string
+        - in: query
+          name: yearGte
+          schema:
+            type: number
+        - in: query
+          name: yearLte
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /discover/audiobooks:
+    get:
+      summary: Popular or recently-released audiobooks
+      description: Cascade — Hardcover (when configured) → Audible
+        BestSellers/ReleaseDate → OpenLibrary trending fallback.
+        Optional ``genre`` filters by Hardcover Genre-tag name (only
+        honoured when Hardcover is the active audiobook provider).
+        ``yearGte`` / ``yearLte`` filter by release year in-memory.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - popular
+              - recent
+            default: popular
+        - in: query
+          name: genre
+          schema:
+            type: string
+        - in: query
+          name: yearGte
+          schema:
+            type: number
+        - in: query
+          name: yearLte
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /discover/genreslider/books:
+    get:
+      summary: Curated list of book genres for the dashboard genre slider
+      description: Populated only when Hardcover is the active book
+        provider; returns ``[]`` otherwise so the dashboard slider
+        self-hides.
+      tags:
+        - search
+      responses:
+        '200':
+          description: Genres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /discover/genreslider/audiobooks:
+    get:
+      summary: Curated list of audiobook genres for the dashboard genre slider
+      description: Populated only when Hardcover is the active audiobook
+        provider; returns ``[]`` otherwise.
+      tags:
+        - search
+      responses:
+        '200':
+          description: Genres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
   /discover/keyword/{keywordId}/movies:
     get:
       summary: Get movies from keyword

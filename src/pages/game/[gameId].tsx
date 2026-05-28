@@ -1,6 +1,7 @@
 import Spinner from '@app/assets/spinner.svg';
 import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import MediaPageBackdrop from '@app/components/Common/MediaPageBackdrop';
 import PageTitle from '@app/components/Common/PageTitle';
 import GameRequestModal from '@app/components/GameRequestModal';
 import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
@@ -21,6 +22,9 @@ import useSWR from 'swr';
 
 const messages = defineMessages('pages.GameDetail', {
   request: 'Request',
+  requestUnavailable: 'Not requestable',
+  platformUnsupportedReason:
+    "This platform isn't supported by the game acquisition service (Romarr), so it can't be requested. Ask your administrator to add it in Romarr.",
   available: 'Available',
   partiallyAvailable: 'Partially Available',
   playOnRomm: 'Play on ROMM',
@@ -132,10 +136,12 @@ interface GameDetailData {
 const PlatformRequestButton = ({
   platform,
   game,
+  acquirable,
   onRequested,
 }: {
   platform: Platform;
   game: GameDetailData;
+  acquirable: boolean;
   onRequested?: () => void;
 }) => {
   const intl = useIntl();
@@ -203,7 +209,7 @@ const PlatformRequestButton = ({
             <span>{intl.formatMessage(messages.playOnRomm)}</span>
           </Button>
         </a>
-      ) : showRequestButton && gameEnabled ? (
+      ) : showRequestButton && gameEnabled && acquirable ? (
         <Button
           buttonType="primary"
           buttonSize="sm"
@@ -211,6 +217,22 @@ const PlatformRequestButton = ({
           onClick={handleRequest}
         >
           {isRequesting ? <Spinner /> : intl.formatMessage(messages.request)}
+        </Button>
+      ) : showRequestButton && gameEnabled && !acquirable ? (
+        // Platform not handled by Romarr: a muted, still-clickable
+        // button that explains why on click rather than vanishing.
+        <Button
+          buttonType="default"
+          buttonSize="sm"
+          className="cursor-help opacity-60"
+          onClick={() =>
+            addToast(intl.formatMessage(messages.platformUnsupportedReason), {
+              appearance: 'info',
+              autoDismiss: true,
+            })
+          }
+        >
+          {intl.formatMessage(messages.requestUnavailable)}
         </Button>
       ) : null}
     </div>
@@ -230,6 +252,17 @@ const GameDetailPage: NextPage = () => {
     error,
     mutate: revalidate,
   } = useSWR<GameDetailData>(gameId ? `/api/v1/game/${gameId}` : null);
+
+  // Which IGDB platforms Romarr can acquire. When `restrict` is on,
+  // platforms outside this list get no request button.
+  const { data: romarrPlatforms } = useSWR<{
+    restrict: boolean;
+    platforms: number[];
+  }>('/api/v1/game/romarr/platforms');
+
+  const isPlatformAcquirable = (platformId: number) =>
+    !romarrPlatforms?.restrict ||
+    romarrPlatforms.platforms.includes(platformId);
 
   if (!game && !error) {
     return <LoadingSpinner />;
@@ -258,6 +291,10 @@ const GameDetailPage: NextPage = () => {
   const isFullyAvailable =
     game.platforms.length > 0 &&
     availablePlatforms.length === game.platforms.length;
+  // Status-only requestable check. Romarr-platform support is NOT
+  // filtered out here: unsupported platforms still surface (page
+  // button + modal) so the user sees a disabled control with a
+  // reason rather than nothing.
   const requestablePlatforms = game.platforms.filter((p) => {
     const s = p.mediaStatus;
     return (
@@ -271,6 +308,7 @@ const GameDetailPage: NextPage = () => {
 
   return (
     <div className="media-page" style={{ height: 493 }}>
+      <MediaPageBackdrop src={game.coverUrl} mode="cover" />
       <PageTitle title={game.title} />
       <div className="media-header">
         <div className="media-poster">
@@ -289,18 +327,24 @@ const GameDetailPage: NextPage = () => {
         </div>
         <div className="media-title">
           <div className="media-status">
-            <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
-              Game
-            </span>
-            {hasAnyAvailable && (
-              <span className="rounded-full bg-green-500 px-3 py-1 text-xs font-bold text-white">
-                {intl.formatMessage(
-                  isFullyAvailable
-                    ? messages.available
-                    : messages.partiallyAvailable
-                )}
-              </span>
-            )}
+            {/* StatusBadge mirrors Movie/TV — same component, same
+                cyan/green palette — so the Game header reads as a
+                first-class media row instead of a custom inline pill.
+                The status we feed it is the AGGREGATE across all the
+                game's platforms: every-platform-AVAILABLE →
+                AVAILABLE; at-least-one-AVAILABLE →
+                PARTIALLY_AVAILABLE; otherwise nothing (StatusBadge
+                self-hides when status is undefined). */}
+            <StatusBadge
+              status={
+                isFullyAvailable
+                  ? MediaStatus.AVAILABLE
+                  : hasAnyAvailable
+                    ? MediaStatus.PARTIALLY_AVAILABLE
+                    : undefined
+              }
+              title={game.title}
+            />
           </div>
           <h1 data-testid="media-title">
             {game.title}{' '}
@@ -340,7 +384,10 @@ const GameDetailPage: NextPage = () => {
         show={showRequestModal}
         igdbId={game.igdbId}
         title={game.title}
-        platforms={game.platforms}
+        platforms={game.platforms.map((p) => ({
+          ...p,
+          romarrSupported: isPlatformAcquirable(p.id),
+        }))}
         releaseYear={game.releaseYear}
         developer={game.developer}
         publisher={game.publisher}
@@ -372,6 +419,7 @@ const GameDetailPage: NextPage = () => {
                     key={platform.id}
                     platform={platform}
                     game={game}
+                    acquirable={isPlatformAcquirable(platform.id)}
                     onRequested={revalidate}
                   />
                 ))}
