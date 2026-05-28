@@ -18,6 +18,7 @@ interface PopularComic {
   publisher?: string;
   deck?: string;
   mediaStatus?: number | null;
+  availableIssues?: number | null;
 }
 
 const DiscoverComicsPage: NextPage = () => {
@@ -41,6 +42,7 @@ const DiscoverComicsPage: NextPage = () => {
             publisher={c.publisher}
             deck={c.deck}
             mediaStatus={c.mediaStatus as never}
+            availableIssues={c.availableIssues ?? undefined}
           />
         </li>
       )}

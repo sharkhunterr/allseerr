@@ -1,5 +1,5 @@
 import MediaTitleCard from '@app/components/Common/MediaTitleCard';
-import type { MediaStatus } from '@server/constants/media';
+import { MediaStatus } from '@server/constants/media';
 import { useIntl } from 'react-intl';
 import { defineMessage } from 'react-intl';
 
@@ -25,6 +25,12 @@ interface MangaCardProps {
   averageScore?: number;
   countryOfOrigin?: string;
   mediaStatus?: MediaStatus | null;
+  // Library-side counts populated by MangaAvailabilityScanner.
+  // When set, the card derives PARTIALLY_AVAILABLE from the
+  // ratio rather than trusting the static ``mediaStatus`` alone
+  // — same UX TV gets from per-season aggregation.
+  availableChapters?: number;
+  availableVolumes?: number;
 }
 
 const badgeForCountry = (
@@ -58,9 +64,43 @@ const MangaCard = ({
   averageScore,
   countryOfOrigin,
   mediaStatus,
+  availableChapters,
+  availableVolumes,
 }: MangaCardProps) => {
   const intl = useIntl();
   const badge = badgeForCountry(countryOfOrigin);
+
+  // Derive PARTIALLY_AVAILABLE when the scanner has reported
+  // some-but-not-all chapters/volumes downloaded. Preferring
+  // chapters because Suwayomi reports them natively; volumes are
+  // approximated from the ratio when AniList exposes a total.
+  const derivedStatus = ((): MediaStatus | null | undefined => {
+    if (
+      typeof availableChapters === 'number' &&
+      typeof chapters === 'number' &&
+      chapters > 0
+    ) {
+      if (availableChapters <= 0) {
+        // Scanner running but nothing downloaded yet — preserve
+        // whatever the DB column says (typically PROCESSING).
+        return mediaStatus;
+      }
+      return availableChapters >= chapters
+        ? MediaStatus.AVAILABLE
+        : MediaStatus.PARTIALLY_AVAILABLE;
+    }
+    if (
+      typeof availableVolumes === 'number' &&
+      typeof volumes === 'number' &&
+      volumes > 0 &&
+      availableVolumes > 0
+    ) {
+      return availableVolumes >= volumes
+        ? MediaStatus.AVAILABLE
+        : MediaStatus.PARTIALLY_AVAILABLE;
+    }
+    return mediaStatus;
+  })();
 
   // Subtitle line above the title on hover — chapters / volumes
   // counts so the operator gets the "how big is this series"
@@ -83,7 +123,7 @@ const MangaCard = ({
       title={title}
       year={year}
       subtitle={subtitle}
-      mediaStatus={mediaStatus}
+      mediaStatus={derivedStatus}
       typeLabel={badge.label}
       typeBadgeClasses={badge.classes}
       rating={averageScore}

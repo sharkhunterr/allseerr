@@ -14,6 +14,10 @@ interface PopularManga {
   format?: string;
   averageScore?: number;
   mediaStatus?: number | null;
+  chapters?: number | null;
+  volumes?: number | null;
+  availableChapters?: number | null;
+  availableVolumes?: number | null;
 }
 
 const DiscoverMangaPage: NextPage = () => {
@@ -37,6 +41,10 @@ const DiscoverMangaPage: NextPage = () => {
             format={m.format}
             averageScore={m.averageScore}
             mediaStatus={m.mediaStatus as never}
+            chapters={m.chapters ?? undefined}
+            volumes={m.volumes ?? undefined}
+            availableChapters={m.availableChapters ?? undefined}
+            availableVolumes={m.availableVolumes ?? undefined}
           />
         </li>
       )}

@@ -42,6 +42,16 @@ export class ComicMedia {
   @Column({ type: 'integer', nullable: true })
   public issueCount?: number | null;
 
+  // Library-side download progress, kept in sync by the
+  // ``ComicAvailabilityScanner`` polling Mylar (or whichever
+  // download manager dispatched the request). Mylar's getComic
+  // exposes ``haveIssues / totalIssues`` — we mirror that here
+  // so the dashboard card can render PARTIALLY_AVAILABLE without
+  // a per-render API round-trip. Null until the first scan
+  // completes (or for entries that bypassed dispatch).
+  @Column({ type: 'integer', nullable: true })
+  public availableIssues?: number | null;
+
   @Column({ type: 'varchar', nullable: true })
   public publisher?: string | null;
 

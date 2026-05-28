@@ -415,7 +415,9 @@ export type JobId =
   | 'romm-collections-scan'
   | 'audiobookshelf-scan'
   | 'komga-scan'
-  | 'grimmory-scan';
+  | 'grimmory-scan'
+  | 'manga-availability-scan'
+  | 'comic-availability-scan';
 
 export interface OidcGroupMapping {
   oidcGroup: string;
@@ -921,6 +923,19 @@ class Settings {
         },
         'grimmory-scan': {
           schedule: '0 */15 * * * *',
+        },
+        // Poll Suwayomi / Mylar for download progress every 5
+        // minutes so the dashboard cards flip from PROCESSING
+        // → PARTIALLY_AVAILABLE → AVAILABLE without operator
+        // intervention. Frequent enough to feel responsive while
+        // the download is actively running; cheap enough that
+        // running with an unconfigured Suwayomi / Mylar is a
+        // no-op early-return.
+        'manga-availability-scan': {
+          schedule: '0 */5 * * * *',
+        },
+        'comic-availability-scan': {
+          schedule: '0 */5 * * * *',
         },
       },
       network: {

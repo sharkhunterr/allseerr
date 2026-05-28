@@ -1063,51 +1063,103 @@ const BOOK_GENRES_CANONICAL = [
 // every result with O(N) lookups instead of N round trips.
 // ---------------------------------------------------------------------------
 
-async function loadGameStatusMap(
+// Batch-load all GameMedia rows for the given IGDB ids so the
+// discover envelope can ship per-platform availability instead of
+// a single aggregated status. The dashboard cards apply the same
+// partial-aggregation logic the search page uses (game owned on
+// SOME of IGDB's platforms but not all → PARTIALLY_AVAILABLE),
+// which only works if we know the full per-platform breakdown.
+async function loadGameMediaByIgdbId(
   igdbIds: number[]
-): Promise<Map<number, number>> {
+): Promise<
+  Map<
+    number,
+    {
+      platformIgdbId?: number | null;
+      platformName?: string | null;
+      status: number;
+      id: number;
+    }[]
+  >
+> {
   if (igdbIds.length === 0) return new Map();
   const { In } = await import('typeorm');
   const { GameMedia } = await import('@server/entity/GameMedia');
   const rows = await getRepository(GameMedia).find({
     where: { igdbId: In(igdbIds) },
-    select: ['igdbId', 'status'],
+    select: ['id', 'igdbId', 'status', 'platformIgdbId', 'platformName'],
   });
-  // ``status`` is an integer enum; one Game can have multiple
-  // GameMedia rows (one per platform), so we MAX so the badge
-  // reflects the most-progressed platform (AVAILABLE > PENDING > UNKNOWN).
-  const map = new Map<number, number>();
+  const map = new Map<
+    number,
+    {
+      platformIgdbId?: number | null;
+      platformName?: string | null;
+      status: number;
+      id: number;
+    }[]
+  >();
   for (const r of rows) {
-    const prev = map.get(r.igdbId) ?? 0;
-    if (r.status > prev) map.set(r.igdbId, r.status);
+    const list = map.get(r.igdbId) ?? [];
+    list.push({
+      id: r.id,
+      status: r.status,
+      platformIgdbId: r.platformIgdbId,
+      platformName: r.platformName,
+    });
+    map.set(r.igdbId, list);
   }
   return map;
 }
 
+interface MangaAvailability {
+  status: number;
+  availableChapters?: number | null;
+  availableVolumes?: number | null;
+}
+
 async function loadMangaStatusMap(
   anilistIds: number[]
-): Promise<Map<number, number>> {
+): Promise<Map<number, MangaAvailability>> {
   if (anilistIds.length === 0) return new Map();
   const { In } = await import('typeorm');
   const { MangaMedia } = await import('@server/entity/MangaMedia');
   const rows = await getRepository(MangaMedia).find({
     where: { anilistId: In(anilistIds) },
-    select: ['anilistId', 'status'],
+    select: ['anilistId', 'status', 'availableChapters', 'availableVolumes'],
   });
-  return new Map(rows.map((r) => [r.anilistId, r.status]));
+  return new Map(
+    rows.map((r) => [
+      r.anilistId,
+      {
+        status: r.status,
+        availableChapters: r.availableChapters,
+        availableVolumes: r.availableVolumes,
+      },
+    ])
+  );
+}
+
+interface ComicAvailability {
+  status: number;
+  availableIssues?: number | null;
 }
 
 async function loadComicStatusMap(
   comicVineIds: number[]
-): Promise<Map<number, number>> {
+): Promise<Map<number, ComicAvailability>> {
   if (comicVineIds.length === 0) return new Map();
   const { In } = await import('typeorm');
   const { ComicMedia } = await import('@server/entity/ComicMedia');
   const rows = await getRepository(ComicMedia).find({
     where: { comicVineId: In(comicVineIds) },
-    select: ['comicVineId', 'status'],
+    select: ['comicVineId', 'status', 'availableIssues'],
   });
-  return new Map(rows.map((r) => [r.comicVineId, r.status]));
+  return new Map(
+    rows.map((r) => [
+      r.comicVineId,
+      { status: r.status, availableIssues: r.availableIssues },
+    ])
+  );
 }
 
 async function loadBookStatusMap(
@@ -1180,10 +1232,15 @@ discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
     const limit = 20;
     const games = await igdb.getPopularGames(page, limit, genre, platform);
 
-    // Batch-load the per-game local status so the dashboard cards
-    // can render the "downloaded" / "requested" / "processing"
-    // badges (same UX TMDB rows get via Media.getRelatedMedia).
-    const statusMap = await loadGameStatusMap(games.map((g) => g.id));
+    // Per-platform availability map so each result can ship the
+    // FULL set of IGDB platforms with their individual statuses.
+    // The card then runs the same aggregation as the search page
+    // (some IGDB platforms owned + others not → PARTIALLY) — only
+    // shipping the aggregate would collapse "GBA owned, Wii/3DS
+    // missing" down to AVAILABLE and lose the partial signal.
+    const mediaByIgdbId = await loadGameMediaByIgdbId(
+      games.map((g) => g.id)
+    );
 
     return res.status(200).json({
       page,
@@ -1192,26 +1249,49 @@ discoverRoutes.get('/games', requireMediaType('game'), async (req, res) => {
       // catalogue runs out (a short response naturally stops it).
       totalPages: games.length < limit ? page : page + 1,
       totalResults: games.length,
-      results: games.map((g) => ({
-        id: g.id,
-        igdbId: g.id,
-        title: g.name,
-        mediaStatus: statusMap.get(g.id) ?? null,
-        coverUrl: g.cover?.url
-          ? `https:${g.cover.url.replace('t_thumb', 't_cover_big')}`
-          : undefined,
-        releaseYear: g.first_release_date
-          ? new Date(g.first_release_date * 1000).getFullYear()
-          : undefined,
-        summary: g.summary,
-        // IGDB's ``total_rating`` is already 0-100 — the prior
-        // ``/10`` divisor turned 94% (GTA V tier) into 9.4 →
-        // rendered as "9%" by the shared RatingBadge. Hand the
-        // 0-100 value through directly; the badge does its own
-        // rounding.
-        rating: g.total_rating ?? undefined,
-        mediaType: 'game',
-      })),
+      results: games.map((g) => {
+        const rows = mediaByIgdbId.get(g.id) ?? [];
+        const igdbPlatforms = g.platforms ?? [];
+        // For each IGDB platform, look up whether we have a
+        // GameMedia row keyed on platformIgdbId. Falls back to a
+        // name match if id wasn't recorded (legacy rows before
+        // platformIgdbId was added always populated platformName).
+        const platforms = igdbPlatforms.map((p) => {
+          const matched =
+            rows.find((r) => r.platformIgdbId === p.id) ??
+            rows.find(
+              (r) =>
+                r.platformName?.toLowerCase() === p.name.toLowerCase()
+            );
+          return {
+            id: p.id,
+            name: p.name,
+            abbreviation: p.abbreviation,
+            mediaStatus: matched?.status ?? null,
+            gameMediaId: matched?.id ?? null,
+          };
+        });
+        return {
+          id: g.id,
+          igdbId: g.id,
+          title: g.name,
+          platforms,
+          coverUrl: g.cover?.url
+            ? `https:${g.cover.url.replace('t_thumb', 't_cover_big')}`
+            : undefined,
+          releaseYear: g.first_release_date
+            ? new Date(g.first_release_date * 1000).getFullYear()
+            : undefined,
+          summary: g.summary,
+          // IGDB's ``total_rating`` is already 0-100 — the prior
+          // ``/10`` divisor turned 94% (GTA V tier) into 9.4 →
+          // rendered as "9%" by the shared RatingBadge. Hand the
+          // 0-100 value through directly; the badge does its own
+          // rounding.
+          rating: g.total_rating ?? undefined,
+          mediaType: 'game',
+        };
+      }),
     });
   } catch (e) {
     logger.error('discover.games failed', {
@@ -1264,20 +1344,33 @@ discoverRoutes.get('/manga', requireMediaType('manga'), async (req, res) => {
       page,
       totalPages: sliced.length < perPage ? page : page + 1,
       totalResults: sliced.length,
-      results: sliced.map((m) => ({
-        id: m.id,
-        anilistId: m.id,
-        title:
-          m.title?.english || m.title?.romaji || m.title?.native || 'Untitled',
-        coverUrl: m.coverImage?.large ?? m.coverImage?.medium ?? undefined,
-        bannerUrl: m.bannerImage ?? undefined,
-        year: m.startDate?.year ?? undefined,
-        status: m.status ?? undefined,
-        format: m.format ?? undefined,
-        averageScore: m.averageScore ?? undefined,
-        mediaStatus: statusMap.get(m.id) ?? null,
-        mediaType: 'manga',
-      })),
+      results: sliced.map((m) => {
+        const avail = statusMap.get(m.id);
+        return {
+          id: m.id,
+          anilistId: m.id,
+          title:
+            m.title?.english ||
+            m.title?.romaji ||
+            m.title?.native ||
+            'Untitled',
+          coverUrl: m.coverImage?.large ?? m.coverImage?.medium ?? undefined,
+          bannerUrl: m.bannerImage ?? undefined,
+          year: m.startDate?.year ?? undefined,
+          status: m.status ?? undefined,
+          format: m.format ?? undefined,
+          averageScore: m.averageScore ?? undefined,
+          // Carry both the raw DB status and the scanner-tracked
+          // counts so the card can derive PARTIALLY_AVAILABLE
+          // without a per-render API call.
+          mediaStatus: avail?.status ?? null,
+          availableChapters: avail?.availableChapters ?? null,
+          availableVolumes: avail?.availableVolumes ?? null,
+          chapters: m.chapters ?? null,
+          volumes: m.volumes ?? null,
+          mediaType: 'manga',
+        };
+      }),
     });
   } catch (e) {
     logger.error('discover.manga failed', {
@@ -1321,17 +1414,21 @@ discoverRoutes.get('/comics', requireMediaType('comic'), async (req, res) => {
       page,
       totalPages: volumes.length < limit ? page : page + 1,
       totalResults: volumes.length,
-      results: volumes.map((v) => ({
-        id: v.id,
-        comicVineId: v.id,
-        title: v.name,
-        coverUrl: v.image?.medium_url ?? v.image?.small_url,
-        year: v.start_year ? Number(v.start_year) || undefined : undefined,
-        issueCount: v.count_of_issues,
-        publisher: v.publisher?.name,
-        deck: v.deck ?? undefined,
-        mediaStatus: statusMap.get(v.id) ?? null,
-      })),
+      results: volumes.map((v) => {
+        const avail = statusMap.get(v.id);
+        return {
+          id: v.id,
+          comicVineId: v.id,
+          title: v.name,
+          coverUrl: v.image?.medium_url ?? v.image?.small_url,
+          year: v.start_year ? Number(v.start_year) || undefined : undefined,
+          issueCount: v.count_of_issues,
+          publisher: v.publisher?.name,
+          deck: v.deck ?? undefined,
+          mediaStatus: avail?.status ?? null,
+          availableIssues: avail?.availableIssues ?? null,
+        };
+      }),
     });
   } catch (e) {
     logger.error('discover.comics failed', {
@@ -1957,7 +2054,7 @@ discoverRoutes.get(
         bookCfg?.primarySource === 'hardcover' &&
         bookCfg.hardcover &&
         !!bookCfg.hardcoverApiKey;
-      if (!useHardcover) {
+      if (!useHardcover || !bookCfg.hardcoverApiKey) {
         return res.status(200).json([]);
       }
       const data = await buildBookGenreSlider(bookCfg.hardcoverApiKey, false);

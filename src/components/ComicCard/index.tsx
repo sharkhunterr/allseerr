@@ -1,6 +1,6 @@
 import MediaTitleCard from '@app/components/Common/MediaTitleCard';
 import defineMessages from '@app/utils/defineMessages';
-import type { MediaStatus } from '@server/constants/media';
+import { MediaStatus } from '@server/constants/media';
 import { useIntl } from 'react-intl';
 
 const messages = defineMessages('components.ComicCard', {
@@ -17,6 +17,10 @@ interface ComicCardProps {
   publisher?: string;
   deck?: string;
   mediaStatus?: MediaStatus | null;
+  // Library-side count populated by ComicAvailabilityScanner.
+  // When set, the card derives PARTIALLY_AVAILABLE from the
+  // ratio rather than trusting the static ``mediaStatus`` alone.
+  availableIssues?: number;
 }
 
 const ComicCard = ({
@@ -28,6 +32,7 @@ const ComicCard = ({
   publisher,
   deck,
   mediaStatus,
+  availableIssues,
 }: ComicCardProps) => {
   const intl = useIntl();
 
@@ -41,6 +46,22 @@ const ComicCard = ({
   }
   const subtitle = parts.length ? parts.join(' · ') : undefined;
 
+  const derivedStatus = ((): MediaStatus | null | undefined => {
+    if (
+      typeof availableIssues === 'number' &&
+      typeof issueCount === 'number' &&
+      issueCount > 0
+    ) {
+      if (availableIssues <= 0) {
+        return mediaStatus;
+      }
+      return availableIssues >= issueCount
+        ? MediaStatus.AVAILABLE
+        : MediaStatus.PARTIALLY_AVAILABLE;
+    }
+    return mediaStatus;
+  })();
+
   return (
     <MediaTitleCard
       href={`/comic/${comicVineId}`}
@@ -49,7 +70,7 @@ const ComicCard = ({
       year={year}
       subtitle={subtitle}
       summary={deck}
-      mediaStatus={mediaStatus}
+      mediaStatus={derivedStatus}
       typeLabel={intl.formatMessage(messages.comic)}
       typeBadgeClasses="border-amber-500 bg-amber-600/80"
     />
