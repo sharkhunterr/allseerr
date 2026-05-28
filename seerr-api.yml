@@ -8491,7 +8491,9 @@ paths:
                 additionalProperties: true
   /discover/books:
     get:
-      summary: Popular books (placeholder envelope)
+      summary: Popular or recently-released books
+      description: Cascade — Hardcover (when configured) → OpenLibrary
+        trending. ``sort`` toggles between popularity and release-date.
       tags:
         - search
       parameters:
@@ -8500,6 +8502,14 @@ paths:
           schema:
             type: number
             default: 1
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - popular
+              - recent
+            default: popular
       responses:
         '200':
           description: Results
@@ -8510,7 +8520,9 @@ paths:
                 additionalProperties: true
   /discover/audiobooks:
     get:
-      summary: Popular audiobooks (placeholder envelope)
+      summary: Popular or recently-released audiobooks
+      description: Cascade — Hardcover (when configured) → Audible
+        BestSellers/ReleaseDate → OpenLibrary trending fallback.
       tags:
         - search
       parameters:
@@ -8519,6 +8531,14 @@ paths:
           schema:
             type: number
             default: 1
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - popular
+              - recent
+            default: popular
       responses:
         '200':
           description: Results
