@@ -23,14 +23,14 @@
  * message rather than a blank grid.
  */
 
-import Button from '@app/components/Common/Button';
 import Header from '@app/components/Common/Header';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import { useUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
+import useVerticalScroll from '@app/hooks/useVerticalScroll';
 import { BarsArrowDownIcon } from '@heroicons/react/24/solid';
 import { useRouter } from 'next/router';
-import { useState, type ReactElement, type ReactNode } from 'react';
+import { type ReactElement, type ReactNode } from 'react';
 import { useIntl } from 'react-intl';
 import useSWRInfinite from 'swr/infinite';
 
@@ -63,10 +63,6 @@ function DiscoverExtended<T>(
   const intl = useIntl();
   const router = useRouter();
   const updateQueryParams = useUpdateQueryParams({});
-  // Tracks how many times the operator pressed "Load more". Used
-  // only to force a re-render when SWR's ``size`` change alone
-  // doesn't (e.g. when the new page resolves from cache instantly).
-  const [, setLoadMoreClicks] = useState(0);
 
   // Sort param round-trips through the URL so refreshes / shared
   // links preserve the operator's choice. Default = first option
@@ -110,6 +106,17 @@ function DiscoverExtended<T>(
   const isReachingEnd =
     !!lastPage &&
     (lastPage.results.length === 0 || lastPage.page >= lastPage.totalPages);
+
+  // Auto-load on scroll-to-bottom — same UX DiscoverMovies /
+  // DiscoverTv get via ListView's ``useVerticalScroll``. Replaces
+  // the explicit "Load more" button: an operator scrolling
+  // through Popular Books expects the next page to materialise
+  // when they reach the bottom of the grid, not to have to
+  // click a button.
+  useVerticalScroll(
+    () => setSize(size + 1),
+    !isLoadingMore && !isLoadingInitial && !isEmpty && !isReachingEnd
+  );
 
   return (
     <>
@@ -172,26 +179,12 @@ function DiscoverExtended<T>(
               )
             )}
           </ul>
-          {!isReachingEnd && (
+          {/* Passive loading footer — useVerticalScroll fires
+              setSize on bottom-of-page; this spinner is just
+              visual feedback during the in-flight fetch. */}
+          {(isLoadingMore || (!isReachingEnd && isValidating)) && (
             <div className="mt-6 flex justify-center">
-              <Button
-                buttonType="primary"
-                disabled={isLoadingMore}
-                onClick={() => {
-                  setLoadMoreClicks((n) => n + 1);
-                  setSize(size + 1);
-                }}
-              >
-                {isLoadingMore
-                  ? intl.formatMessage({
-                      id: 'components.Discover.DiscoverExtended.loading',
-                      defaultMessage: 'Loading…',
-                    })
-                  : intl.formatMessage({
-                      id: 'components.Discover.DiscoverExtended.loadMore',
-                      defaultMessage: 'Load more',
-                    })}
-              </Button>
+              <LoadingSpinner />
             </div>
           )}
         </>
