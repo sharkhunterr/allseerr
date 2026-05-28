@@ -94,15 +94,20 @@ function ExtendedMediaSlider<T>(
   if (data && (data[0]?.results?.length ?? 0) === 0) return null;
   if (error) return null;
 
+  // NB: the inner ``Slider`` component already wraps each item
+  // in its own ``<div class="inline-block px-2 align-top">``
+  // (mirrors how MediaSlider hands TitleCard straight in), so
+  // we MUST NOT add an extra ``<li>`` here — a double wrap
+  // makes the inline-block parent collapse to zero width,
+  // which in turn collapses the card's ``paddingBottom: 150%``
+  // to zero height. Operator-visible symptom: only dots and
+  // the show-more tile rendered in each row.
   const cards: JSX.Element[] = items
     .slice(0, 20)
     .map((item) => (
-      <li
-        key={`${props.sliderKey}-${props.cardKey(item)}`}
-        className="inline-block"
-      >
+      <div key={`${props.sliderKey}-${props.cardKey(item)}`}>
         {props.renderCard(item)}
-      </li>
+      </div>
     ));
 
   // ShowMore card — same UX MediaSlider uses for the movie/tv

@@ -93,6 +93,13 @@ const MediaTitleCard = ({
     mediaStatus !== MediaStatus.UNKNOWN;
 
   return (
+    // Outer width wrapper — MATCHES the dimensions TitleCard
+    // uses (``w-36 sm:w-36 md:w-44``) so a row mixing Movies +
+    // Games + Books renders with one consistent card width.
+    // The ``paddingBottom: '150%'`` trick below resolves against
+    // THIS wrapper's width; without it the card collapses to
+    // zero (operator-visible as empty dots in the slider row).
+    <div className="w-36 sm:w-36 md:w-44" data-testid="media-title-card">
     <div
       className={[
         'relative transform-gpu cursor-default overflow-hidden rounded-xl',
@@ -221,6 +228,7 @@ const MediaTitleCard = ({
           </div>
         </Transition>
       </div>
+    </div>
     </div>
   );
 };
