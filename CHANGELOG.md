@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.6](https://github.com/seerr-team/seerr/-/compare/v0.2.5...v0.2.6) (2026-05-28)
+
+
+### Features
+
+* **availability:** partial badge for games / manga / comics ([fe7dc87](https://github.com/seerr-team/seerr/-/commit/fe7dc87145af1b64f14c7d67c78c00d2b17bd23b))
+* **cards:** unify Game/Manga/Comic/Book/Audiobook cards on TitleCard layout ([5544781](https://github.com/seerr-team/seerr/-/commit/5544781ffee941cc4d778975ae770ff15fbb3c0e))
+* **discover:** auto-load on scroll-bottom (replace Load more button) ([07bf507](https://github.com/seerr-team/seerr/-/commit/07bf5077490b8dd636566616ffe2639cb4f7bb39))
+* **discover:** dashboard rows for Games/Manga/Comics/Books/Audiobooks ([163d448](https://github.com/seerr-team/seerr/-/commit/163d4481ef8b62937c5428bcacdafaa8f613eb6a))
+* **discover:** genre + platform tiles for extended-media types ([75bc4e2](https://github.com/seerr-team/seerr/-/commit/75bc4e214e1cda3011c21c8dfdd2e79f32e32e17))
+* **discover:** overlay local mediaStatus on extended-media browse + dashboard ([34b8224](https://github.com/seerr-team/seerr/-/commit/34b82240cd6bd2308c9489bc82b79d4a6e5b2b26))
+* **discover:** per-type filter slideovers for extended media ([2e2c52d](https://github.com/seerr-team/seerr/-/commit/2e2c52d35c014fae63a2ab5288297cc3d3b99a5c))
+* **discover:** Popular / Recent sort selector on books + audiobooks ([62c605e](https://github.com/seerr-team/seerr/-/commit/62c605e27365383abafa1daaa845fe849f10aeef))
+* **discover:** prefer Hardcover for popular books/audiobooks when configured ([f899a68](https://github.com/seerr-team/seerr/-/commit/f899a68c6ecbd3987d8e08e81199add4eaba7fa6))
+* **games:** integrate Romarr as the game acquisition service ([4c3d013](https://github.com/seerr-team/seerr/-/commit/4c3d0137650da2c3e814bc54fcfe04002c271881))
+* **games:** restrict game requests to Romarr-supported platforms ([864c321](https://github.com/seerr-team/seerr/-/commit/864c321fa26eb19f60cefdd3fc2c77adbd35d9d0))
+* **games:** show a disabled request control for unsupported platforms ([ec991f7](https://github.com/seerr-team/seerr/-/commit/ec991f74b2345e8b177438cb94bc66b4f5a614d0))
+* **nav:** sidebar+navbar links for Games/Manga/Comics/Books/Audiobooks ([ee8ba04](https://github.com/seerr-team/seerr/-/commit/ee8ba04e04ae8e2456867c96506ec6bc0295fa9f))
+* **nav:** swap PuzzlePieceIcon → custom GameControllerIcon for Games link ([22b2a47](https://github.com/seerr-team/seerr/-/commit/22b2a47387209f491a7e7761bb7598d8c6afc070))
+* shared RatingBadge + popular feeds for books/comics/audiobooks ([f0758a8](https://github.com/seerr-team/seerr/-/commit/f0758a80ce8db0d0c234b0b508ed07cf4bea26e1))
+* **ui:** align Game/Book/Audiobook/Manga/Comic detail page visuals with Movie/TV reference ([7ae2c9f](https://github.com/seerr-team/seerr/-/commit/7ae2c9fce3d59a66d60d002c18114842ae17efa9))
+
+
+### Bug Fixes
+
+* **api-docs:** declare ?sort query param on /discover/{books,audiobooks} ([2805972](https://github.com/seerr-team/seerr/-/commit/2805972129f2ccc77120d47f1778518a8b754e83))
+* **cards:** give MediaTitleCard a width so paddingBottom resolves ([e1cbbdb](https://github.com/seerr-team/seerr/-/commit/e1cbbdbb4271d010bf87a69882836bc0ad8ac3ad))
+* **dashboard:** drop poster thumbnails from extended-media show-more card ([2bb83fe](https://github.com/seerr-team/seerr/-/commit/2bb83fe451e35ba90b1fa7c09f852e0910be003a))
+* **discover:** cascade through Hardcover when it returns empty ([de2844d](https://github.com/seerr-team/seerr/-/commit/de2844db57385590d9b0717b600a7dc0608148c9))
+* **discover:** handle OpenLibrary trending JSON shape + Audible Popularity sort ([60761c8](https://github.com/seerr-team/seerr/-/commit/60761c8c71a3efc8d2bf2bbfec05e05d553d1ea2))
+* **discover:** proper audiobook content + correct game ratings ([8838e59](https://github.com/seerr-team/seerr/-/commit/8838e59e3afa728e7de9644cc224d4ca3354c399))
+* **discover:** use Audible's actual sort enum (BestSellers, not Popularity) ([4a45be3](https://github.com/seerr-team/seerr/-/commit/4a45be37828884a2517492b3421521567db7351f))
+* **games:** re-dispatch to Romarr when the romarrId is stale ([30a2ec5](https://github.com/seerr-team/seerr/-/commit/30a2ec5495771e4ad8082ae2566690ffefd5e134))
+* **ui:** clip MediaPageBackdrop + deepen gradient in cover mode ([b47e0e9](https://github.com/seerr-team/seerr/-/commit/b47e0e925627f8cdfcb3c16d06f3b9235b48045a))
+
 ### [0.2.5](https://github.com/seerr-team/seerr/-/compare/v0.2.4...v0.2.5) (2026-04-28)
 
 
