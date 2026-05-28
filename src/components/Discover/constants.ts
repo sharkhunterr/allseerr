@@ -93,6 +93,11 @@ export const sliderTitles = defineMessages('components.Discover', {
   popularcomics: 'Popular Comics',
   popularbooks: 'Popular Books',
   popularaudiobooks: 'Popular Audiobooks',
+  gamegenres: 'Game Genres',
+  gameplatforms: 'Game Platforms',
+  mangagenres: 'Manga Genres',
+  bookgenres: 'Book Genres',
+  audiobookgenres: 'Audiobook Genres',
 });
 
 export const QueryFilterOptions = z.object({

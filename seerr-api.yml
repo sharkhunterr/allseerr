@@ -8433,7 +8433,9 @@ paths:
       summary: Popular games (IGDB by total_rating_count)
       description: Paginated popular games envelope shaped like the
         TMDB discover endpoints. Returns 503 when the ``game``
-        media type is disabled in admin settings.
+        media type is disabled in admin settings. Optional
+        ``genre`` filter narrows by IGDB genre id. Optional
+        ``platform`` filter narrows by IGDB platform id.
       tags:
         - search
       parameters:
@@ -8442,6 +8444,14 @@ paths:
           schema:
             type: number
             default: 1
+        - in: query
+          name: genre
+          schema:
+            type: number
+        - in: query
+          name: platform
+          schema:
+            type: number
       responses:
         '200':
           description: Results
@@ -8453,6 +8463,8 @@ paths:
   /discover/manga:
     get:
       summary: Trending manga (AniList TRENDING_DESC)
+      description: Optional ``genre`` filter narrows to a single
+        AniList genre name (e.g. "Action", "Romance").
       tags:
         - search
       parameters:
@@ -8461,6 +8473,10 @@ paths:
           schema:
             type: number
             default: 1
+        - in: query
+          name: genre
+          schema:
+            type: string
       responses:
         '200':
           description: Results
@@ -8469,6 +8485,55 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+  /discover/genreslider/games:
+    get:
+      summary: List of game genres for the dashboard genre slider
+      tags:
+        - search
+      responses:
+        '200':
+          description: Genres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /discover/platformslider/games:
+    get:
+      summary: List of game platforms for the dashboard platform slider
+      description: Derived from the top popular games so the dashboard
+        surfaces consoles operators actually have content for.
+        Each tile carries a small pool of game-cover URLs the
+        client picks one of as the tile backdrop.
+      tags:
+        - search
+      responses:
+        '200':
+          description: Platforms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /discover/genreslider/manga:
+    get:
+      summary: List of manga genres for the dashboard genre slider
+      tags:
+        - search
+      responses:
+        '200':
+          description: Genres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
   /discover/comics:
     get:
       summary: Popular comics (placeholder — returns empty envelope until a
@@ -8494,6 +8559,8 @@ paths:
       summary: Popular or recently-released books
       description: Cascade — Hardcover (when configured) → OpenLibrary
         trending. ``sort`` toggles between popularity and release-date.
+        Optional ``genre`` filters by Hardcover Genre-tag name (only
+        honoured when Hardcover is the active provider).
       tags:
         - search
       parameters:
@@ -8510,6 +8577,10 @@ paths:
               - popular
               - recent
             default: popular
+        - in: query
+          name: genre
+          schema:
+            type: string
       responses:
         '200':
           description: Results
@@ -8523,6 +8594,8 @@ paths:
       summary: Popular or recently-released audiobooks
       description: Cascade — Hardcover (when configured) → Audible
         BestSellers/ReleaseDate → OpenLibrary trending fallback.
+        Optional ``genre`` filters by Hardcover Genre-tag name (only
+        honoured when Hardcover is the active audiobook provider).
       tags:
         - search
       parameters:
@@ -8539,6 +8612,10 @@ paths:
               - popular
               - recent
             default: popular
+        - in: query
+          name: genre
+          schema:
+            type: string
       responses:
         '200':
           description: Results
@@ -8547,6 +8624,41 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+  /discover/genreslider/books:
+    get:
+      summary: Curated list of book genres for the dashboard genre slider
+      description: Populated only when Hardcover is the active book
+        provider; returns ``[]`` otherwise so the dashboard slider
+        self-hides.
+      tags:
+        - search
+      responses:
+        '200':
+          description: Genres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  /discover/genreslider/audiobooks:
+    get:
+      summary: Curated list of audiobook genres for the dashboard genre slider
+      description: Populated only when Hardcover is the active audiobook
+        provider; returns ``[]`` otherwise.
+      tags:
+        - search
+      responses:
+        '200':
+          description: Genres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
   /discover/keyword/{keywordId}/movies:
     get:
       summary: Get movies from keyword

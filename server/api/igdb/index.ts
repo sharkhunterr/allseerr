@@ -14,14 +14,14 @@ interface TwitchToken {
 export interface IgdbGameResult {
   id: number;
   name: string;
-  platforms?: Array<{ id: number; name: string; abbreviation?: string }>;
+  platforms?: { id: number; name: string; abbreviation?: string }[];
   first_release_date?: number;
-  involved_companies?: Array<{
+  involved_companies?: {
     company: { name: string };
     developer: boolean;
     publisher: boolean;
-  }>;
-  genres?: Array<{ name: string }>;
+  }[];
+  genres?: { id?: number; name: string }[];
   total_rating?: number;
   cover?: { url: string };
   summary?: string;
@@ -68,7 +68,9 @@ class IgdbAPI {
         label: 'igdb',
         error: e instanceof Error ? e.message : String(e),
       });
-      throw new Error('IGDB authentication failed. Check Twitch API credentials.');
+      throw new Error(
+        'IGDB authentication failed. Check Twitch API credentials.'
+      );
     }
   }
 
@@ -102,7 +104,7 @@ class IgdbAPI {
     let body = `search "${title.replace(/"/g, '\\"')}";
 fields name,platforms.name,platforms.abbreviation,first_release_date,
   involved_companies.company.name,involved_companies.developer,
-  involved_companies.publisher,genres.name,total_rating,cover.url,summary;
+  involved_companies.publisher,genres.id,genres.name,total_rating,cover.url,summary;
 limit ${limit};`;
 
     if (platformId) {
@@ -135,14 +137,23 @@ limit ${limit};`;
    */
   async getPopularGames(
     page = 1,
-    limit = 20
+    limit = 20,
+    genreId?: number,
+    platformId?: number
   ): Promise<IgdbGameResult[]> {
     const offset = (Math.max(1, page) - 1) * limit;
-    const body = `fields name,platforms.name,platforms.abbreviation,first_release_date,
+    // ``where`` clauses are composed with ``&``. When the caller
+    // narrows by genre we add ``genres = (N)``; IGDB matches if
+    // ANY of the game's tagged genres is N (so a game tagged
+    // both Adventure + RPG appears under both genre tiles).
+    const filters = ['total_rating != null', 'total_rating_count > 50'];
+    if (genreId) filters.push(`genres = (${genreId})`);
+    if (platformId) filters.push(`platforms = (${platformId})`);
+    const body = `fields name,platforms.id,platforms.name,platforms.abbreviation,first_release_date,
   involved_companies.company.name,involved_companies.developer,
-  involved_companies.publisher,genres.name,total_rating,
+  involved_companies.publisher,genres.id,genres.name,total_rating,
   total_rating_count,cover.url,summary;
-where total_rating != null & total_rating_count > 50;
+where ${filters.join(' & ')};
 sort total_rating_count desc;
 limit ${limit};
 offset ${offset};`;
@@ -158,13 +169,34 @@ offset ${offset};`;
     }
   }
 
+  /**
+   * Available game genres for the dashboard genre slider. Stable
+   * IDs that don't move year to year — we cache by hard-coded
+   * key so we don't re-hit IGDB on every dashboard load.
+   */
+  async getGenres(): Promise<{ id: number; name: string }[]> {
+    try {
+      const rows = (await this.query(
+        'genres',
+        'fields name; limit 50; sort name asc;'
+      )) as { id: number; name: string }[];
+      return rows;
+    } catch (e) {
+      logger.error('IGDB genres failed', {
+        label: 'igdb',
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return [];
+    }
+  }
+
   async getGame(igdbId: number): Promise<IgdbGameResult | null> {
     try {
       const results = await this.query(
         'games',
         `fields name,platforms.name,platforms.abbreviation,first_release_date,
   involved_companies.company.name,involved_companies.developer,
-  involved_companies.publisher,genres.name,total_rating,cover.url,summary;
+  involved_companies.publisher,genres.id,genres.name,total_rating,cover.url,summary;
 where id = ${igdbId};`
       );
       return results[0] ?? null;
@@ -173,13 +205,19 @@ where id = ${igdbId};`
     }
   }
 
-  async getPlatforms(): Promise<Array<{ id: number; name: string; abbreviation?: string }>> {
+  async getPlatforms(): Promise<
+    { id: number; name: string; abbreviation?: string }[]
+  > {
     try {
       const results = await this.query(
         'platforms',
         'fields name,abbreviation; limit 500; sort name asc;'
       );
-      return results as unknown as Array<{ id: number; name: string; abbreviation?: string }>;
+      return results as unknown as {
+        id: number;
+        name: string;
+        abbreviation?: string;
+      }[];
     } catch {
       return [];
     }

@@ -57,9 +57,7 @@ interface DiscoverExtendedProps<T> {
   sortOptions?: { value: string; label: string }[];
 }
 
-function DiscoverExtended<T>(
-  props: DiscoverExtendedProps<T>
-): ReactElement {
+function DiscoverExtended<T>(props: DiscoverExtendedProps<T>): ReactElement {
   const intl = useIntl();
   const router = useRouter();
   const updateQueryParams = useUpdateQueryParams({});
@@ -91,6 +89,16 @@ function DiscoverExtended<T>(
       }
       const qs = new URLSearchParams({ page: String(pageIndex + 1) });
       if (activeSort) qs.set('sort', activeSort);
+      // Pass through filter params from the URL so dashboard
+      // genre tiles (``/discover/games?genre=ID``) and other
+      // future filters reach the upstream — the discover routes
+      // already accept ``genre`` for games + manga via the zod
+      // schemas in server/routes/discover.ts. Skipping ``page``
+      // and ``sort`` because we own those above.
+      for (const [k, v] of Object.entries(router.query)) {
+        if (k === 'page' || k === 'sort' || typeof v !== 'string') continue;
+        qs.set(k, v);
+      }
       return `${props.endpoint}?${qs.toString()}`;
     },
     { revalidateFirstPage: false, revalidateOnFocus: false }
@@ -100,7 +108,10 @@ function DiscoverExtended<T>(
   const firstPage = data?.[0];
   const isLoadingInitial = !data && !error;
   const isLoadingMore =
-    isValidating && data !== undefined && data.length > 0 && size > data.length - 1;
+    isValidating &&
+    data !== undefined &&
+    data.length > 0 &&
+    size > data.length - 1;
   const lastPage = data?.[data.length - 1];
   const isEmpty = firstPage?.totalResults === 0 && items.length === 0;
   const isReachingEnd =
@@ -173,10 +184,7 @@ function DiscoverExtended<T>(
         <>
           <ul className="cards-vertical">
             {items.map((item, idx) =>
-              props.renderCard(
-                item,
-                props.cardKey ? props.cardKey(item) : idx
-              )
+              props.renderCard(item, props.cardKey ? props.cardKey(item) : idx)
             )}
           </ul>
           {/* Passive loading footer — useVerticalScroll fires

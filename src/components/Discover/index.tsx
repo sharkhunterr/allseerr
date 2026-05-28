@@ -6,17 +6,22 @@ import ConfirmButton from '@app/components/Common/ConfirmButton';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tooltip from '@app/components/Common/Tooltip';
-import { sliderTitles } from '@app/components/Discover/constants';
+import AudiobookGenreSlider from '@app/components/Discover/AudiobookGenreSlider';
+import BookGenreSlider from '@app/components/Discover/BookGenreSlider';
 import CreateSlider from '@app/components/Discover/CreateSlider';
 import DiscoverSliderEdit from '@app/components/Discover/DiscoverSliderEdit';
 import ExtendedMediaSlider from '@app/components/Discover/ExtendedMediaSlider';
+import GameGenreSlider from '@app/components/Discover/GameGenreSlider';
+import GamePlatformSlider from '@app/components/Discover/GamePlatformSlider';
+import MangaGenreSlider from '@app/components/Discover/MangaGenreSlider';
 import MovieGenreSlider from '@app/components/Discover/MovieGenreSlider';
 import NetworkSlider from '@app/components/Discover/NetworkSlider';
 import PlexWatchlistSlider from '@app/components/Discover/PlexWatchlistSlider';
-import RecentlyAddedSlider from '@app/components/Discover/RecentlyAddedSlider';
 import RecentRequestsSlider from '@app/components/Discover/RecentRequestsSlider';
+import RecentlyAddedSlider from '@app/components/Discover/RecentlyAddedSlider';
 import StudioSlider from '@app/components/Discover/StudioSlider';
 import TvGenreSlider from '@app/components/Discover/TvGenreSlider';
+import { sliderTitles } from '@app/components/Discover/constants';
 import GameCard from '@app/components/GameCard';
 import MangaCard from '@app/components/MangaCard';
 import MediaSlider from '@app/components/MediaSlider';
@@ -68,7 +73,11 @@ const messages = defineMessages('components.Discover', {
  * setting is the operator's master switch).
  */
 const useMediaTypeEnabled = (): Record<
-  'gameEnabled' | 'mangaEnabled' | 'comicEnabled' | 'bookEnabled' | 'audiobookEnabled',
+  | 'gameEnabled'
+  | 'mangaEnabled'
+  | 'comicEnabled'
+  | 'bookEnabled'
+  | 'audiobookEnabled',
   boolean
 > => {
   const { currentSettings } = useSettings();
@@ -497,6 +506,31 @@ const Discover = (): JSX.Element => {
                   />
                 )}
               />
+            ) : null;
+            break;
+          case DiscoverSliderType.GAME_GENRES:
+            sliderComponent = mediaTypeEnabled.gameEnabled ? (
+              <GameGenreSlider />
+            ) : null;
+            break;
+          case DiscoverSliderType.GAME_PLATFORMS:
+            sliderComponent = mediaTypeEnabled.gameEnabled ? (
+              <GamePlatformSlider />
+            ) : null;
+            break;
+          case DiscoverSliderType.MANGA_GENRES:
+            sliderComponent = mediaTypeEnabled.mangaEnabled ? (
+              <MangaGenreSlider />
+            ) : null;
+            break;
+          case DiscoverSliderType.BOOK_GENRES:
+            sliderComponent = mediaTypeEnabled.bookEnabled ? (
+              <BookGenreSlider />
+            ) : null;
+            break;
+          case DiscoverSliderType.AUDIOBOOK_GENRES:
+            sliderComponent = mediaTypeEnabled.audiobookEnabled ? (
+              <AudiobookGenreSlider />
             ) : null;
             break;
           case DiscoverSliderType.TMDB_MOVIE_KEYWORD:

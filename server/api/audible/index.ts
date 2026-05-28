@@ -315,6 +315,110 @@ class AudibleAPI {
     }
   }
 
+  /**
+   * Audible storefront's top-level categories — Audible exposes
+   * ~24 of them per region (localised to the storefront's
+   * language: "Science-Fiction et fantasy" on .fr, "Sci-Fi &
+   * Fantasy" on .com). Used by the dashboard "Audiobook Genres"
+   * slider when Audible is the operator's primary audiobook
+   * provider (Hardcover's curated tag list isn't useful when
+   * the user isn't browsing Hardcover content).
+   *
+   * Cached 24h — categories don't change between releases.
+   */
+  async getCategories(): Promise<{ id: string; name: string }[]> {
+    const cacheKey = `${this.region}:categories`;
+    const hit = audibleCache.get<{ id: string; name: string }[]>(cacheKey);
+    if (hit !== undefined) return hit;
+    try {
+      const response = await axios.get<{
+        categories: { id: string; name: string }[];
+      }>(`${this.baseUrl()}/catalog/categories`, {
+        params: {
+          categories_num_levels: 1,
+          response_groups: 'category_metadata',
+        },
+        timeout: 10000,
+      });
+      const value = (response.data.categories ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+      }));
+      if (value.length > 0) {
+        audibleCache.set(cacheKey, value, 24 * 3600);
+      }
+      return value;
+    } catch (e) {
+      logger.error('Audible categories failed', {
+        label: 'audible',
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Products filtered to a specific category id. Audible's
+   * ``/catalog/products`` endpoint accepts ``category_id`` plus
+   * the same ``products_sort_by`` we use for popular/recent, so
+   * "Popular Sci-Fi audiobooks" is a one-call query.
+   *
+   * ``sort`` mirrors the discover route's enum so callers can
+   * pass it through verbatim.
+   */
+  async getByCategoryId(
+    categoryId: string,
+    sort: 'popular' | 'recent' = 'popular',
+    numResults = 20,
+    page = 0
+  ): Promise<{ results: AudiobookResult[]; totalResults: number }> {
+    const sortBy = sort === 'recent' ? 'ReleaseDate' : 'BestSellers';
+    const cacheKey = `${this.region}:cat:${categoryId}:${sort}:${numResults}:${page}`;
+    const hit = audibleCache.get<{
+      results: AudiobookResult[];
+      totalResults: number;
+    }>(cacheKey);
+    if (hit !== undefined) return hit;
+    try {
+      const response = await axios.get<AudibleSearchApiResponse>(
+        `${this.baseUrl()}/catalog/products`,
+        {
+          params: {
+            num_results: numResults,
+            products_sort_by: sortBy,
+            category_id: categoryId,
+            release_time: 'past',
+            page,
+            response_groups:
+              'media,product_attrs,product_desc,contributors,product_extended_attrs',
+          },
+          timeout: 10000,
+        }
+      );
+      const products = response.data.products ?? [];
+      const audiobooks = products.filter(
+        (p) =>
+          p.content_delivery_type !== 'PodcastEpisode' &&
+          p.content_type !== 'Podcast'
+      );
+      const value = {
+        results: audiobooks.map(toResult),
+        totalResults: response.data.total_results ?? audiobooks.length,
+      };
+      if (value.results.length > 0) {
+        audibleCache.set(cacheKey, value, 3600);
+      }
+      return value;
+    } catch (e) {
+      logger.error('Audible category-products failed', {
+        label: 'audible',
+        categoryId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return { results: [], totalResults: 0 };
+    }
+  }
+
   async getProduct(asin: string): Promise<AudiobookResult | null> {
     const cacheKey = `${this.region}:product:${asin}`;
     const hit = audibleCache.get<AudiobookResult | null>(cacheKey);

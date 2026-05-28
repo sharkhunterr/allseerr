@@ -28,6 +28,22 @@ class DiscoverSlider {
           slider,
         });
         await sliderRepository.save(new DiscoverSlider(slider));
+      } else if (
+        existingSlider.isBuiltIn &&
+        slider.order !== undefined &&
+        existingSlider.order !== slider.order
+      ) {
+        // Re-pin built-in sliders to the canonical default order
+        // whenever ``defaultSliders`` changes. Without this,
+        // operators who bootstrapped on an earlier layout would
+        // keep stale positions for built-ins (e.g. a new genre
+        // row landing at the bottom of the dashboard instead of
+        // right after its sibling Popular row). Custom slider
+        // entries are untouched — only ``isBuiltIn`` rows get
+        // re-pinned, so an operator's hand-arranged custom
+        // sliders stay where they put them.
+        existingSlider.order = slider.order;
+        await sliderRepository.save(existingSlider);
       }
     }
   }

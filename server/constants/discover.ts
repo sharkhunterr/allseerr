@@ -33,6 +33,15 @@ export enum DiscoverSliderType {
   POPULAR_COMICS,
   POPULAR_BOOKS,
   POPULAR_AUDIOBOOKS,
+  GAME_GENRES,
+  MANGA_GENRES,
+  // COMIC_GENRES intentionally absent: ComicVine has no clean
+  // genre taxonomy per volume and curating one would mislead
+  // operators. Revisit if a provider with usable genre data
+  // ships (e.g. Marvel/DC catalogues).
+  BOOK_GENRES,
+  AUDIOBOOK_GENRES,
+  GAME_PLATFORMS,
 }
 
 export const defaultSliders: Partial<DiscoverSlider>[] = [
@@ -122,27 +131,57 @@ export const defaultSliders: Partial<DiscoverSlider>[] = [
     order: 12,
   },
   {
-    type: DiscoverSliderType.POPULAR_MANGA,
+    type: DiscoverSliderType.GAME_GENRES,
     enabled: true,
     isBuiltIn: true,
     order: 13,
   },
   {
-    type: DiscoverSliderType.POPULAR_COMICS,
+    type: DiscoverSliderType.GAME_PLATFORMS,
     enabled: true,
     isBuiltIn: true,
     order: 14,
   },
   {
-    type: DiscoverSliderType.POPULAR_BOOKS,
+    type: DiscoverSliderType.POPULAR_MANGA,
     enabled: true,
     isBuiltIn: true,
     order: 15,
   },
   {
-    type: DiscoverSliderType.POPULAR_AUDIOBOOKS,
+    type: DiscoverSliderType.MANGA_GENRES,
     enabled: true,
     isBuiltIn: true,
     order: 16,
+  },
+  {
+    type: DiscoverSliderType.POPULAR_COMICS,
+    enabled: true,
+    isBuiltIn: true,
+    order: 17,
+  },
+  {
+    type: DiscoverSliderType.POPULAR_BOOKS,
+    enabled: true,
+    isBuiltIn: true,
+    order: 18,
+  },
+  {
+    type: DiscoverSliderType.BOOK_GENRES,
+    enabled: true,
+    isBuiltIn: true,
+    order: 19,
+  },
+  {
+    type: DiscoverSliderType.POPULAR_AUDIOBOOKS,
+    enabled: true,
+    isBuiltIn: true,
+    order: 20,
+  },
+  {
+    type: DiscoverSliderType.AUDIOBOOK_GENRES,
+    enabled: true,
+    isBuiltIn: true,
+    order: 21,
   },
 ];

@@ -443,14 +443,25 @@ class AniListAPI {
    * forum posts) — much more useful than POPULARITY_DESC which is
    * lifetime cumulative.
    */
-  async getTrendingManga(limit = 20): Promise<AniListMediaSummary[]> {
+  async getTrendingManga(
+    limit = 20,
+    genre?: string
+  ): Promise<AniListMediaSummary[]> {
+    // Genre is folded into the cache key so a ``?genre=Action``
+    // narrow request doesn't share a cache slot with the
+    // unfiltered trending feed.
+    const cacheKey = `manga:trending:${limit}:${genre ?? ''}`;
     return cached(
-      `manga:trending:${limit}`,
+      cacheKey,
       async () => {
+        // AniList's GraphQL ``media`` field accepts an optional
+        // ``genre_in: [String!]`` argument we drop in only when
+        // the caller specified one. Filtering by genre still
+        // sorts by trending desc.
         const gqlQuery = `
-          query Trending($perPage: Int!) {
+          query Trending($perPage: Int!, $genres: [String]) {
             Page(perPage: $perPage) {
-              media(type: MANGA, sort: TRENDING_DESC, isAdult: false) {
+              media(type: MANGA, sort: TRENDING_DESC, isAdult: false, genre_in: $genres) {
                 ${MEDIA_FRAGMENT_SUMMARY}
               }
             }
@@ -458,12 +469,77 @@ class AniListAPI {
         `;
         const { data } = await this.gql<{
           Page: { media: AniListMediaSummary[] };
-        }>(gqlQuery, { perPage: limit });
+        }>(gqlQuery, {
+          perPage: limit,
+          genres: genre ? [genre] : null,
+        });
         return data?.Page?.media ?? [];
       },
       // Trending changes faster than the per-id detail; refresh every
       // 30 minutes so the home page doesn't go stale.
       30 * 60
+    );
+  }
+
+  /**
+   * Variant of ``getTrendingManga`` that also pulls the
+   * ``genres`` field per item — used by the genre-slider
+   * endpoint to bucket popular covers per genre in a single
+   * GraphQL call rather than N (one per genre).
+   *
+   * Kept separate from ``getTrendingManga`` because the regular
+   * trending feed (used by the Popular Manga slider) doesn't
+   * need the genres payload, and AniList's complexity budget
+   * adds up when ``genres`` is selected at high ``perPage``.
+   */
+  async getTrendingMangaWithGenres(
+    limit = 100
+  ): Promise<(AniListMediaSummary & { genres?: string[] | null })[]> {
+    return cached(
+      `manga:trending-with-genres:${limit}`,
+      async () => {
+        const gqlQuery = `
+          query TrendingWithGenres($perPage: Int!) {
+            Page(perPage: $perPage) {
+              media(type: MANGA, sort: TRENDING_DESC, isAdult: false) {
+                ${MEDIA_FRAGMENT_SUMMARY}
+                genres
+              }
+            }
+          }
+        `;
+        const { data } = await this.gql<{
+          Page: {
+            media: (AniListMediaSummary & { genres?: string[] | null })[];
+          };
+        }>(gqlQuery, { perPage: limit });
+        return data?.Page?.media ?? [];
+      },
+      30 * 60
+    );
+  }
+
+  /**
+   * Available manga genres for the dashboard genre slider.
+   * AniList exposes them via the ``GenreCollection`` root
+   * query — small, stable, cheap. ``Hentai`` is filtered out
+   * so the dashboard doesn't surface an adult bucket; the
+   * detail-page + search-config ``hideAdult`` toggle handles
+   * per-title adult filtering separately.
+   */
+  async getGenres(): Promise<string[]> {
+    return cached(
+      'manga:genres',
+      async () => {
+        const { data } = await this.gql<{ GenreCollection: string[] }>(
+          'query { GenreCollection }'
+        );
+        const ADULT_GENRES = new Set(['Hentai']);
+        return (data?.GenreCollection ?? []).filter(
+          (g) => !ADULT_GENRES.has(g)
+        );
+      },
+      24 * 60 * 60
     );
   }
 

@@ -179,6 +179,16 @@ const DiscoverSliderEdit = ({
         return intl.formatMessage(sliderTitles.popularbooks);
       case DiscoverSliderType.POPULAR_AUDIOBOOKS:
         return intl.formatMessage(sliderTitles.popularaudiobooks);
+      case DiscoverSliderType.GAME_GENRES:
+        return intl.formatMessage(sliderTitles.gamegenres);
+      case DiscoverSliderType.GAME_PLATFORMS:
+        return intl.formatMessage(sliderTitles.gameplatforms);
+      case DiscoverSliderType.MANGA_GENRES:
+        return intl.formatMessage(sliderTitles.mangagenres);
+      case DiscoverSliderType.BOOK_GENRES:
+        return intl.formatMessage(sliderTitles.bookgenres);
+      case DiscoverSliderType.AUDIOBOOK_GENRES:
+        return intl.formatMessage(sliderTitles.audiobookgenres);
       default:
         return 'Unknown Slider';
     }
