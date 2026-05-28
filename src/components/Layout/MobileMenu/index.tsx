@@ -1,4 +1,5 @@
 import Badge from '@app/components/Common/Badge';
+import GameControllerIcon from '@app/components/Common/Icons/GameControllerIcon';
 import { menuMessages } from '@app/components/Layout/Sidebar';
 import useClickOutside from '@app/hooks/useClickOutside';
 import useSettings from '@app/hooks/useSettings';
@@ -14,7 +15,6 @@ import {
   EyeSlashIcon,
   FilmIcon,
   MusicalNoteIcon,
-  PuzzlePieceIcon,
   RectangleStackIcon,
   SparklesIcon,
   TvIcon,
@@ -29,7 +29,6 @@ import {
   EyeSlashIcon as FilledEyeSlashIcon,
   FilmIcon as FilledFilmIcon,
   MusicalNoteIcon as FilledMusicalNoteIcon,
-  PuzzlePieceIcon as FilledPuzzlePieceIcon,
   RectangleStackIcon as FilledRectangleStackIcon,
   SparklesIcon as FilledSparklesIcon,
   TvIcon as FilledTvIcon,
@@ -116,8 +115,11 @@ const MobileMenu = ({
     {
       href: '/discover/games',
       content: intl.formatMessage(menuMessages.browsegames),
-      svgIcon: <PuzzlePieceIcon className="h-6 w-6" />,
-      svgIconSelected: <FilledPuzzlePieceIcon className="h-6 w-6" />,
+      // Custom inline controller SVG — same component for active
+      // and inactive (no filled variant needed; the icon's
+      // dot-buttons are already filled).
+      svgIcon: <GameControllerIcon className="h-6 w-6" />,
+      svgIconSelected: <GameControllerIcon className="h-6 w-6" />,
       activeRegExp: /^\/discover\/games$/,
       settingsFlag: 'gameEnabled',
     },

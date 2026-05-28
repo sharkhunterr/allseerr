@@ -1,4 +1,5 @@
 import Badge from '@app/components/Common/Badge';
+import GameControllerIcon from '@app/components/Common/Icons/GameControllerIcon';
 import VersionStatus from '@app/components/Layout/VersionStatus';
 import useClickOutside from '@app/hooks/useClickOutside';
 import useSettings from '@app/hooks/useSettings';
@@ -14,7 +15,6 @@ import {
   EyeSlashIcon,
   FilmIcon,
   MusicalNoteIcon,
-  PuzzlePieceIcon,
   RectangleStackIcon,
   SparklesIcon,
   TvIcon,
@@ -100,7 +100,7 @@ const SidebarLinks: SidebarLinkProps[] = [
   {
     href: '/discover/games',
     messagesKey: 'browsegames',
-    svgIcon: <PuzzlePieceIcon className="mr-3 h-6 w-6" />,
+    svgIcon: <GameControllerIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/discover\/games$/,
     settingsFlag: 'gameEnabled',
   },
