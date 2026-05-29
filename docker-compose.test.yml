@@ -1,0 +1,281 @@
+# docker-compose.test.yml — full integration stack for allseerr
+# ============================================================
+#
+# Spins up every downstream service allseerr knows how to talk
+# to (skipping radarr/sonarr per the test plan) so you can
+# exercise end-to-end request workflows against a real backend:
+#
+#   ROMM           → game library  (http://localhost:8181)
+#   Romarr         → game acquisition  (http://localhost:8585)
+#   Audiobookshelf → audiobook library  (http://localhost:13378)
+#   Bindery        → book + audiobook acquisition  (http://localhost:8787)
+#   Grabarr        → magazine acquisition  (http://localhost:8086)
+#   Pressarr       → magazine manager  (http://localhost:8084)
+#   qBittorrent    → download client  (http://localhost:8088)
+#   MariaDB        → ROMM persistence  (internal only)
+#
+# Allseerr itself runs on the host (``pnpm dev``) and reaches
+# each service via the ``localhost:<port>`` host-side mapping.
+# The compose network is internal so the services can also
+# call each other directly by container name when needed
+# (e.g. Bindery → qBittorrent at ``http://qbittorrent:8080``).
+#
+# First-run sequence (TL;DR):
+#   1. cp docker-compose.test.yml.env.example .env (optional)
+#   2. docker compose -f docker-compose.test.yml up -d
+#   3. Capture initial admin tokens / passwords:
+#        docker compose -f docker-compose.test.yml logs romarr   | grep setup_token
+#        docker compose -f docker-compose.test.yml logs bindery  | grep "initial admin"
+#        docker compose -f docker-compose.test.yml logs qbittorrent | grep "temporary password"
+#   4. Open each WebUI, create admin / accept setup wizard, grab API keys.
+#   5. Run scripts/bootstrap-test-stack.sh to patch the allseerr
+#      settings.json with the URLs (API keys you fill manually).
+#
+# Volumes are stored under ./data/<service>/ so a full reset is
+# ``docker compose -f docker-compose.test.yml down -v && rm -rf data/``.
+
+volumes:
+  # Shared download landing zone — qBit writes completed
+  # downloads here, and Bindery / Romarr / Grabarr read the
+  # SAME absolute path inside their containers (``/downloads``)
+  # because all three mount the host directory at the same
+  # target. This is how the importers see qBit's output.
+  romm_redis:
+  romm_db:
+
+networks:
+  allseerr-test:
+    driver: bridge
+
+services:
+  # ===========================================================
+  # qBittorrent — shared download client for Bindery / Romarr /
+  # Grabarr. Auth subnet whitelist set to RFC1918 + loopback so
+  # the *arr services don't need to round-trip through the per-
+  # session password.
+  # ===========================================================
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: allseerr-test-qbittorrent
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Europe/Paris"
+      WEBUI_PORT: "8080"
+    volumes:
+      - ./data/qbittorrent:/config
+      - ./data/downloads:/downloads
+    ports:
+      - "8088:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # ROMM — game library (acquisition role goes to Romarr below).
+  # Needs a MariaDB sidecar.
+  # ===========================================================
+  romm-db:
+    image: mariadb:latest
+    container_name: allseerr-test-romm-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: "rommrootpw"
+      MARIADB_DATABASE: "romm"
+      MARIADB_USER: "romm"
+      MARIADB_PASSWORD: "rommpw"
+    volumes:
+      - romm_db:/var/lib/mysql
+    healthcheck:
+      test:
+        ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - allseerr-test
+
+  romm:
+    image: rommapp/romm:latest
+    container_name: allseerr-test-romm
+    restart: unless-stopped
+    depends_on:
+      romm-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: "romm-db"
+      DB_NAME: "romm"
+      DB_USER: "romm"
+      DB_PASSWD: "rommpw"
+      # ROMM requires this for session token signing — replace
+      # with a real 32-char secret before exposing this stack
+      # past your LAN.
+      ROMM_AUTH_SECRET_KEY: "test-only-32char-secret-replace-please"
+      HASHEOUS_API_ENABLED: "true"
+    volumes:
+      - ./data/romm/resources:/romm/resources
+      - romm_redis:/redis-data
+      - ./data/romm/library:/romm/library
+      - ./data/romm/assets:/romm/assets
+      - ./data/romm/config:/romm/config
+    ports:
+      - "8181:8080"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Romarr — game acquisition (the "Radarr" for ROMs). Pulls
+  # from qBittorrent → drops ROMs into ROMM's library mount.
+  # Builds from your local checkout so we always run the
+  # current dev tip.
+  # ===========================================================
+  romarr:
+    build: /home/jeremie/Documents/Developpement/romarr/romarr
+    image: romarr:dev
+    container_name: allseerr-test-romarr
+    restart: unless-stopped
+    environment:
+      # Same dev secret the standalone Romarr compose uses — keep
+      # in sync so the Fernet-encrypted credential rows are
+      # readable across both stacks.
+      ROMARR_AUTH_SECRET_KEY: "dev-only-do-not-use-in-prod-replace-with-32-chars-please"
+      ROMARR_BOOTSTRAP_ENABLED: "true"
+      ROMARR_AUTO_MIGRATE: "true"
+      ROMARR_SCHEDULER_ENABLED: "true"
+      ROMARR_SPA_ENABLED: "true"
+      ROMARR_IMPORTER_WATCHER_ENABLED: "true"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./data/romarr:/data
+      - ./data/downloads:/downloads
+      # Romarr drops imported ROMs into ROMM's library directly
+      # via the same host mount.
+      - ./data/romm/library:/library
+    ports:
+      - "8585:8585"
+    depends_on:
+      - qbittorrent
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Audiobookshelf — audiobook + ebook library server.
+  # ===========================================================
+  audiobookshelf:
+    image: ghcr.io/advplyr/audiobookshelf:latest
+    container_name: allseerr-test-audiobookshelf
+    restart: unless-stopped
+    environment:
+      PORT: "80"
+    volumes:
+      - ./data/audiobookshelf/config:/config
+      - ./data/audiobookshelf/metadata:/metadata
+      # Audiobookshelf scans these; Bindery drops imported
+      # audiobooks into ``/audiobooks`` and ebooks into
+      # ``/books`` (same host paths exposed to Bindery below).
+      - ./data/library/audiobooks:/audiobooks
+      - ./data/library/books:/books
+      - ./data/library/podcasts:/podcasts
+    ports:
+      - "13378:80"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Bindery — book + audiobook acquisition (the *arr for books
+  # post-Readarr-death). Reads downloads from qBit's mount,
+  # writes imported files to the shared library paths
+  # Audiobookshelf scans above.
+  # ===========================================================
+  bindery:
+    image: ghcr.io/vavallee/bindery:latest
+    container_name: allseerr-test-bindery
+    restart: unless-stopped
+    environment:
+      BINDERY_LOG_LEVEL: "info"
+      # Allow private-network webhooks (allseerr is on the
+      # docker host, which Bindery sees as a non-public IP).
+      BINDERY_NOTIFICATIONS_ALLOW_PRIVATE: "true"
+    volumes:
+      - ./data/bindery:/config
+      - ./data/library/books:/books
+      - ./data/library/audiobooks:/audiobooks
+      - ./data/downloads:/downloads
+    ports:
+      - "8787:8787"
+    depends_on:
+      - qbittorrent
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Grabarr — magazine grabber (Bookys + AnnaArchive + IA…).
+  # Depends on flaresolverr to bypass CloudFlare on some
+  # sources. Builds from local repo.
+  # ===========================================================
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:v3.3.25
+    container_name: allseerr-test-flaresolverr
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: "info"
+    ports:
+      - "8191:8191"
+    networks:
+      - allseerr-test
+
+  grabarr:
+    build: /home/jeremie/Documents/Developpement/grabarr
+    image: grabarr:dev
+    container_name: allseerr-test-grabarr
+    restart: unless-stopped
+    environment:
+      GRABARR_LOG_LEVEL: "INFO"
+      LOG_FORMAT: "text"
+      GRABARR_SHELFMARK_EXT_BYPASSER_URL: "http://flaresolverr:8191/v1"
+      GRABARR_SHELFMARK_USING_EXTERNAL_BYPASSER: "true"
+      # Required by Internet Archive ToS — replace with your
+      # contact email before any real use.
+      GRABARR_IA_CONTACT_EMAIL: "test@example.com"
+      GRABARR_TORRENT_MODE: "active_seed"
+      GRABARR_TORRENT_LISTEN_PORT_MIN: "45000"
+      GRABARR_TORRENT_LISTEN_PORT_MAX: "45100"
+    volumes:
+      - ./data/grabarr/config:/config
+      - ./data/grabarr/data:/data
+      - ./data/downloads:/downloads
+    ports:
+      - "8086:8080"
+      - "45000-45100:45000-45100/tcp"
+      - "45000-45100:45000-45100/udp"
+    depends_on:
+      - flaresolverr
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Pressarr — magazine manager. Reads completed downloads
+  # from qBit (via the shared /downloads mount) and organizes
+  # them into the magazine library.
+  # ===========================================================
+  pressarr:
+    build: /home/jeremie/Documents/Developpement/pressarr/pressarr
+    image: pressarr:dev
+    container_name: allseerr-test-pressarr
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: "INFO"
+    volumes:
+      - ./data/pressarr/config:/app/config
+      - ./data/pressarr/data:/app/data
+      - ./data/downloads:/downloads
+      - ./data/library/magazines:/magazines
+    ports:
+      - "8084:8585"
+    depends_on:
+      - qbittorrent
+      - grabarr
+    networks:
+      - allseerr-test
