@@ -11,6 +11,7 @@ import BinderyModal from '@app/components/Settings/BinderyModal';
 import DownloadManagerSettings from '@app/components/Settings/BooksAudiobooks/DownloadManagerSettings';
 import LibraryServerSettings from '@app/components/Settings/BooksAudiobooks/LibraryServerSettings';
 import BookshelfModal from '@app/components/Settings/BookshelfModal';
+import LivrarrModal from '@app/components/Settings/LivrarrModal';
 import SettingsMylar from '@app/components/Settings/MangaComics/SettingsMylar';
 import SettingsSuwayomi from '@app/components/Settings/MangaComics/SettingsSuwayomi';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
@@ -34,6 +35,7 @@ import type { OverrideRuleResultsResponse } from '@server/interfaces/api/overrid
 import type {
   BinderySettings,
   BookshelfSettings,
+  LivrarrSettings,
   RadarrSettings,
   RomarrSettings,
   SonarrSettings,
@@ -72,6 +74,13 @@ const messages = defineMessages('components.Settings', {
   deletebookshelfserver: 'Delete Bookshelf Server',
   noDefaultBookshelf:
     'At least one Bookshelf server must be marked as default for {mediaType} requests to be processed.',
+  addlivrarr: 'Add Livrarr Server',
+  livrarrsettings: 'Livrarr Settings',
+  livrarrSettingsDescription:
+    'Configure your Livrarr server(s) below. Livrarr is an *arr-style ebook + audiobook acquisition service (Hardcover / OpenLibrary metadata, Prowlarr indexers, qBittorrent / SABnzbd downloaders). Mutually exclusive with Bindery and Bookshelf for the same media type — the most recently set default wins.',
+  deletelivrarrserver: 'Delete Livrarr Server',
+  noDefaultLivrarr:
+    'At least one Livrarr server must be marked as default for {mediaType} requests to be processed.',
   mediaTypeBook: 'book',
   mediaTypeAudiobook: 'audiobook',
   binderyMediaTypeBook: 'Books',
@@ -882,6 +891,142 @@ const BookshelfServices = ({ mediaType }: BookshelfServicesProps) => {
   );
 };
 
+interface LivrarrServicesProps {
+  mediaType: 'book' | 'audiobook';
+}
+
+const LivrarrServices = ({ mediaType }: LivrarrServicesProps) => {
+  const intl = useIntl();
+  const {
+    data: livrarrData,
+    error: livrarrError,
+    mutate: revalidateLivrarr,
+  } = useSWR<LivrarrSettings[]>('/api/v1/settings/livrarr');
+  const [editLivrarrModal, setEditLivrarrModal] = useState<{
+    open: boolean;
+    livrarr: LivrarrSettings | null;
+  }>({ open: false, livrarr: null });
+  const [deleteLivrarrModal, setDeleteLivrarrModal] = useState<{
+    open: boolean;
+    serverId: number | null;
+  }>({ open: false, serverId: null });
+
+  const filtered = (livrarrData ?? []).filter(
+    (l) => l.mediaType === mediaType
+  );
+
+  const deleteServer = async () => {
+    await axios.delete(
+      `/api/v1/settings/livrarr/${deleteLivrarrModal.serverId}`
+    );
+    setDeleteLivrarrModal({ open: false, serverId: null });
+    revalidateLivrarr();
+    mutate('/api/v1/settings/public');
+  };
+
+  return (
+    <>
+      <div className="mb-6">
+        <h3 className="heading">
+          {intl.formatMessage(messages.livrarrsettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.livrarrSettingsDescription)}
+        </p>
+      </div>
+      {editLivrarrModal.open && (
+        <LivrarrModal
+          livrarr={editLivrarrModal.livrarr}
+          defaultMediaType={mediaType}
+          onClose={() => setEditLivrarrModal({ open: false, livrarr: null })}
+          onSave={() => {
+            revalidateLivrarr();
+            mutate('/api/v1/settings/public');
+            setEditLivrarrModal({ open: false, livrarr: null });
+          }}
+        />
+      )}
+      <Transition
+        as={Fragment}
+        show={deleteLivrarrModal.open}
+        enter="transition-opacity ease-in-out duration-300"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition-opacity ease-in-out duration-300"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <Modal
+          okText={intl.formatMessage(globalMessages.delete)}
+          okButtonType="danger"
+          onOk={() => deleteServer()}
+          onCancel={() =>
+            setDeleteLivrarrModal({ open: false, serverId: null })
+          }
+          title={intl.formatMessage(messages.deletelivrarrserver)}
+        >
+          {intl.formatMessage(messages.deleteserverconfirm)}
+        </Modal>
+      </Transition>
+      <div className="section">
+        {!livrarrData && !livrarrError && <LoadingSpinner />}
+        {livrarrData && !livrarrError && (
+          <>
+            {filtered.length > 0 && !filtered.some((l) => l.isDefault) && (
+              <Alert
+                title={intl.formatMessage(messages.noDefaultLivrarr, {
+                  mediaType: intl.formatMessage(
+                    mediaType === 'book'
+                      ? messages.mediaTypeBook
+                      : messages.mediaTypeAudiobook
+                  ),
+                })}
+              />
+            )}
+            <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((livrarr) => (
+                <ServerInstance
+                  key={`livrarr-config-${livrarr.id}`}
+                  name={livrarr.name}
+                  hostname={livrarr.hostname}
+                  port={livrarr.port}
+                  isSSL={livrarr.useSsl}
+                  isDefault={livrarr.isDefault}
+                  isBindery
+                  externalUrl={livrarr.externalUrl}
+                  onEdit={() =>
+                    setEditLivrarrModal({ open: true, livrarr })
+                  }
+                  onDelete={() =>
+                    setDeleteLivrarrModal({
+                      open: true,
+                      serverId: livrarr.id,
+                    })
+                  }
+                />
+              ))}
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    className="mb-3 mt-3"
+                    onClick={() =>
+                      setEditLivrarrModal({ open: true, livrarr: null })
+                    }
+                  >
+                    <PlusIcon />
+                    <span>{intl.formatMessage(messages.addlivrarr)}</span>
+                  </Button>
+                </div>
+              </li>
+            </ul>
+          </>
+        )}
+      </div>
+    </>
+  );
+};
+
 const RomarrServices = () => {
   const intl = useIntl();
   const {
@@ -1085,6 +1230,7 @@ const SettingsServices = () => {
         <div className="space-y-8">
           <BinderyServices mediaType="book" />
           <BookshelfServices mediaType="book" />
+          <LivrarrServices mediaType="book" />
           <DownloadManagerSettings mediaTypeFilter="book" />
           <LibraryServerSettings mediaTypeFilter="book" />
         </div>
@@ -1093,6 +1239,7 @@ const SettingsServices = () => {
         <div className="space-y-8">
           <BinderyServices mediaType="audiobook" />
           <BookshelfServices mediaType="audiobook" />
+          <LivrarrServices mediaType="audiobook" />
           <DownloadManagerSettings mediaTypeFilter="audiobook" />
           <LibraryServerSettings mediaTypeFilter="audiobook" />
         </div>

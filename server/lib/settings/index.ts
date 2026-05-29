@@ -112,6 +112,39 @@ export interface BookshelfSettings extends DVRSettings {
 }
 
 /**
+ * Livrarr — kkodecs/livrarr is an *arr-style ebook + audiobook
+ * acquisition service (Rust, single Docker image, Hardcover /
+ * OpenLibrary / Audnexus metadata, Prowlarr indexers, qBittorrent
+ * or SABnzbd downloaders). It plays the same role as Bindery /
+ * Bookshelf for allseerr: when a book or audiobook request is
+ * approved the dispatcher posts the work to the default Livrarr
+ * instance for the requested mediaType, and Livrarr handles the
+ * acquisition + library placement (it pushes finished ebooks to
+ * Calibre-Web-Automated and audiobooks to Audiobookshelf).
+ *
+ * Slimmer than BookshelfSettings: Livrarr has no per-instance
+ * quality / metadata profiles and configures its root folder
+ * globally inside its own UI, so allseerr only needs URL + API
+ * key + the mediaType this instance owns. ``preventSearch``
+ * mirrors the same flag on the Servarr DVR types — when set,
+ * the work is added in ``monitor`` mode without triggering an
+ * immediate search (operator does it from the Livrarr UI).
+ */
+export interface LivrarrSettings {
+  id: number;
+  name: string;
+  hostname: string;
+  port: number;
+  apiKey: string;
+  useSsl: boolean;
+  baseUrl?: string;
+  isDefault: boolean;
+  mediaType: 'book' | 'audiobook';
+  preventSearch?: boolean;
+  externalUrl?: string;
+}
+
+/**
  * Romarr — the game *acquisition* service (the Radarr role for ROMs).
  * When a game request is approved the subscriber asks the default
  * Romarr instance to acquire it; ROMM stays the library / "Play"
@@ -667,6 +700,7 @@ export interface AllSettings {
   sonarr: SonarrSettings[];
   bindery: BinderySettings[];
   bookshelf: BookshelfSettings[];
+  livrarr: LivrarrSettings[];
   romarr: RomarrSettings[];
   public: PublicSettings;
   notifications: NotificationSettings;
@@ -760,6 +794,7 @@ class Settings {
       sonarr: [],
       bindery: [],
       bookshelf: [],
+      livrarr: [],
       romarr: [],
       public: {
         initialized: false,
@@ -1163,6 +1198,14 @@ class Settings {
 
   set bookshelf(data: BookshelfSettings[]) {
     this.data.bookshelf = data;
+  }
+
+  get livrarr(): LivrarrSettings[] {
+    return this.data.livrarr;
+  }
+
+  set livrarr(data: LivrarrSettings[]) {
+    this.data.livrarr = data;
   }
 
   get romarr(): RomarrSettings[] {

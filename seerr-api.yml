@@ -3395,6 +3395,112 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ServiceProfile'
+  /settings/livrarr:
+    get:
+      summary: Get Livrarr settings
+      description: Returns all Livrarr instances configured for download
+        dispatch of books and audiobooks.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+    post:
+      summary: Create Livrarr instance
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /settings/livrarr/test:
+    post:
+      summary: Test Livrarr configuration
+      description: Pings /api/v1/system/status on the candidate Livrarr
+        instance, then enumerates its configured root folders.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname: { type: string }
+                port: { type: number }
+                apiKey: { type: string }
+                useSsl: { type: boolean }
+                baseUrl: { type: string }
+              required: [hostname, port, apiKey]
+      responses:
+        '200':
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /settings/livrarr/{livrarrId}:
+    put:
+      summary: Update Livrarr instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: livrarrId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    delete:
+      summary: Delete Livrarr instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: livrarrId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
   /settings/romarr:
     get:
       summary: Get Romarr settings
