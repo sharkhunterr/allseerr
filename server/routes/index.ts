@@ -37,6 +37,7 @@ import discoverRoutes, { createTmdbWithRegionLanguage } from './discover';
 import gameRoutes from './game';
 import issueRoutes from './issue';
 import issueCommentRoutes from './issueComment';
+import magazineRoutes from './magazine';
 import mangaRoutes from './manga';
 import mediaRoutes from './media';
 import movieRoutes from './movie';
@@ -181,6 +182,7 @@ router.use('/book', bookRoutes);
 router.use('/game', gameRoutes);
 router.use('/manga', mangaRoutes);
 router.use('/comic', comicRoutes);
+router.use('/magazine', magazineRoutes);
 
 // Music routes: conditionally registered based on ENABLE_MUSIC flag (FR-014)
 const musicRouter = getMusicRoutes();

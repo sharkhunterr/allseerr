@@ -1516,6 +1516,92 @@ discoverRoutes.get('/comics', requireMediaType('comic'), async (req, res) => {
   }
 });
 
+// ----- Magazines discover -------------------------------------
+// Magazines have no native ``trending`` feed (Google Books
+// doesn't expose one for ``printType=magazines``, and ISSN
+// portal doesn't either). We surface a curated default list of
+// well-known periodicals when no query is provided, plus
+// honour an optional ``?query=`` param that delegates straight
+// to Google Books — the same shape the search endpoint uses.
+const MAGAZINES_DISCOVER_DEFAULTS = [
+  'Le Monde', 'Time', 'The Economist', 'National Geographic',
+  'Wired', 'New Scientist', 'Science', 'Nature',
+  '60 Millions de Consommateurs', 'Que Choisir', 'Courrier International',
+];
+
+discoverRoutes.get(
+  '/magazines',
+  requireMediaType('magazine'),
+  async (req, res) => {
+    try {
+      const { searchMagazines } = await import(
+        '@server/api/googlebooks/magazines'
+      );
+      const apiKey =
+        getSettings().book?.metadataProviders?.googleBooksApiKey || undefined;
+      const query =
+        typeof req.query.query === 'string' && req.query.query.trim()
+          ? req.query.query.trim()
+          : undefined;
+      // Without a query we sample the curated list. We dedupe
+      // results post-fetch since Google Books often returns
+      // multiple editions of the same publication.
+      const queries = query ? [query] : MAGAZINES_DISCOVER_DEFAULTS;
+      const seen = new Set<string>();
+      const merged: {
+        id: string;
+        googleBooksId: string;
+        title: string;
+        publisher?: string;
+        issn?: string;
+        coverUrl?: string;
+        year?: number;
+        language?: string;
+        description?: string;
+        mediaType: 'magazine';
+      }[] = [];
+      for (const q of queries) {
+        const hits = await searchMagazines(q, { apiKey, maxResults: 6 });
+        for (const h of hits) {
+          const k = h.issn ? `issn:${h.issn}` : `t:${h.title.toLowerCase()}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          merged.push({
+            id: h.id,
+            googleBooksId: h.id,
+            title: h.title,
+            publisher: h.publisher,
+            issn: h.issn,
+            coverUrl: h.coverUrl,
+            year: h.year,
+            language: h.language,
+            description: h.description,
+            mediaType: 'magazine',
+          });
+        }
+        if (merged.length >= 40) break;
+      }
+      return res.status(200).json({
+        page: 1,
+        totalPages: 1,
+        totalResults: merged.length,
+        results: merged,
+      });
+    } catch (e) {
+      logger.error('discover.magazines failed', {
+        label: 'discover',
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return res.status(200).json({
+        page: 1,
+        totalPages: 1,
+        totalResults: 0,
+        results: [],
+      });
+    }
+  }
+);
+
 // Helper for the books / audiobooks year-range filter. Applied
 // post-fetch because no provider supports a clean ``year`` range
 // filter; we already have the year per row. Returns the array
