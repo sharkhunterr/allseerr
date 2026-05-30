@@ -15,6 +15,12 @@ export enum MediaType {
   MANGA = 'manga',
   COMIC = 'comic',
   MUSIC = 'music',
+  // Magazines / press / journals. Dispatched to Pressarr
+  // (kkodecs/pressarr — *arr-style periodical manager) when an
+  // operator has a default Pressarr instance configured.
+  // Metadata discovery via Google Books printType=magazines,
+  // with manual fallback when no API key is set.
+  MAGAZINE = 'magazine',
 }
 
 export enum MediaStatus {

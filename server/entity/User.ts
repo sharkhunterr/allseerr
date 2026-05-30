@@ -185,6 +185,12 @@ export class User {
   @Column({ nullable: true })
   public comicQuotaDays?: number;
 
+  @Column({ nullable: true })
+  public magazineQuotaLimit?: number;
+
+  @Column({ nullable: true })
+  public magazineQuotaDays?: number;
+
   @OneToOne(() => UserSettings, (settings) => settings.user, {
     cascade: true,
     eager: true,

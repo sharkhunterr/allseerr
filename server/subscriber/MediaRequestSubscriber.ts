@@ -844,7 +844,8 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
           entity.type === MediaType.AUDIOBOOK ||
           entity.type === MediaType.GAME ||
           entity.type === MediaType.MANGA ||
-          entity.type === MediaType.COMIC)
+          entity.type === MediaType.COMIC ||
+          entity.type === MediaType.MAGAZINE)
       ) {
         const requestRepository = getRepository(MediaRequest);
         const fullRequest = await requestRepository.findOne({

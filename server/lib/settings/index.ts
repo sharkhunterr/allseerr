@@ -209,6 +209,7 @@ export interface MainSettings {
     game: Quota;
     manga: Quota;
     comic: Quota;
+    magazine: Quota;
   };
   hideAvailable: boolean;
   hideBlocklisted: boolean;
@@ -293,6 +294,7 @@ interface FullPublicSettings extends PublicSettings {
   gameEnabled: boolean;
   mangaEnabled: boolean;
   comicEnabled: boolean;
+  magazineEnabled: boolean;
   // Optional admin-defined notices shown at the top of each request
   // modal. Empty string per scope = no notice. Surfaced via the
   // public settings endpoint so the modals (which run as any user)
@@ -653,6 +655,7 @@ export interface MediaTypeToggles {
   game: boolean;
   manga: boolean;
   comic: boolean;
+  magazine: boolean;
 }
 
 /** Severity drives the matching <Alert type=…> visual. */
@@ -685,6 +688,7 @@ export interface RequestNotices {
   game: RequestNoticeEntry;
   manga: RequestNoticeEntry;
   comic: RequestNoticeEntry;
+  magazine: RequestNoticeEntry;
 }
 
 export interface AllSettings {
@@ -746,6 +750,7 @@ class Settings {
           game: {},
           manga: {},
           comic: {},
+          magazine: {},
         },
         hideAvailable: false,
         hideBlocklisted: false,
@@ -1096,6 +1101,7 @@ class Settings {
         game: true,
         manga: true,
         comic: true,
+        magazine: true,
       },
       requestNotices: {
         global: { message: '', severity: 'info' },
@@ -1106,6 +1112,7 @@ class Settings {
         game: { message: '', severity: 'info' },
         manga: { message: '', severity: 'info' },
         comic: { message: '', severity: 'info' },
+        magazine: { message: '', severity: 'info' },
       },
       oidc: {
         enabled: false,
@@ -1266,6 +1273,7 @@ class Settings {
       game: stored?.game ?? true,
       manga: stored?.manga ?? true,
       comic: stored?.comic ?? true,
+      magazine: stored?.magazine ?? true,
     };
   }
 
@@ -1311,6 +1319,9 @@ class Settings {
       game: coerce(stored?.game as RequestNoticeEntry | string | undefined),
       manga: coerce(stored?.manga as RequestNoticeEntry | string | undefined),
       comic: coerce(stored?.comic as RequestNoticeEntry | string | undefined),
+      magazine: coerce(
+        stored?.magazine as RequestNoticeEntry | string | undefined
+      ),
     };
   }
 
@@ -1420,6 +1431,14 @@ class Settings {
         types.comic &&
         !!this.data.comic?.metadataProviders?.comicvine &&
         !!this.data.comic?.metadataProviders?.apiKey,
+      magazineEnabled:
+        // Magazines need a Pressarr instance OR Google Books
+        // suggestions OR pure manual entry — none of which we
+        // can detect cheaply here. Surface the tab whenever
+        // ``magazine`` is checked in Settings → Media Types; the
+        // discover page itself surfaces the right empty state
+        // when neither suggestion nor dispatcher are wired.
+        types.magazine,
       requestNotices: this.requestNotices,
     };
   }

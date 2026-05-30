@@ -58,6 +58,7 @@ requestNoticesRoutes.put('/', async (req, res) => {
       game: coerceEntry(body.game, current.game),
       manga: coerceEntry(body.manga, current.manga),
       comic: coerceEntry(body.comic, current.comic),
+      magazine: coerceEntry(body.magazine, current.magazine),
     };
 
     settings.requestNotices = next;
