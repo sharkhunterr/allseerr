@@ -15,6 +15,7 @@ import {
 import { getRepository } from '@server/datasource';
 import { AudiobookMedia } from '@server/entity/AudiobookMedia';
 import { BookMedia } from '@server/entity/BookMedia';
+import { MagazineMedia } from '@server/entity/MagazineMedia';
 import type { GameMedia as GameMediaType } from '@server/entity/GameMedia';
 import Media from '@server/entity/Media';
 import { MediaRequest } from '@server/entity/MediaRequest';
@@ -24,6 +25,7 @@ import notificationManager, { Notification } from '@server/lib/notifications';
 import { submitToBindery } from '@server/lib/services/binderyDispatcher';
 import { submitToBookshelf } from '@server/lib/services/bookshelfDispatcher';
 import { submitToLivrarr } from '@server/lib/services/livrarrDispatcher';
+import { submitToPressarr } from '@server/lib/services/pressarrDispatcher';
 import { submitToMylar } from '@server/lib/services/mylarDispatcher';
 import {
   romarrStillHasGame,
@@ -1325,6 +1327,55 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
    * approval. Skips silently when Mylar isn't enabled — manual
    * workflow (parallel to Suwayomi-for-manga / ROMM-for-games).
    */
+  public async sendToPressarr(entity: MediaRequest): Promise<void> {
+    if (entity.status !== MediaRequestStatus.APPROVED) {
+      return;
+    }
+    if (entity.type !== MediaType.MAGAZINE) {
+      return;
+    }
+
+    // MagazineMedia isn't eager-loaded on the bare event entity
+    // (subscriber-event scope), so re-fetch with the relation.
+    const requestRepo = getRepository(MediaRequest);
+    const fullRequest = await requestRepo.findOne({
+      where: { id: entity.id },
+      relations: ['magazineMedia'],
+    });
+    const media = fullRequest?.magazineMedia;
+    if (!media) {
+      return;
+    }
+
+    const result = await submitToPressarr(media);
+    const persist = async () => {
+      await getRepository(MagazineMedia).save(media as MagazineMedia);
+    };
+
+    if (result.success) {
+      media.statusReason = null;
+      await persist();
+    } else if (result.noInstance) {
+      // No Pressarr configured — leave a manual-workflow notice
+      // so the user understands why the request is sitting.
+      if (!media.statusReason) {
+        media.statusReason =
+          'No magazine download manager is configured. Pressarr can be enabled in Settings → Services → Magazines, or this request can be fulfilled manually.';
+        await persist();
+      }
+    } else {
+      media.statusReason = result.message
+        ? `Dispatch to Pressarr failed: ${result.message}`
+        : 'Dispatch to Pressarr failed.';
+      await persist();
+      logger.warn('Pressarr dispatch did not succeed', {
+        label: 'Media Request',
+        requestId: entity.id,
+        message: result.message,
+      });
+    }
+  }
+
   public async sendToMylar(entity: MediaRequest): Promise<void> {
     if (entity.status !== MediaRequestStatus.APPROVED) {
       return;
@@ -1488,6 +1539,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToBindery(event.entity as MediaRequest);
       await this.sendToBookshelf(event.entity as MediaRequest);
       await this.sendToLivrarr(event.entity as MediaRequest);
+      await this.sendToPressarr(event.entity as MediaRequest);
       await this.sendToSuwayomi(event.entity as MediaRequest);
       await this.sendToMylar(event.entity as MediaRequest);
       await this.sendToRomarr(event.entity as MediaRequest);
@@ -1533,6 +1585,7 @@ export class MediaRequestSubscriber implements EntitySubscriberInterface<MediaRe
       await this.sendToBindery(event.entity as MediaRequest);
       await this.sendToBookshelf(event.entity as MediaRequest);
       await this.sendToLivrarr(event.entity as MediaRequest);
+      await this.sendToPressarr(event.entity as MediaRequest);
       await this.sendToSuwayomi(event.entity as MediaRequest);
       await this.sendToMylar(event.entity as MediaRequest);
       await this.sendToRomarr(event.entity as MediaRequest);

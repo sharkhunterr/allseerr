@@ -112,6 +112,23 @@ export interface BookshelfSettings extends DVRSettings {
 }
 
 /**
+ * Pressarr — kkodecs/pressarr is the *arr-style periodical /
+ * magazine manager. Same dispatch contract as Bindery /
+ * Bookshelf except the mediaType is fixed to ``magazine``
+ * (pressarr only handles periodicals). POST /api/v1/magazine
+ * needs a rootFolderId + qualityProfileId — we surface both
+ * through the standard DVRSettings ``activeProfileId`` +
+ * ``activeDirectory`` fields (the test endpoint enumerates
+ * pressarr's options so the modal can offer dropdowns).
+ *
+ * Auth is the standard ``X-Api-Key`` header that the rest of
+ * the *arr family uses.
+ */
+export interface PressarrSettings extends DVRSettings {
+  mediaType: 'magazine';
+}
+
+/**
  * Livrarr — kkodecs/livrarr is an *arr-style ebook + audiobook
  * acquisition service (Rust, single Docker image, Hardcover /
  * OpenLibrary / Audnexus metadata, Prowlarr indexers, qBittorrent
@@ -705,6 +722,7 @@ export interface AllSettings {
   bindery: BinderySettings[];
   bookshelf: BookshelfSettings[];
   livrarr: LivrarrSettings[];
+  pressarr: PressarrSettings[];
   romarr: RomarrSettings[];
   public: PublicSettings;
   notifications: NotificationSettings;
@@ -800,6 +818,7 @@ class Settings {
       bindery: [],
       bookshelf: [],
       livrarr: [],
+      pressarr: [],
       romarr: [],
       public: {
         initialized: false,
@@ -1213,6 +1232,14 @@ class Settings {
 
   set livrarr(data: LivrarrSettings[]) {
     this.data.livrarr = data;
+  }
+
+  get pressarr(): PressarrSettings[] {
+    return this.data.pressarr ?? [];
+  }
+
+  set pressarr(data: PressarrSettings[]) {
+    this.data.pressarr = data;
   }
 
   get romarr(): RomarrSettings[] {
