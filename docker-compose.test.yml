@@ -314,6 +314,56 @@ services:
       - allseerr-test
 
   # ===========================================================
+  # Suwayomi (Tachidesk) — manga download manager + reader.
+  # Allseerr's submitToSuwayomi dispatcher posts approved manga
+  # requests here; Suwayomi pulls them from its catalogue of
+  # online sources and stores them under /downloads.
+  # ===========================================================
+  suwayomi:
+    image: ghcr.io/suwayomi/tachidesk:latest
+    container_name: allseerr-test-suwayomi
+    restart: unless-stopped
+    environment:
+      TZ: "Europe/Paris"
+      # Default-deny basic auth (admin sets a password from the
+      # WebUI on first visit). Open WebUI defaults are fine on
+      # a LAN-only test stack.
+      BIND_IP: "0.0.0.0"
+      BIND_PORT: "4567"
+    volumes:
+      - ./data/suwayomi:/home/suwayomi/.local/share/Tachidesk
+      - ./data/library/manga:/manga
+      - ./data/downloads:/downloads
+    ports:
+      - "4567:4567"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Mylar3 — comic acquisition + monitor (Sonarr-shaped). Reads
+  # qBit-completed CBR/CBZ files from /downloads, writes
+  # imported comics into /comics where Grimmory + ABS see them.
+  # ===========================================================
+  mylar:
+    image: lscr.io/linuxserver/mylar3:latest
+    container_name: allseerr-test-mylar
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Europe/Paris"
+    volumes:
+      - ./data/mylar:/config
+      - ./data/library/comics:/comics
+      - ./data/downloads:/downloads
+    ports:
+      - "8090:8090"
+    depends_on:
+      - qbittorrent
+    networks:
+      - allseerr-test
+
+  # ===========================================================
   # Grabarr — magazine grabber (Bookys + AnnaArchive + IA…).
   # Depends on flaresolverr to bypass CloudFlare on some
   # sources. Builds from local repo.

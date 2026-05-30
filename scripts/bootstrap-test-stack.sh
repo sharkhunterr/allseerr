@@ -44,8 +44,18 @@ AUDIOBOOKSHELF_HOST="localhost"
 AUDIOBOOKSHELF_PORT=13378
 BINDERY_HOST="localhost"
 BINDERY_PORT=8787
+LIVRARR_HOST="localhost"
+LIVRARR_PORT=8789
+GRIMMORY_HOST="localhost"
+GRIMMORY_PORT=6060
 PRESSARR_HOST="localhost"
 PRESSARR_PORT=8084
+GRABARR_HOST="localhost"
+GRABARR_PORT=8086
+SUWAYOMI_HOST="localhost"
+SUWAYOMI_PORT=4567
+MYLAR_HOST="localhost"
+MYLAR_PORT=8090
 QBITTORRENT_HOST="localhost"
 QBITTORRENT_PORT=8088
 
@@ -93,10 +103,10 @@ jq \
   end
 ' "${TMP}" > "${TMP}.2" && mv "${TMP}.2" "${TMP}"
 
-# Bindery — same multi-instance shape. Pre-create one default
-# instance for "book" mediaType. Audiobook can be a second
-# instance pointing at the same Bindery — Bindery itself
-# handles both formats, so the same hostname+port is fine.
+# Bindery — multi-instance shape. Pre-create one default
+# instance for "book" mediaType. (Audiobook can be a second
+# instance pointing at the same Bindery URL — Bindery handles
+# both formats from one running instance.)
 jq \
   --arg binderyHost "${BINDERY_HOST}" \
   --argjson binderyPort "${BINDERY_PORT}" '
@@ -115,6 +125,60 @@ jq \
       "activeProfileId": 1,
       "activeProfileName": "Standard",
       "activeDirectory": "/books",
+      "tags": [],
+      "preventSearch": false,
+      "syncEnabled": false,
+      "tagRequests": false
+    }])
+  end
+' "${TMP}" > "${TMP}.2" && mv "${TMP}.2" "${TMP}"
+
+# Livrarr — slim downloader (no quality profile / root folder
+# picker, configured globally inside Livrarr). Pre-create one
+# instance for "book" so the Settings UI shows it filled in.
+jq \
+  --arg livrarrHost "${LIVRARR_HOST}" \
+  --argjson livrarrPort "${LIVRARR_PORT}" '
+  if (.livrarr // []) | any(.hostname == $livrarrHost and .port == $livrarrPort) then
+    .
+  else
+    .livrarr = ((.livrarr // []) + [{
+      "id": ((.livrarr // []) | length),
+      "name": "Livrarr (test stack)",
+      "hostname": $livrarrHost,
+      "port": $livrarrPort,
+      "apiKey": "",
+      "useSsl": false,
+      "isDefault": false,
+      "mediaType": "book",
+      "preventSearch": false
+    }])
+  end
+' "${TMP}" > "${TMP}.2" && mv "${TMP}.2" "${TMP}"
+
+# Pressarr — magazine downloader. Same DVRSettings shape as
+# Bookshelf (activeProfileId + activeDirectory) — the operator
+# fills the API key + activeDirectory via the UI once the
+# Pressarr instance has been initialised through its setup
+# wizard.
+jq \
+  --arg pressarrHost "${PRESSARR_HOST}" \
+  --argjson pressarrPort "${PRESSARR_PORT}" '
+  if (.pressarr // []) | any(.hostname == $pressarrHost and .port == $pressarrPort) then
+    .
+  else
+    .pressarr = ((.pressarr // []) + [{
+      "id": ((.pressarr // []) | length),
+      "name": "Pressarr (test stack)",
+      "hostname": $pressarrHost,
+      "port": $pressarrPort,
+      "apiKey": "",
+      "useSsl": false,
+      "isDefault": true,
+      "mediaType": "magazine",
+      "activeProfileId": 1,
+      "activeProfileName": "Standard",
+      "activeDirectory": "/magazines",
       "tags": [],
       "preventSearch": false,
       "syncEnabled": false,
@@ -146,6 +210,11 @@ else
   echo "  Romarr         http://${ROMARR_HOST}:${ROMARR_PORT}"
   echo "  Audiobookshelf http://${AUDIOBOOKSHELF_HOST}:${AUDIOBOOKSHELF_PORT}"
   echo "  Bindery        http://${BINDERY_HOST}:${BINDERY_PORT}"
+  echo "  Livrarr        http://${LIVRARR_HOST}:${LIVRARR_PORT}"
+  echo "  Grimmory       http://${GRIMMORY_HOST}:${GRIMMORY_PORT}"
   echo "  Pressarr       http://${PRESSARR_HOST}:${PRESSARR_PORT}"
+  echo "  Grabarr        http://${GRABARR_HOST}:${GRABARR_PORT}"
+  echo "  Suwayomi       http://${SUWAYOMI_HOST}:${SUWAYOMI_PORT}"
+  echo "  Mylar3         http://${MYLAR_HOST}:${MYLAR_PORT}"
   echo "  qBittorrent    http://${QBITTORRENT_HOST}:${QBITTORRENT_PORT}"
 fi
