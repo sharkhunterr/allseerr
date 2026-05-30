@@ -13,6 +13,7 @@ import LibraryServerSettings from '@app/components/Settings/BooksAudiobooks/Libr
 import BookshelfModal from '@app/components/Settings/BookshelfModal';
 import LivrarrModal from '@app/components/Settings/LivrarrModal';
 import SettingsMylar from '@app/components/Settings/MangaComics/SettingsMylar';
+import PressarrModal from '@app/components/Settings/PressarrModal';
 import SettingsSuwayomi from '@app/components/Settings/MangaComics/SettingsSuwayomi';
 import OverrideRuleModal from '@app/components/Settings/OverrideRule/OverrideRuleModal';
 import OverrideRuleTiles from '@app/components/Settings/OverrideRule/OverrideRuleTiles';
@@ -36,6 +37,7 @@ import type {
   BinderySettings,
   BookshelfSettings,
   LivrarrSettings,
+  PressarrSettings,
   RadarrSettings,
   RomarrSettings,
   SonarrSettings,
@@ -81,6 +83,14 @@ const messages = defineMessages('components.Settings', {
   deletelivrarrserver: 'Delete Livrarr Server',
   noDefaultLivrarr:
     'At least one Livrarr server must be marked as default for {mediaType} requests to be processed.',
+  addpressarr: 'Add Pressarr Server',
+  pressarrsettings: 'Pressarr Settings',
+  pressarrSettingsDescription:
+    'Configure your Pressarr server(s) below. Pressarr is an *arr-style periodical / magazine manager — Google Books / DOAJ / ISSN portal metadata, Prowlarr indexers, qBittorrent / SABnzbd downloaders. One instance per magazine catalogue.',
+  deletepressarrserver: 'Delete Pressarr Server',
+  noDefaultPressarr:
+    'At least one Pressarr server must be marked as default for magazine requests to be processed.',
+  magazinetabLabel: 'Magazines',
   mediaTypeBook: 'book',
   mediaTypeAudiobook: 'audiobook',
   binderyMediaTypeBook: 'Books',
@@ -1167,11 +1177,142 @@ const RomarrServices = () => {
   );
 };
 
+const PressarrServices = () => {
+  const intl = useIntl();
+  const {
+    data: pressarrData,
+    error: pressarrError,
+    mutate: revalidatePressarr,
+  } = useSWR<PressarrSettings[]>('/api/v1/settings/pressarr');
+  const [editPressarrModal, setEditPressarrModal] = useState<{
+    open: boolean;
+    pressarr: PressarrSettings | null;
+  }>({ open: false, pressarr: null });
+  const [deletePressarrModal, setDeletePressarrModal] = useState<{
+    open: boolean;
+    serverId: number | null;
+  }>({ open: false, serverId: null });
+
+  const deleteServer = async () => {
+    await axios.delete(
+      `/api/v1/settings/pressarr/${deletePressarrModal.serverId}`
+    );
+    setDeletePressarrModal({ open: false, serverId: null });
+    revalidatePressarr();
+    mutate('/api/v1/settings/public');
+  };
+
+  return (
+    <>
+      <div className="mb-6">
+        <h3 className="heading">
+          {intl.formatMessage(messages.pressarrsettings)}
+        </h3>
+        <p className="description">
+          {intl.formatMessage(messages.pressarrSettingsDescription)}
+        </p>
+      </div>
+      {editPressarrModal.open && (
+        <PressarrModal
+          pressarr={editPressarrModal.pressarr}
+          onClose={() =>
+            setEditPressarrModal({ open: false, pressarr: null })
+          }
+          onSave={() => {
+            revalidatePressarr();
+            mutate('/api/v1/settings/public');
+            setEditPressarrModal({ open: false, pressarr: null });
+          }}
+        />
+      )}
+      <Transition
+        as={Fragment}
+        show={deletePressarrModal.open}
+        enter="transition-opacity ease-in-out duration-300"
+        enterFrom="opacity-0"
+        enterTo="opacity-100"
+        leave="transition-opacity ease-in-out duration-300"
+        leaveFrom="opacity-100"
+        leaveTo="opacity-0"
+      >
+        <Modal
+          okText={intl.formatMessage(globalMessages.delete)}
+          okButtonType="danger"
+          onOk={() => deleteServer()}
+          onCancel={() =>
+            setDeletePressarrModal({ open: false, serverId: null })
+          }
+          title={intl.formatMessage(messages.deletepressarrserver)}
+        >
+          {intl.formatMessage(messages.deleteserverconfirm)}
+        </Modal>
+      </Transition>
+      <div className="section">
+        {!pressarrData && !pressarrError && <LoadingSpinner />}
+        {pressarrData && !pressarrError && (
+          <>
+            {pressarrData.length > 0 &&
+              !pressarrData.some((p) => p.isDefault) && (
+                <Alert
+                  title={intl.formatMessage(messages.noDefaultPressarr)}
+                />
+              )}
+            <ul className="grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+              {pressarrData.map((pressarr) => (
+                <ServerInstance
+                  key={`pressarr-config-${pressarr.id}`}
+                  name={pressarr.name}
+                  hostname={pressarr.hostname}
+                  port={pressarr.port}
+                  profileName={pressarr.activeProfileName}
+                  isSSL={pressarr.useSsl}
+                  isDefault={pressarr.isDefault}
+                  isBindery
+                  externalUrl={pressarr.externalUrl}
+                  onEdit={() =>
+                    setEditPressarrModal({ open: true, pressarr })
+                  }
+                  onDelete={() =>
+                    setDeletePressarrModal({
+                      open: true,
+                      serverId: pressarr.id,
+                    })
+                  }
+                />
+              ))}
+              <li className="col-span-1 h-32 rounded-lg border-2 border-dashed border-gray-400 shadow sm:h-44">
+                <div className="flex h-full w-full items-center justify-center">
+                  <Button
+                    buttonType="ghost"
+                    className="mb-3 mt-3"
+                    onClick={() =>
+                      setEditPressarrModal({ open: true, pressarr: null })
+                    }
+                  >
+                    <PlusIcon />
+                    <span>{intl.formatMessage(messages.addpressarr)}</span>
+                  </Button>
+                </div>
+              </li>
+            </ul>
+          </>
+        )}
+      </div>
+    </>
+  );
+};
+
 const SettingsServices = () => {
   const intl = useIntl();
   const { currentSettings } = useSettings();
   const [activeTab, setActiveTab] = useState<
-    'movies-tv' | 'books' | 'audiobooks' | 'manga' | 'comics' | 'games'
+    | 'movies-tv'
+    | 'books'
+    | 'audiobooks'
+    | 'manga'
+    | 'comics'
+    | 'games'
+    | 'magazines'
   >('movies-tv');
 
   // Per-type tabs only show when their master toggle is on. Suwayomi
@@ -1211,6 +1352,14 @@ const SettingsServices = () => {
           },
         ]
       : []),
+    ...(currentSettings.magazineEnabled
+      ? [
+          {
+            key: 'magazines' as const,
+            label: intl.formatMessage(messages.magazinetabLabel),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -1247,6 +1396,7 @@ const SettingsServices = () => {
       {activeTab === 'manga' && <SettingsSuwayomi />}
       {activeTab === 'comics' && <SettingsMylar />}
       {activeTab === 'games' && <RomarrServices />}
+      {activeTab === 'magazines' && <PressarrServices />}
     </>
   );
 };

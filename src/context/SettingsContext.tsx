@@ -39,6 +39,7 @@ const defaultSettings: PublicSettingsResponse = {
   gameEnabled: false,
   mangaEnabled: false,
   comicEnabled: false,
+  magazineEnabled: false,
   requestNotices: {
     global: { message: '', severity: 'info' },
     movie: { message: '', severity: 'info' },
@@ -48,6 +49,7 @@ const defaultSettings: PublicSettingsResponse = {
     game: { message: '', severity: 'info' },
     manga: { message: '', severity: 'info' },
     comic: { message: '', severity: 'info' },
+    magazine: { message: '', severity: 'info' },
   },
 };
 

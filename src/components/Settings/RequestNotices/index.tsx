@@ -132,6 +132,7 @@ const RequestNoticesSection = () => {
     game: blank,
     manga: blank,
     comic: blank,
+    magazine: blank,
   };
 
   return (

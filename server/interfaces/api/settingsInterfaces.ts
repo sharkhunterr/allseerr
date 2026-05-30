@@ -37,6 +37,7 @@ export interface RequestNotices {
   game: RequestNoticeEntry;
   manga: RequestNoticeEntry;
   comic: RequestNoticeEntry;
+  magazine: RequestNoticeEntry;
 }
 
 export interface PublicSettingsResponse {
@@ -74,6 +75,7 @@ export interface PublicSettingsResponse {
   gameEnabled: boolean;
   mangaEnabled: boolean;
   comicEnabled: boolean;
+  magazineEnabled: boolean;
   requestNotices: RequestNotices;
 }
 

@@ -9,6 +9,7 @@ import { Transition } from '@headlessui/react';
 import {
   BookmarkIcon,
   BookOpenIcon,
+  NewspaperIcon,
   ClockIcon,
   CogIcon,
   ExclamationTriangleIcon,
@@ -34,6 +35,7 @@ export const menuMessages = defineMessages('components.Layout.Sidebar', {
   browsegames: 'Games',
   browsemanga: 'Manga',
   browsecomics: 'Comics',
+  browsemagazines: 'Magazines',
   browsebooks: 'Books',
   browseaudiobooks: 'Audiobooks',
   requests: 'Requests',
@@ -71,7 +73,8 @@ interface SidebarLinkProps {
     | 'mangaEnabled'
     | 'comicEnabled'
     | 'bookEnabled'
-    | 'audiobookEnabled';
+    | 'audiobookEnabled'
+    | 'magazineEnabled';
 }
 
 const SidebarLinks: SidebarLinkProps[] = [
@@ -131,6 +134,13 @@ const SidebarLinks: SidebarLinkProps[] = [
     svgIcon: <MusicalNoteIcon className="mr-3 h-6 w-6" />,
     activeRegExp: /^\/discover\/audiobooks$/,
     settingsFlag: 'audiobookEnabled',
+  },
+  {
+    href: '/discover/magazines',
+    messagesKey: 'browsemagazines',
+    svgIcon: <NewspaperIcon className="mr-3 h-6 w-6" />,
+    activeRegExp: /^\/discover\/magazines$/,
+    settingsFlag: 'magazineEnabled',
   },
   {
     href: '/requests',
