@@ -1523,11 +1523,11 @@ discoverRoutes.get('/comics', requireMediaType('comic'), async (req, res) => {
 // well-known periodicals when no query is provided, plus
 // honour an optional ``?query=`` param that delegates straight
 // to Google Books — the same shape the search endpoint uses.
-const MAGAZINES_DISCOVER_DEFAULTS = [
-  'Le Monde', 'Time', 'The Economist', 'National Geographic',
-  'Wired', 'New Scientist', 'Science', 'Nature',
-  '60 Millions de Consommateurs', 'Que Choisir', 'Courrier International',
-];
+// Curated default list — 4 entries (was 11). Each query hits
+// Google Books once; running them in parallel keeps the
+// response under 2-3s on a cold cache. More entries = more
+// breadth but burns more quota AND blocks the page rendering.
+const MAGAZINES_DISCOVER_DEFAULTS = ['Time', 'The Economist', 'Wired', 'Nature'];
 
 discoverRoutes.get(
   '/magazines',
@@ -1543,10 +1543,14 @@ discoverRoutes.get(
         typeof req.query.query === 'string' && req.query.query.trim()
           ? req.query.query.trim()
           : undefined;
-      // Without a query we sample the curated list. We dedupe
-      // results post-fetch since Google Books often returns
-      // multiple editions of the same publication.
       const queries = query ? [query] : MAGAZINES_DISCOVER_DEFAULTS;
+      // Parallel fan-out — Google Books's per-query latency
+      // dominates; sequential would be ~4x slower. Promise.all
+      // is safe because searchMagazines catches its own errors
+      // and returns [] on failure.
+      const batches = await Promise.all(
+        queries.map((q) => searchMagazines(q, { apiKey, maxResults: 6 }))
+      );
       const seen = new Set<string>();
       const merged: {
         id: string;
@@ -1560,8 +1564,7 @@ discoverRoutes.get(
         description?: string;
         mediaType: 'magazine';
       }[] = [];
-      for (const q of queries) {
-        const hits = await searchMagazines(q, { apiKey, maxResults: 6 });
+      for (const hits of batches) {
         for (const h of hits) {
           const k = h.issn ? `issn:${h.issn}` : `t:${h.title.toLowerCase()}`;
           if (seen.has(k)) continue;
@@ -1578,6 +1581,7 @@ discoverRoutes.get(
             description: h.description,
             mediaType: 'magazine',
           });
+          if (merged.length >= 40) break;
         }
         if (merged.length >= 40) break;
       }

@@ -8821,6 +8821,178 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+  /discover/magazines:
+    get:
+      summary: Magazines discover via Google Books printType=magazines
+      description: Returns a merged list — either a curated default
+        set of well-known periodicals when no ``query`` is given,
+        or Google Books search results for the supplied query.
+        Returns 503 when the ``magazine`` media type is disabled.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: query
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /magazine/search:
+    get:
+      summary: Free-text magazine search
+      description: Merges Google Books printType=magazines hits with
+        Pressarr's /magazine/lookup when a default instance is
+        configured. Deduplicated by ISSN or lowercased title.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /magazine/{id}:
+    get:
+      summary: Single magazine detail by Google Books volume id
+      tags:
+        - search
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Magazine
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: Not found
+  /settings/pressarr:
+    get:
+      summary: Get Pressarr settings
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+    post:
+      summary: Create Pressarr instance
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /settings/pressarr/test:
+    post:
+      summary: Test Pressarr configuration
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname: { type: string }
+                port: { type: number }
+                apiKey: { type: string }
+                useSsl: { type: boolean }
+                baseUrl: { type: string }
+              required: [hostname, port, apiKey]
+      responses:
+        '200':
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /settings/pressarr/{pressarrId}:
+    put:
+      summary: Update Pressarr instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: pressarrId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    delete:
+      summary: Delete Pressarr instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: pressarrId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
   /discover/genreslider/books:
     get:
       summary: Curated list of book genres for the dashboard genre slider

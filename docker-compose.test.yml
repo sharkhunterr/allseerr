@@ -34,14 +34,26 @@
 # Volumes are stored under ./data/<service>/ so a full reset is
 # ``docker compose -f docker-compose.test.yml down -v && rm -rf data/``.
 
+# ============================================================
+# Shared host paths (created on first ``up``)
+# ============================================================
+#
+# ./data/downloads        ← qBit drops here, every *arr reads
+# ./data/library/books    ← Bindery + Livrarr + Audiobookshelf + Grimmory + CWA share
+# ./data/library/audiobooks ← Bindery + Livrarr + Audiobookshelf share
+# ./data/library/comics   ← Grimmory + Mylar share
+# ./data/library/magazines ← Pressarr stores here
+# ./data/library/games    ← Romarr writes, ROMM reads
+#
+# Every container that mounts the same host path mounts it at
+# the SAME target inside its container so importers + library
+# scanners see identical absolute paths — no remote-path
+# mappings required between services.
+
 volumes:
-  # Shared download landing zone — qBit writes completed
-  # downloads here, and Bindery / Romarr / Grabarr read the
-  # SAME absolute path inside their containers (``/downloads``)
-  # because all three mount the host directory at the same
-  # target. This is how the importers see qBit's output.
   romm_redis:
   romm_db:
+  grimmory_db:
 
 networks:
   allseerr-test:
@@ -172,12 +184,14 @@ services:
     volumes:
       - ./data/audiobookshelf/config:/config
       - ./data/audiobookshelf/metadata:/metadata
-      # Audiobookshelf scans these; Bindery drops imported
-      # audiobooks into ``/audiobooks`` and ebooks into
-      # ``/books`` (same host paths exposed to Bindery below).
+      # Audiobookshelf scans all four library mounts. Same host
+      # paths Bindery / Livrarr / Grimmory write to so a single
+      # imported file surfaces in every library server that has
+      # the matching library type configured.
       - ./data/library/audiobooks:/audiobooks
       - ./data/library/books:/books
       - ./data/library/podcasts:/podcasts
+      - ./data/library/comics:/comics
     ports:
       - "13378:80"
     networks:
@@ -207,6 +221,95 @@ services:
       - "8787:8787"
     depends_on:
       - qbittorrent
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Livrarr — alternative book + audiobook acquisition service
+  # (kkodecs/livrarr — Rust + React, Hardcover / OpenLibrary /
+  # Audnexus metadata, ships finished files to CWA / ABS). Same
+  # /books + /audiobooks library mounts as Bindery so both can
+  # coexist + an operator can A/B them by toggling which is the
+  # default in allseerr's Settings → Services → Books.
+  # ===========================================================
+  livrarr:
+    image: ghcr.io/kkodecs/livrarr:latest
+    container_name: allseerr-test-livrarr
+    restart: unless-stopped
+    volumes:
+      - ./data/livrarr:/config
+      - ./data/library/books:/books
+      - ./data/library/audiobooks:/audiobooks
+      - ./data/downloads:/downloads
+    ports:
+      - "8789:8789"
+    depends_on:
+      - qbittorrent
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Grimmory — self-hosted digital library for ebooks + comics
+  # (Booklore community fork). Reads the SAME ``./data/library/
+  # books`` directory Bindery / Livrarr write to, so books
+  # imported by either of them surface in Grimmory's reader
+  # automatically. Also mounts ``./data/library/comics`` so
+  # CBR/CBZ files land in a dedicated reader catalogue.
+  #
+  # Needs its own MariaDB (separate from ROMM's because
+  # Grimmory's schema is incompatible).
+  # ===========================================================
+  grimmory-db:
+    image: lscr.io/linuxserver/mariadb:11.4.5
+    container_name: allseerr-test-grimmory-db
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Europe/Paris"
+      MYSQL_ROOT_PASSWORD: "grimmoryrootpw"
+      MYSQL_DATABASE: "grimmory"
+      MYSQL_USER: "grimmory"
+      MYSQL_PASSWORD: "grimmorypw"
+    volumes:
+      - grimmory_db:/config
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - allseerr-test
+
+  grimmory:
+    image: grimmory/grimmory:latest
+    container_name: allseerr-test-grimmory
+    restart: unless-stopped
+    depends_on:
+      grimmory-db:
+        condition: service_healthy
+    environment:
+      USER_ID: "1000"
+      GROUP_ID: "1000"
+      TZ: "Europe/Paris"
+      DATABASE_URL: "jdbc:mariadb://grimmory-db:3306/grimmory"
+      DATABASE_USERNAME: "grimmory"
+      DATABASE_PASSWORD: "grimmorypw"
+      API_DOCS_ENABLED: "true"
+      DISK_TYPE: "LOCAL"
+    volumes:
+      - ./data/grimmory/data:/app/data
+      # Shared with Bindery + Livrarr — same host path mounted
+      # at /books inside Grimmory so all three see identical
+      # absolute paths.
+      - ./data/library/books:/books
+      - ./data/library/comics:/comics
+      # Dedicated "bookdrop" Grimmory scans for opportunistic
+      # imports — operator can drop a stray PDF here without
+      # routing it through Bindery.
+      - ./data/grimmory/bookdrop:/bookdrop
+    ports:
+      - "6060:6060"
     networks:
       - allseerr-test
 
