@@ -501,7 +501,7 @@ export interface BookSettings {
   grimmory: {
     url: string;
     publicUrl: string;
-    email: string;
+    username: string;
     password: string;
     pollIntervalMinutes: number;
     enabled: boolean;
@@ -1053,7 +1053,7 @@ class Settings {
         grimmory: {
           url: '',
           publicUrl: '',
-          email: '',
+          username: '',
           password: '',
           pollIntervalMinutes: 15,
           enabled: false,

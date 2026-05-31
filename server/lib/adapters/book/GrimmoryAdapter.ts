@@ -12,7 +12,7 @@ interface GrimmoryConfig {
   hostname: string;
   port: number;
   useSsl: boolean;
-  email: string;
+  username: string;
   password: string;
   baseUrl?: string;
 }
@@ -55,7 +55,7 @@ interface GrimmoryLibrary {
 
 /**
  * Grimmory adapter for ebook/book library management.
- * Auth via JWT (email + password) with automatic refresh.
+ * Auth via JWT (username + password) with automatic refresh.
  * https://github.com/bannert1337/grimmory-mcp (derived from live API usage)
  */
 export class GrimmoryAdapter implements BookLibraryAdapter {
@@ -80,9 +80,10 @@ export class GrimmoryAdapter implements BookLibraryAdapter {
 
     if (this.refreshToken && Date.now() < this.tokenExpiresAt + 300_000) {
       try {
-        const refreshResponse = await this.axios.post('/api/auth/refresh', {
-          refreshToken: this.refreshToken,
-        });
+        const refreshResponse = await this.axios.post(
+          '/api/v1/auth/refresh',
+          { refreshToken: this.refreshToken }
+        );
         this.accessToken = refreshResponse.data?.accessToken;
         this.refreshToken = refreshResponse.data?.refreshToken;
         this.tokenExpiresAt = Date.now() + 15 * 60 * 1000;
@@ -92,8 +93,8 @@ export class GrimmoryAdapter implements BookLibraryAdapter {
       }
     }
 
-    const response = await this.axios.post('/api/auth/login', {
-      username: this.config.email,
+    const response = await this.axios.post('/api/v1/auth/login', {
+      username: this.config.username,
       password: this.config.password,
     });
     this.accessToken = response.data?.accessToken;
