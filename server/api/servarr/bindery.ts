@@ -129,6 +129,43 @@ class BinderyAPI extends ServarrBase<{ bookId: number }> {
     }
   };
 
+  /**
+   * Resolve a book through Bindery's metadata pipeline by ISBN. Returns the
+   * foreignBookId / foreignAuthorId Bindery's currently-active primary
+   * provider would use — i.e. always OpenLibrary `OL...W` / `OL...A` IDs.
+   * Lets us bridge from a different upstream catalogue (e.g. Hardcover)
+   * by funnelling an ISBN through this single call.
+   */
+  public lookupBookByIsbn = async (
+    isbn: string
+  ): Promise<{
+    foreignBookId: string;
+    foreignAuthorId?: string;
+    authorName?: string;
+    title: string;
+  } | null> => {
+    try {
+      const response = await this.axios.get<{
+        foreignBookId: string;
+        title: string;
+        author?: { foreignAuthorId?: string; authorName?: string };
+      }>('/book/lookup', { params: { isbn } });
+      return {
+        foreignBookId: response.data.foreignBookId,
+        foreignAuthorId: response.data.author?.foreignAuthorId,
+        authorName: response.data.author?.authorName,
+        title: response.data.title,
+      };
+    } catch (e) {
+      logger.warn('Bindery ISBN lookup failed', {
+        label: 'Bindery API',
+        errorMessage: e.message,
+        isbn,
+      });
+      return null;
+    }
+  };
+
   public getBooks = async (): Promise<BinderyBook[]> => {
     try {
       const response = await this.axios.get<BinderyBook[]>('/book');
