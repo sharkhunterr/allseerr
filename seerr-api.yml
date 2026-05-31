@@ -8823,16 +8823,23 @@ paths:
                 additionalProperties: true
   /discover/magazines:
     get:
-      summary: Magazines discover via Google Books printType=magazines
-      description: Returns a merged list — either a curated default
-        set of well-known periodicals when no ``query`` is given,
-        or Google Books search results for the supplied query.
-        Returns 503 when the ``magazine`` media type is disabled.
+      summary: Magazines discover via the ISSN-first cascade
+      description: Returns a merged list — pressarr's cascade
+        (ZDB + Wikidata + BnF + Google Books + Internet Archive,
+        ISSN-deduped) when a default pressarr instance is
+        configured; Google Books printType=magazines otherwise.
+        Curated default set covers FR + worldwide press when no
+        ``query`` is given. Returns 503 when the ``magazine``
+        media type is disabled.
       tags:
         - search
       parameters:
         - in: query
           name: query
+          schema:
+            type: string
+        - in: query
+          name: locale
           schema:
             type: string
         - in: query
@@ -8850,16 +8857,22 @@ paths:
                 additionalProperties: true
   /magazine/search:
     get:
-      summary: Free-text magazine search
-      description: Merges Google Books printType=magazines hits with
-        Pressarr's /magazine/lookup when a default instance is
-        configured. Deduplicated by ISSN or lowercased title.
+      summary: Free-text magazine search via the ISSN-first cascade
+      description: Forwards to pressarr's /magazine/lookup (cascade-aggregated)
+        when a default instance is configured; falls back to Google
+        Books printType=magazines otherwise. Optional locale biases
+        ranking server-side.
       tags:
         - search
       parameters:
         - in: query
           name: query
           required: true
+          schema:
+            type: string
+        - in: query
+          name: locale
+          required: false
           schema:
             type: string
       responses:
@@ -8872,13 +8885,19 @@ paths:
                 additionalProperties: true
   /magazine/{id}:
     get:
-      summary: Single magazine detail by Google Books volume id
+      summary: Single magazine detail
+      description: id is either issn:NNNN-NNNN, wd:Q123, pressarr:..., or a Google Books volume id.
       tags:
         - search
       parameters:
         - in: path
           name: id
           required: true
+          schema:
+            type: string
+        - in: query
+          name: locale
+          required: false
           schema:
             type: string
       responses:
@@ -8891,6 +8910,32 @@ paths:
                 additionalProperties: true
         '404':
           description: Not found
+  /magazine/request:
+    post:
+      summary: Create a magazine request
+      tags:
+        - request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden
+        '409':
+          description: Duplicate request
   /settings/pressarr:
     get:
       summary: Get Pressarr settings

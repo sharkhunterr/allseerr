@@ -9,9 +9,13 @@ const messages = defineMessages('components.MagazineCard', {
 });
 
 interface MagazineCardProps {
-  // Google Books volume id (or pressarr metadata provider id —
-  // both flavours flow through the same /magazine/{id} route).
-  googleBooksId: string;
+  // Cascade-shaped magazine key. Shape varies by source:
+  //   * ``issn:NNNN-NNNN`` — cascade ISSN hit (ZDB / Wikidata / BnF)
+  //   * ``wd:Q123`` — Wikidata-only hit (no ISSN known)
+  //   * ``pressarr:<provider_id>`` — pressarr's local catalogue
+  //   * ``<google-books-volume-id>`` — legacy Google Books fallback
+  // The /magazine/{id} route handler dispatches by prefix.
+  id: string;
   title: string;
   coverUrl?: string;
   year?: number;
@@ -19,6 +23,8 @@ interface MagazineCardProps {
   issn?: string;
   description?: string;
   language?: string;
+  country?: string;
+  categories?: string[];
   issueCount?: number;
   // Live count populated by pressarr availability scanning
   // (commit 4+). Drives PARTIALLY_AVAILABLE when 0 < available
@@ -28,7 +34,7 @@ interface MagazineCardProps {
 }
 
 const MagazineCard = ({
-  googleBooksId,
+  id,
   title,
   coverUrl,
   year,
@@ -36,6 +42,8 @@ const MagazineCard = ({
   issn,
   description,
   language,
+  country,
+  categories: _categories,
   issueCount,
   availableIssues,
   mediaStatus,
@@ -49,6 +57,15 @@ const MagazineCard = ({
   // vs "Le Monde Diplomatique" etc.).
   const parts: string[] = [];
   if (publisher) parts.push(publisher);
+  if (country && /^[A-Z]{2}$/i.test(country)) {
+    parts.push(
+      country
+        .toUpperCase()
+        .split('')
+        .map((c) => String.fromCodePoint(127397 + c.charCodeAt(0)))
+        .join('')
+    );
+  }
   if (issn) parts.push(`ISSN ${issn}`);
   else if (language) parts.push(language.toUpperCase());
   if (typeof issueCount === 'number' && issueCount > 0) {
@@ -72,7 +89,7 @@ const MagazineCard = ({
 
   return (
     <MediaTitleCard
-      href={`/magazine/${encodeURIComponent(googleBooksId)}`}
+      href={`/magazine/${encodeURIComponent(id)}`}
       coverUrl={coverUrl}
       title={title}
       year={year}

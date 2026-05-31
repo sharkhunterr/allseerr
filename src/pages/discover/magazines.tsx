@@ -11,14 +11,16 @@ import { useIntl } from 'react-intl';
 // merged result set.
 interface DiscoverMagazine {
   id: string;
-  googleBooksId: string;
+  googleBooksId?: string;
   title: string;
   coverUrl?: string;
   year?: number;
   publisher?: string;
   issn?: string;
   language?: string;
+  country?: string;
   description?: string;
+  categories?: string[];
   issueCount?: number;
   availableIssues?: number | null;
   mediaStatus?: number | null;
@@ -33,11 +35,11 @@ const DiscoverMagazinesPage: NextPage = () => {
         defaultMessage: 'Magazines',
       })}
       endpoint="/api/v1/discover/magazines"
-      cardKey={(m) => m.googleBooksId}
+      cardKey={(m) => m.id}
       renderCard={(m, key) => (
         <li key={key}>
           <MagazineCard
-            googleBooksId={m.googleBooksId}
+            id={m.id}
             title={m.title}
             coverUrl={m.coverUrl}
             year={m.year}
@@ -45,6 +47,8 @@ const DiscoverMagazinesPage: NextPage = () => {
             issn={m.issn}
             description={m.description}
             language={m.language}
+            country={m.country}
+            categories={m.categories}
             issueCount={m.issueCount}
             availableIssues={m.availableIssues ?? undefined}
             mediaStatus={m.mediaStatus as never}

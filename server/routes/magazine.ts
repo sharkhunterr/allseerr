@@ -7,9 +7,20 @@ import PressarrAPI, {
   type PressarrMagazineIdentity,
   type PressarrMetadataSearchResult,
 } from '@server/api/servarr/pressarr';
+import {
+  MediaRequestStatus,
+  MediaStatus,
+  MediaType,
+} from '@server/constants/media';
+import { MagazineMedia } from '@server/entity/MagazineMedia';
+import { MediaRequest } from '@server/entity/MediaRequest';
+import { User } from '@server/entity/User';
+import { Permission } from '@server/lib/permissions';
+import { hasPermission } from '@server/lib/permissions';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { Router } from 'express';
+import { getRepository } from 'typeorm';
 
 const magazineRoutes = Router();
 
@@ -237,6 +248,182 @@ magazineRoutes.get('/:id', isAuthenticated(), async (req, res) => {
     return res.status(404).json({ status: 404, message: 'Magazine not found' });
   }
   return res.status(200).json(data);
+});
+
+/**
+ * POST /api/v1/magazine/request — create a MagazineMedia + a
+ * MediaRequest, mirroring the comic.ts / book.ts request shape.
+ *
+ * ``externalKey`` deduplicates: ISSN when present (canonical for
+ * the cascade), else slug of the title. A duplicate active
+ * request returns 409 with the existing id; a declined request
+ * is treated as "may re-request" and the same MagazineMedia row
+ * gets re-used.
+ */
+magazineRoutes.post('/request', isAuthenticated(), async (req, res) => {
+  const body = req.body as {
+    id: string; // cascade id: ``issn:NNNN-NNNN`` | ``wd:Q123`` | ``googlebooks:VOL`` | ``pressarr:…``
+    title: string;
+    issn?: string;
+    publisher?: string;
+    coverUrl?: string;
+    year?: number;
+    language?: string;
+    description?: string;
+    frequency?: string;
+    googleBooksId?: string;
+    userId?: number;
+  };
+
+  if (!body.id || !body.title) {
+    return res
+      .status(400)
+      .json({ status: 400, message: 'id and title are required.' });
+  }
+
+  if (
+    !hasPermission(
+      [Permission.REQUEST, Permission.REQUEST_MAGAZINE],
+      req.user?.permissions ?? 0,
+      { type: 'or' }
+    )
+  ) {
+    return res.status(403).json({
+      status: 403,
+      message: 'You do not have permission to request magazines.',
+    });
+  }
+
+  // Canonical externalKey: ISSN when known, else slug of title.
+  const slug = body.title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-+|-+$)/g, '');
+  const externalKey = body.issn ? `issn:${body.issn}` : `slug:${slug}`;
+
+  const magazineMediaRepo = getRepository(MagazineMedia);
+  const requestRepo = getRepository(MediaRequest);
+  const userRepo = getRepository(User);
+
+  // Admin "Request As" — same pattern as comic / book routes.
+  let requestUser = req.user!;
+  if (
+    body.userId &&
+    body.userId !== req.user?.id &&
+    hasPermission(
+      [Permission.MANAGE_USERS, Permission.MANAGE_REQUESTS],
+      req.user?.permissions ?? 0,
+      { type: 'or' }
+    )
+  ) {
+    const target = await userRepo.findOne({ where: { id: body.userId } });
+    if (target) {
+      requestUser = target;
+    }
+  }
+
+  // Duplicate detection — externalKey unique constraint already
+  // prevents two MagazineMedia rows; we just need to surface the
+  // existing in-flight request id to the caller.
+  const existing = await magazineMediaRepo.findOne({ where: { externalKey } });
+  if (existing) {
+    const existingRequest = await requestRepo.findOne({
+      where: { magazineMedia: { id: existing.id } },
+    });
+    if (
+      existingRequest &&
+      existingRequest.status !== MediaRequestStatus.DECLINED
+    ) {
+      return res.status(409).json({
+        status: 409,
+        message: 'This magazine has already been requested.',
+        existingRequestId: existingRequest.id,
+        existingStatus: existingRequest.status,
+      });
+    }
+  }
+
+  try {
+    const quotas = await requestUser.getQuota();
+    if (quotas.magazine?.restricted) {
+      return res.status(403).json({
+        status: 403,
+        message: 'Magazine quota exceeded.',
+        quota: quotas.magazine,
+      });
+    }
+  } catch (e) {
+    logger.warn('Magazine quota check failed (proceeding without)', {
+      label: 'magazine',
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  try {
+    let magazineMedia = existing;
+    if (!magazineMedia) {
+      magazineMedia = new MagazineMedia({
+        title: body.title,
+        externalKey,
+        issn: body.issn ?? null,
+        googleBooksId: body.googleBooksId ?? null,
+        publisher: body.publisher ?? null,
+        coverUrl: body.coverUrl ?? null,
+        year: body.year ?? null,
+        language: body.language ?? null,
+        description: body.description ?? null,
+        frequency: body.frequency ?? null,
+        status: MediaStatus.PENDING,
+      });
+      await magazineMediaRepo.save(magazineMedia);
+    } else if (magazineMedia.status !== MediaStatus.AVAILABLE) {
+      magazineMedia.status = MediaStatus.PENDING;
+      await magazineMediaRepo.save(magazineMedia);
+    }
+
+    const request = new MediaRequest();
+    request.status = MediaRequestStatus.PENDING;
+    request.type = MediaType.MAGAZINE;
+    request.requestedBy = requestUser;
+    request.magazineMedia = magazineMedia;
+    await requestRepo.save(request);
+
+    if (
+      req.user &&
+      hasPermission(
+        [
+          Permission.MANAGE_REQUESTS,
+          Permission.AUTO_APPROVE,
+          Permission.AUTO_APPROVE_MAGAZINE,
+        ],
+        req.user.permissions,
+        { type: 'or' }
+      )
+    ) {
+      magazineMedia.status = MediaStatus.PROCESSING;
+      await magazineMediaRepo.save(magazineMedia);
+      request.status = MediaRequestStatus.APPROVED;
+      await requestRepo.save(request);
+    }
+
+    logger.info(`Magazine request created: ${body.title} (${externalKey})`, {
+      label: 'magazine',
+      requestId: request.id,
+    });
+
+    return res.status(201).json({ ...request, magazineMedia });
+  } catch (e) {
+    logger.error('Magazine request creation failed', {
+      label: 'magazine',
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return res.status(500).json({
+      status: 500,
+      message: 'Magazine request creation failed. Please try again.',
+    });
+  }
 });
 
 logger.debug('Magazine routes wired (cascade-primary, Google Books fallback)');

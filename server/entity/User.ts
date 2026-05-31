@@ -476,6 +476,17 @@ export class User {
       comicQuotaDays
     );
 
+    const magazineQuotaLimit = !canBypass
+      ? (this.magazineQuotaLimit ?? defaultQuotas.magazine?.quotaLimit ?? 0)
+      : 0;
+    const magazineQuotaDays =
+      this.magazineQuotaDays ?? defaultQuotas.magazine?.quotaDays ?? 0;
+    const magazineQuotaUsed = await countSimpleQuota(
+      MediaType.MAGAZINE,
+      magazineQuotaLimit,
+      magazineQuotaDays
+    );
+
     return {
       movie: {
         days: movieQuotaDays,
@@ -546,6 +557,17 @@ export class User {
           : undefined,
         restricted: !!(
           comicQuotaLimit && comicQuotaLimit - comicQuotaUsed <= 0
+        ),
+      },
+      magazine: {
+        days: magazineQuotaDays,
+        limit: magazineQuotaLimit,
+        used: magazineQuotaUsed,
+        remaining: magazineQuotaLimit
+          ? Math.max(0, magazineQuotaLimit - magazineQuotaUsed)
+          : undefined,
+        restricted: !!(
+          magazineQuotaLimit && magazineQuotaLimit - magazineQuotaUsed <= 0
         ),
       },
     };

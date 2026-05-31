@@ -27,6 +27,7 @@ export interface QuotaResponse {
   game: QuotaStatus;
   manga: QuotaStatus;
   comic: QuotaStatus;
+  magazine: QuotaStatus;
 }
 
 export interface UserWatchDataResponse {
