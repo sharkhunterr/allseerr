@@ -25,67 +25,71 @@ export interface LivrarrInstance {
 /**
  * Payload shipped to ``POST /api/v1/work``. Livrarr's handler
  * (see ``crates/livrarr-handlers/src/types/work.rs``) accepts a
- * single ``ol_key`` identifier plus a few enrichment hints — no
+ * single ``olKey`` identifier plus a few enrichment hints — no
  * quality / metadata profile selection (Livrarr resolves both
  * from its own config) and no rootFolder field (the operator
  * configures the root folder globally inside Livrarr).
  *
  * We populate as many hints as we have so Livrarr's matcher
- * does the right thing on first lookup: ``isbn_13`` is the most
+ * does the right thing on first lookup: ``isbn13`` is the most
  * deterministic key when available (Hardcover-sourced books
- * carry it), with ``ol_key`` / ``title`` + ``author_name`` as
+ * carry it), with ``olKey`` / ``title`` + ``authorName`` as
  * fallbacks for Audible / OpenLibrary-sourced rows.
+ *
+ * NOTE: Livrarr's POST handler is strict camelCase — it rejects
+ * snake_case keys with 422 "missing field". Keep this interface
+ * camelCase to match the wire format directly.
  */
 export interface LivrarrAddWorkPayload {
-  ol_key?: string;
+  olKey?: string;
   title: string;
-  author_name?: string;
-  author_ol_key?: string;
+  authorName?: string;
+  authorOlKey?: string;
   year?: number;
-  cover_url?: string;
+  coverUrl?: string;
   language?: string;
-  detail_url?: string;
-  cover_manual?: boolean;
-  isbn_13?: string;
+  detailUrl?: string;
+  coverManual?: boolean;
+  isbn13?: string;
 }
 
 export interface LivrarrWorkDetail {
   id: number;
   title: string;
-  ol_key?: string | null;
-  author_name?: string | null;
-  monitor_ebook?: boolean;
-  monitor_audiobook?: boolean;
+  olKey?: string | null;
+  authorName?: string | null;
+  monitorEbook?: boolean;
+  monitorAudiobook?: boolean;
   // Livrarr returns a much richer payload (cover, identifiers,
-  // library_items, …) — keep the shape open since we only
+  // libraryItems, …) — keep the shape open since we only
   // care about the id + monitor flags on the dispatch path.
   [k: string]: unknown;
 }
 
 export interface LivrarrAddWorkResponse {
   work: LivrarrWorkDetail;
-  author_created: boolean;
+  authorCreated: boolean;
   messages: string[];
 }
 
 export interface LivrarrLookupResult {
-  ol_key: string;
+  olKey: string;
   title: string;
-  author_name?: string;
-  author_ol_key?: string;
+  authorName?: string;
+  authorOlKey?: string;
   year?: number;
-  cover_url?: string;
+  coverUrl?: string;
   language?: string;
-  isbn_13?: string;
-  detail_url?: string;
+  isbn13?: string;
+  detailUrl?: string;
   source?: string;
 }
 
 export interface LivrarrLookupResponse {
   results: LivrarrLookupResult[];
-  filtered_count: number;
-  raw_count: number;
-  raw_available: boolean;
+  filteredCount: number;
+  rawCount: number;
+  rawAvailable: boolean;
 }
 
 export interface LivrarrSystemStatus {
@@ -155,7 +159,12 @@ class LivrarrAPI {
   ): string {
     const protocol = instance.useSsl ? 'https' : 'http';
     const base = instance.baseUrl ? instance.baseUrl.replace(/\/$/, '') : '';
-    return `${protocol}://${instance.hostname}:${instance.port}${base}${apiPath}`;
+    // Defensive: operators routinely paste ``http://host`` into the
+    // hostname field. Strip any leading scheme so we never end up
+    // building ``http://http://host:18789…`` which DNS resolves as
+    // a literal "http" hostname and fails with ENOTFOUND.
+    const hostname = instance.hostname.replace(/^https?:\/\//, '');
+    return `${protocol}://${hostname}:${instance.port}${base}${apiPath}`;
   }
 
   /**
@@ -242,12 +251,12 @@ class LivrarrAPI {
   /**
    * Add a work to Livrarr — equivalent of Bookshelf's
    * ``POST /book`` or Bindery's ``POST /author/book``. Livrarr
-   * auto-creates the author when ``author_ol_key`` resolves a
+   * auto-creates the author when ``authorOlKey`` resolves a
    * record it doesn't already have (the response's
    * ``author_created`` boolean reports it).
    *
    * After ``addWork`` the caller typically calls ``updateWork``
-   * to flip on the right ``monitor_ebook`` / ``monitor_audiobook``
+   * to flip on the right ``monitorEbook`` / ``monitorAudiobook``
    * flag based on what the user requested.
    */
   public async addWork(
@@ -278,12 +287,12 @@ class LivrarrAPI {
   public async updateWork(
     workId: number,
     patch: {
-      monitor_ebook?: boolean;
-      monitor_audiobook?: boolean;
+      monitorEbook?: boolean;
+      monitorAudiobook?: boolean;
       title?: string;
-      author_name?: string;
-      series_name?: string;
-      series_position?: number;
+      authorName?: string;
+      seriesName?: string;
+      seriesPosition?: number;
     }
   ): Promise<LivrarrWorkDetail> {
     try {

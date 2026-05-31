@@ -90,12 +90,12 @@ export async function submitToLivrarr(
 
     const payload: LivrarrAddWorkPayload = {
       title: media.title,
-      author_name: media.authorName ?? undefined,
-      ol_key: olKey,
-      author_ol_key: authorOlKey,
-      isbn_13: isbn13 ?? undefined,
+      authorName: media.authorName ?? undefined,
+      olKey,
+      authorOlKey,
+      isbn13: isbn13 ?? undefined,
       language: language ?? undefined,
-      cover_url: coverUrl ?? undefined,
+      coverUrl: coverUrl ?? undefined,
       year,
     };
 
@@ -123,8 +123,8 @@ export async function submitToLivrarr(
     // edition the user asked for.
     try {
       await api.updateWork(workId, {
-        monitor_ebook: targetType === 'book',
-        monitor_audiobook: targetType === 'audiobook',
+        monitorEbook: targetType === 'book',
+        monitorAudiobook: targetType === 'audiobook',
       });
     } catch (e) {
       logger.warn(
@@ -150,7 +150,7 @@ export async function submitToLivrarr(
       label: 'livrarr',
       mediaType: targetType,
       livrarrWorkId: workId,
-      authorCreated: created.author_created,
+      authorCreated: created.authorCreated,
     });
 
     return { success: true, externalId: String(workId) };
