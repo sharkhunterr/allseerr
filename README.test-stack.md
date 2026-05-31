@@ -9,22 +9,25 @@ backends without provisioning anything by hand.
 
 | Role | Service | Host port | Container image |
 |---|---|---|---|
-| Download client | qBittorrent | 8088 | `lscr.io/linuxserver/qbittorrent:latest` |
-| Game library | ROMM + MariaDB | 8181 / internal | `rommapp/romm:latest` + `mariadb:latest` |
-| Game acquisition | Romarr | 8585 | built from `../romarr/romarr` |
+| Game library | ROMM + MariaDB | 18181 / internal | `rommapp/romm:latest` + `mariadb:latest` |
+| Game acquisition | Romarr | 18585 | built from `../romarr/romarr` |
 | Book/audiobook library | Audiobookshelf | 13378 | `ghcr.io/advplyr/audiobookshelf:latest` |
-| Book/audiobook acquisition | Bindery | 8787 | `ghcr.io/vavallee/bindery:latest` |
-| Book/audiobook acquisition (alt) | Livrarr | 8789 | `ghcr.io/kkodecs/livrarr:latest` |
-| Ebook + comic reader | Grimmory + MariaDB | 6060 / internal | `grimmory/grimmory:latest` + `lscr.io/linuxserver/mariadb` |
-| Manga acquisition + reader | Suwayomi (Tachidesk) | 4567 | `ghcr.io/suwayomi/tachidesk:latest` |
-| Comic acquisition | Mylar3 | 8090 | `lscr.io/linuxserver/mylar3:latest` |
-| Magazine grabber | Grabarr + FlareSolverr | 8086 / 8191 | built from `../grabarr` |
-| Magazine manager | Pressarr | 8084 | built from `../pressarr/pressarr` |
+| Book/audiobook acquisition | Bindery | 18787 | `ghcr.io/vavallee/bindery:latest` |
+| Book/audiobook acquisition (alt) | Livrarr | 18789 | `ghcr.io/kkodecs/livrarr:0.1.0-alpha5` |
+| Ebook + comic reader | Grimmory + MariaDB | 16060 / internal | `grimmory/grimmory:latest` + `lscr.io/linuxserver/mariadb` |
+| Manga acquisition + reader | Suwayomi (Tachidesk) | 14567 | `ghcr.io/suwayomi/tachidesk:latest` |
+| Comic acquisition | Mylar3 | 18090 | `lscr.io/linuxserver/mylar3:latest` |
+| Magazine grabber | Grabarr + FlareSolverr | 18086 / 18191 | built from `../grabarr` |
+| Magazine manager | Pressarr | 18084 | built from `../pressarr/pressarr` |
+
+**No download client bundled.** The operator already runs a
+standalone qBittorrent on the host. Each *arr inside the test
+stack reaches it at `http://host.docker.internal:<port>`
+(`extra_hosts: ["host.docker.internal:host-gateway"]` is wired
+on every service that needs a download client).
 
 Allseerr itself runs **on the host** (`pnpm dev` from this
-repo). It reaches each service via `localhost:<host_port>`. The
-docker network is internal so cross-service calls (Bindery →
-qBittorrent, Pressarr → Grabarr, …) stay container-to-container.
+repo). It reaches each service via `localhost:<host_port>`.
 
 ## Shared library layout
 
@@ -63,22 +66,20 @@ pulls the images, and starts everything. Give it ~60 seconds
 for all healthchecks to settle (ROMM + Grimmory wait for their
 MariaDBs).
 
-### 2. Relax qBit auth
+### 2. Point the *arrs at your standalone qBittorrent
 
-By default qBittorrent generates a random temporary admin
-password on first boot and rejects everything that isn't
-literally `localhost` (Host header check). For a LAN-only
-test stack we want any RFC1918 caller to skip auth entirely so
-the *arr services can post torrents straight in.
+There's no qBit in the stack — each *arr needs its download
+client configured to your host's qBit. Inside each service
+(Bindery, Livrarr, Pressarr, Mylar, Romarr), set the download
+client to:
 
-```bash
-./scripts/qbit-relax-auth.sh
-docker compose -f docker-compose.test.yml restart qbittorrent
-```
+- **Host:** `host.docker.internal`
+- **Port:** whatever your host qBit listens on (e.g. `8088`)
+- **Username / password:** your standalone qBit's creds
 
-(The script is idempotent — re-running after a `docker
-compose down --volumes` and back up just reapplies the same
-four lines.)
+`extra_hosts: ["host.docker.internal:host-gateway"]` is wired
+into each *arr in the compose file so the hostname resolves
+to the docker host on Linux.
 
 ### 3. Capture first-run admin credentials
 

@@ -37,27 +37,25 @@ fi
 # Allseerr runs on the docker host so it reaches each service
 # through localhost:<host_port>.
 ROMM_URL_HOST="localhost"
-ROMM_PORT=8181
+ROMM_PORT=18181
 ROMARR_HOST="localhost"
-ROMARR_PORT=8585
+ROMARR_PORT=18585
 AUDIOBOOKSHELF_HOST="localhost"
 AUDIOBOOKSHELF_PORT=13378
 BINDERY_HOST="localhost"
-BINDERY_PORT=8787
+BINDERY_PORT=18787
 LIVRARR_HOST="localhost"
-LIVRARR_PORT=8789
+LIVRARR_PORT=18789
 GRIMMORY_HOST="localhost"
-GRIMMORY_PORT=6060
+GRIMMORY_PORT=16060
 PRESSARR_HOST="localhost"
-PRESSARR_PORT=8084
+PRESSARR_PORT=18084
 GRABARR_HOST="localhost"
-GRABARR_PORT=8086
+GRABARR_PORT=18086
 SUWAYOMI_HOST="localhost"
-SUWAYOMI_PORT=4567
+SUWAYOMI_PORT=14567
 MYLAR_HOST="localhost"
-MYLAR_PORT=8090
-QBITTORRENT_HOST="localhost"
-QBITTORRENT_PORT=8088
+MYLAR_PORT=18090
 
 TMP="$(mktemp)"
 trap 'rm -f "${TMP}"' EXIT
@@ -216,5 +214,4 @@ else
   echo "  Grabarr        http://${GRABARR_HOST}:${GRABARR_PORT}"
   echo "  Suwayomi       http://${SUWAYOMI_HOST}:${SUWAYOMI_PORT}"
   echo "  Mylar3         http://${MYLAR_HOST}:${MYLAR_PORT}"
-  echo "  qBittorrent    http://${QBITTORRENT_HOST}:${QBITTORRENT_PORT}"
 fi

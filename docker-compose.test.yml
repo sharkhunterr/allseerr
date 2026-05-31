@@ -5,30 +5,31 @@
 # to (skipping radarr/sonarr per the test plan) so you can
 # exercise end-to-end request workflows against a real backend:
 #
-#   ROMM           → game library  (http://localhost:8181)
-#   Romarr         → game acquisition  (http://localhost:8585)
+#   ROMM           → game library  (http://localhost:18181)
+#   Romarr         → game acquisition  (http://localhost:18585)
 #   Audiobookshelf → audiobook library  (http://localhost:13378)
-#   Bindery        → book + audiobook acquisition  (http://localhost:8787)
-#   Grabarr        → magazine acquisition  (http://localhost:8086)
-#   Pressarr       → magazine manager  (http://localhost:8084)
-#   qBittorrent    → download client  (http://localhost:8088)
-#   MariaDB        → ROMM persistence  (internal only)
+#   Bindery        → book + audiobook acquisition  (http://localhost:18787)
+#   Grabarr        → magazine acquisition  (http://localhost:18086)
+#   Pressarr       → magazine manager  (http://localhost:18084)
+#   MariaDB        → ROMM + Grimmory persistence  (internal only)
+#
+# Download client (qBittorrent) is NOT bundled — the operator
+# already runs a standalone qBit on the host. Each *arr's
+# download-client setting points at the host's qBit via
+# ``http://host.docker.internal:<port>`` (Docker on Linux needs
+# ``extra_hosts: ["host.docker.internal:host-gateway"]`` per
+# service that needs it, already wired below).
 #
 # Allseerr itself runs on the host (``pnpm dev``) and reaches
 # each service via the ``localhost:<port>`` host-side mapping.
-# The compose network is internal so the services can also
-# call each other directly by container name when needed
-# (e.g. Bindery → qBittorrent at ``http://qbittorrent:8080``).
 #
 # First-run sequence (TL;DR):
-#   1. cp docker-compose.test.yml.env.example .env (optional)
-#   2. docker compose -f docker-compose.test.yml up -d
-#   3. Capture initial admin tokens / passwords:
-#        docker compose -f docker-compose.test.yml logs romarr   | grep setup_token
-#        docker compose -f docker-compose.test.yml logs bindery  | grep "initial admin"
-#        docker compose -f docker-compose.test.yml logs qbittorrent | grep "temporary password"
-#   4. Open each WebUI, create admin / accept setup wizard, grab API keys.
-#   5. Run scripts/bootstrap-test-stack.sh to patch the allseerr
+#   1. docker compose -f docker-compose.test.yml up -d
+#   2. Capture initial admin tokens / passwords:
+#        docker compose -f docker-compose.test.yml logs romarr  | grep setup_token
+#        docker compose -f docker-compose.test.yml logs bindery | grep "initial admin"
+#   3. Open each WebUI, create admin / accept setup wizard, grab API keys.
+#   4. Run scripts/bootstrap-test-stack.sh to patch the allseerr
 #      settings.json with the URLs (API keys you fill manually).
 #
 # Volumes are stored under ./data/<service>/ so a full reset is
@@ -60,31 +61,6 @@ networks:
     driver: bridge
 
 services:
-  # ===========================================================
-  # qBittorrent — shared download client for Bindery / Romarr /
-  # Grabarr. Auth subnet whitelist set to RFC1918 + loopback so
-  # the *arr services don't need to round-trip through the per-
-  # session password.
-  # ===========================================================
-  qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
-    container_name: allseerr-test-qbittorrent
-    restart: unless-stopped
-    environment:
-      PUID: "1000"
-      PGID: "1000"
-      TZ: "Europe/Paris"
-      WEBUI_PORT: "8080"
-    volumes:
-      - ./data/qbittorrent:/config
-      - ./data/downloads:/downloads
-    ports:
-      - "8088:8080"
-      - "6881:6881"
-      - "6881:6881/udp"
-    networks:
-      - allseerr-test
-
   # ===========================================================
   # ROMM — game library (acquisition role goes to Romarr below).
   # Needs a MariaDB sidecar.
@@ -133,7 +109,7 @@ services:
       - ./data/romm/assets:/romm/assets
       - ./data/romm/config:/romm/config
     ports:
-      - "8181:8080"
+      - "18181:8080"
     networks:
       - allseerr-test
 
@@ -166,9 +142,10 @@ services:
       # via the same host mount.
       - ./data/romm/library:/library
     ports:
-      - "8585:8585"
-    depends_on:
-      - qbittorrent
+      - "18585:8585"
+    # Reach the operator's standalone qBit on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - allseerr-test
 
@@ -196,6 +173,8 @@ services:
       - "13378:80"
     networks:
       - allseerr-test
+    # ABS's default port 13378 doesn't collide with anything in
+    # the operator's standalone dev so we keep it.
 
   # ===========================================================
   # Bindery — book + audiobook acquisition (the *arr for books
@@ -218,9 +197,9 @@ services:
       - ./data/library/audiobooks:/audiobooks
       - ./data/downloads:/downloads
     ports:
-      - "8787:8787"
-    depends_on:
-      - qbittorrent
+      - "18787:8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - allseerr-test
 
@@ -233,7 +212,9 @@ services:
   # default in allseerr's Settings → Services → Books.
   # ===========================================================
   livrarr:
-    image: ghcr.io/kkodecs/livrarr:latest
+    # Livrarr is alpha — no ``:latest`` tag yet, pin to the
+    # most recent alpha release. Bump when a stable lands.
+    image: ghcr.io/kkodecs/livrarr:0.1.0-alpha5
     container_name: allseerr-test-livrarr
     restart: unless-stopped
     volumes:
@@ -242,9 +223,9 @@ services:
       - ./data/library/audiobooks:/audiobooks
       - ./data/downloads:/downloads
     ports:
-      - "8789:8789"
-    depends_on:
-      - qbittorrent
+      - "18789:8789"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - allseerr-test
 
@@ -309,7 +290,7 @@ services:
       # routing it through Bindery.
       - ./data/grimmory/bookdrop:/bookdrop
     ports:
-      - "6060:6060"
+      - "16060:6060"
     networks:
       - allseerr-test
 
@@ -335,7 +316,7 @@ services:
       - ./data/library/manga:/manga
       - ./data/downloads:/downloads
     ports:
-      - "4567:4567"
+      - "14567:4567"
     networks:
       - allseerr-test
 
@@ -357,9 +338,9 @@ services:
       - ./data/library/comics:/comics
       - ./data/downloads:/downloads
     ports:
-      - "8090:8090"
-    depends_on:
-      - qbittorrent
+      - "18090:8090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - allseerr-test
 
@@ -375,7 +356,7 @@ services:
     environment:
       LOG_LEVEL: "info"
     ports:
-      - "8191:8191"
+      - "18191:8191"
     networks:
       - allseerr-test
 
@@ -400,9 +381,11 @@ services:
       - ./data/grabarr/data:/data
       - ./data/downloads:/downloads
     ports:
-      - "8086:8080"
-      - "45000-45100:45000-45100/tcp"
-      - "45000-45100:45000-45100/udp"
+      - "18086:8080"
+      # Decal libtorrent peer range away from operator's
+      # standalone grabarr (which uses 45000-45100).
+      - "46000-46100:45000-45100/tcp"
+      - "46000-46100:45000-45100/udp"
     depends_on:
       - flaresolverr
     networks:
@@ -426,9 +409,10 @@ services:
       - ./data/downloads:/downloads
       - ./data/library/magazines:/magazines
     ports:
-      - "8084:8585"
+      - "18084:8585"
     depends_on:
-      - qbittorrent
       - grabarr
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - allseerr-test
