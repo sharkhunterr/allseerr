@@ -54,6 +54,40 @@ export interface PressarrMetadataSearchResult {
   coverUrl?: string | null;
   issn?: string | null;
   frequency?: string | null;
+  // ISSN-first cascade enrichment fields. Surfaced by pressarr's
+  // ZDB / Wikidata / BnF providers; older Google Books / Internet
+  // Archive hits leave them blank.
+  language?: string | null;
+  wikidataQid?: string | null;
+  zdbId?: string | null;
+  wikipediaUrl?: string | null;
+  categories?: string[] | null;
+  firstIssued?: string | null;
+  ceasedAt?: string | null;
+  sources?: { provider: string; providerId: string; count?: number }[];
+}
+
+/**
+ * Authoritative single-magazine identity from pressarr's
+ * ``GET /magazine/identity?issn=…`` endpoint. Used when the operator
+ * pastes an ISSN or when a discovery card needs the full record.
+ */
+export interface PressarrMagazineIdentity {
+  title: string;
+  issn?: string | null;
+  publisher?: string | null;
+  country?: string | null;
+  language?: string | null;
+  frequency?: string | null;
+  coverUrl?: string | null;
+  description?: string | null;
+  firstIssued?: string | null;
+  ceasedAt?: string | null;
+  wikidataQid?: string | null;
+  zdbId?: string | null;
+  wikipediaUrl?: string | null;
+  categories?: string[];
+  sources?: string[];
 }
 
 export interface PressarrRootFolder {
@@ -127,13 +161,14 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
    * exact title (with ISSN when available) before dispatching.
    */
   public lookupMagazine = async (
-    query: string
+    query: string,
+    opts?: { locale?: string }
   ): Promise<PressarrMetadataSearchResult[]> => {
     if (!query?.trim()) return [];
     try {
       const response = await this.axios.get<PressarrMetadataSearchResult[]>(
         '/magazine/lookup',
-        { params: { query } }
+        { params: { query, locale: opts?.locale } }
       );
       return response.data ?? [];
     } catch (e) {
@@ -143,6 +178,38 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
         error: e instanceof Error ? e.message : String(e),
       });
       return [];
+    }
+  };
+
+  /**
+   * Authoritative ISSN → identity. Returns null when no source in
+   * pressarr's cascade recognises the ISSN. Used by the manual-add
+   * flow (paste ISSN) and to enrich a discovery hit before dispatch.
+   */
+  public lookupMagazineIdentity = async (
+    issn: string,
+    opts?: { locale?: string }
+  ): Promise<PressarrMagazineIdentity | null> => {
+    if (!issn?.trim()) return null;
+    try {
+      const response = await this.axios.get<PressarrMagazineIdentity>(
+        '/magazine/identity',
+        { params: { issn, locale: opts?.locale } }
+      );
+      return response.data ?? null;
+    } catch (e) {
+      // 404 is the expected "no ISSN match" — log at debug to avoid
+      // false-alarm noise when the operator types ISSNs that don't
+      // resolve. Other statuses surface as warn.
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      const level = status === 404 ? 'debug' : 'warn';
+      logger[level]('Pressarr magazine identity lookup failed', {
+        label: 'pressarr',
+        issn,
+        status,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return null;
     }
   };
 

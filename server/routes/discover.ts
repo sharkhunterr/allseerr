@@ -1517,73 +1517,138 @@ discoverRoutes.get('/comics', requireMediaType('comic'), async (req, res) => {
 });
 
 // ----- Magazines discover -------------------------------------
-// Magazines have no native ``trending`` feed (Google Books
-// doesn't expose one for ``printType=magazines``, and ISSN
-// portal doesn't either). We surface a curated default list of
-// well-known periodicals when no query is provided, plus
-// honour an optional ``?query=`` param that delegates straight
-// to Google Books — the same shape the search endpoint uses.
-// Curated default list — 4 entries (was 11). Each query hits
-// Google Books once; running them in parallel keeps the
-// response under 2-3s on a cold cache. More entries = more
-// breadth but burns more quota AND blocks the page rendering.
-const MAGAZINES_DISCOVER_DEFAULTS = ['Time', 'The Economist', 'Wired', 'Nature'];
+// Magazines have no native ``trending`` feed, so we surface a
+// curated default list of well-known periodicals when no query
+// is provided. Discovery delegates to pressarr's ISSN-first
+// cascade (ZDB + Wikidata + BnF + GoogleBooks + InternetArchive
+// merged + ISSN-deduped) so the cards land with proper covers
+// and country info regardless of where each title is catalogued.
+// Falls back to Google Books printType=magazines when no
+// pressarr instance is configured.
+//
+// Curated set spans regions and registers so a fresh stack shows
+// breadth: international flagships, French press the operator
+// asked us to cover, and a couple of consumer titles.
+const MAGAZINES_DISCOVER_DEFAULTS = [
+  'Time',
+  'The Economist',
+  'Nature',
+  'Le Monde',
+  'Le Figaro',
+  '60 millions de consommateurs',
+  'Picsou Magazine',
+];
+
+interface DiscoverMagazineCard {
+  id: string;
+  googleBooksId?: string;
+  title: string;
+  publisher?: string;
+  issn?: string;
+  coverUrl?: string;
+  year?: number;
+  language?: string;
+  country?: string;
+  description?: string;
+  categories?: string[];
+  mediaType: 'magazine';
+}
 
 discoverRoutes.get(
   '/magazines',
   requireMediaType('magazine'),
   async (req, res) => {
     try {
-      const { searchMagazines } = await import(
-        '@server/api/googlebooks/magazines'
+      const settings = getSettings();
+      const pressarr = settings.pressarr.find(
+        (p) => p.mediaType === 'magazine' && p.isDefault
       );
-      const apiKey =
-        getSettings().book?.metadataProviders?.googleBooksApiKey || undefined;
       const query =
         typeof req.query.query === 'string' && req.query.query.trim()
           ? req.query.query.trim()
           : undefined;
+      const locale =
+        typeof req.query.locale === 'string' && req.query.locale.trim()
+          ? req.query.locale.trim()
+          : undefined;
       const queries = query ? [query] : MAGAZINES_DISCOVER_DEFAULTS;
-      // Parallel fan-out — Google Books's per-query latency
-      // dominates; sequential would be ~4x slower. Promise.all
-      // is safe because searchMagazines catches its own errors
-      // and returns [] on failure.
-      const batches = await Promise.all(
-        queries.map((q) => searchMagazines(q, { apiKey, maxResults: 6 }))
-      );
+
+      const merged: DiscoverMagazineCard[] = [];
       const seen = new Set<string>();
-      const merged: {
-        id: string;
-        googleBooksId: string;
-        title: string;
-        publisher?: string;
-        issn?: string;
-        coverUrl?: string;
-        year?: number;
-        language?: string;
-        description?: string;
-        mediaType: 'magazine';
-      }[] = [];
-      for (const hits of batches) {
-        for (const h of hits) {
-          const k = h.issn ? `issn:${h.issn}` : `t:${h.title.toLowerCase()}`;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          merged.push({
-            id: h.id,
-            googleBooksId: h.id,
-            title: h.title,
-            publisher: h.publisher,
-            issn: h.issn,
-            coverUrl: h.coverUrl,
-            year: h.year,
-            language: h.language,
-            description: h.description,
-            mediaType: 'magazine',
-          });
+      const push = (card: DiscoverMagazineCard) => {
+        const key = card.issn ? `issn:${card.issn}` : card.id;
+        if (seen.has(key)) return;
+        seen.add(key);
+        merged.push(card);
+      };
+
+      if (pressarr) {
+        // Primary: pressarr cascade. Already ISSN-merged + ranked
+        // upstream so we just stitch the per-query top-6 together
+        // and dedupe across queries by ISSN.
+        const { default: PressarrAPI } = await import(
+          '@server/api/servarr/pressarr'
+        );
+        const api = new PressarrAPI({
+          apiKey: pressarr.apiKey,
+          url: PressarrAPI.buildUrl(pressarr, '/api/v1'),
+        });
+        const batches = await Promise.all(
+          queries.map((q) => api.lookupMagazine(q, { locale }))
+        );
+        for (const hits of batches) {
+          for (const h of hits.slice(0, 6)) {
+            push({
+              id: h.issn
+                ? `issn:${h.issn}`
+                : h.wikidataQid
+                  ? `wd:${h.wikidataQid}`
+                  : `pressarr:${h.providerId}`,
+              title: h.title,
+              publisher: h.publisher ?? undefined,
+              issn: h.issn ?? undefined,
+              coverUrl: h.coverUrl ?? undefined,
+              year: h.firstIssued
+                ? Number.parseInt(h.firstIssued, 10) || undefined
+                : undefined,
+              language: h.language ?? undefined,
+              country: h.country ?? undefined,
+              description: h.description ?? undefined,
+              categories: h.categories ?? undefined,
+              mediaType: 'magazine',
+            });
+            if (merged.length >= 40) break;
+          }
           if (merged.length >= 40) break;
         }
-        if (merged.length >= 40) break;
+      } else {
+        // Fallback: Google Books printType=magazines.
+        const { searchMagazines } = await import(
+          '@server/api/googlebooks/magazines'
+        );
+        const apiKey =
+          settings.book?.metadataProviders?.googleBooksApiKey || undefined;
+        const batches = await Promise.all(
+          queries.map((q) => searchMagazines(q, { apiKey, maxResults: 6 }))
+        );
+        for (const hits of batches) {
+          for (const h of hits) {
+            push({
+              id: h.id,
+              googleBooksId: h.id,
+              title: h.title,
+              publisher: h.publisher,
+              issn: h.issn,
+              coverUrl: h.coverUrl,
+              year: h.year,
+              language: h.language,
+              description: h.description,
+              mediaType: 'magazine',
+            });
+            if (merged.length >= 40) break;
+          }
+          if (merged.length >= 40) break;
+        }
       }
       return res.status(200).json({
         page: 1,
