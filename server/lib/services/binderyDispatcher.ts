@@ -50,12 +50,11 @@ export async function submitToBindery(
     // pipeline can't resolve. Bridge through ISBN → Bindery's own
     // /book/lookup so we hand it the OpenLibrary IDs it expects.
     //
-    // Audiobooks: AudiobookMedia has no isbn13 column (its identifier
-    // is ASIN, which lives in a different ID space than ISBN). The
-    // bridge therefore only fires for BookMedia. For audiobooks the
-    // dispatcher still falls back to Bindery's author/title fallback
-    // below, which is the only available recovery path until we
-    // plumb ISBN13 through the audiobook discovery flow.
+    // Both BookMedia and AudiobookMedia carry an optional isbn13
+    // column. For audiobooks Audible itself doesn't surface ISBN,
+    // so we rely on the discovery flow's Hardcover enrichment to
+    // capture a print/ebook edition's ISBN at create-time. The
+    // bridge is identical for either type whenever the field is set.
     let foreignBookId = media.foreignBookId;
     let foreignAuthorId = media.foreignAuthorId ?? undefined;
     let resolvedAuthorName = media.authorName;
@@ -63,16 +62,15 @@ export async function submitToBindery(
     const looksLikeOpenLibraryWork = (id?: string | null) =>
       !!id && /^OL\d+W$/i.test(id.replace(/^\/works\//, ''));
 
-    const bookIsbn =
-      mediaType === MediaType.BOOK
-        ? (media as BookMedia).isbn13 ?? undefined
-        : undefined;
+    // AudiobookMedia gained isbn13 in 1776900000000-AddIsbnToAudiobookMedia
+    // so we can read it uniformly here regardless of media variant.
+    const bridgeIsbn = (media as { isbn13?: string | null }).isbn13 ?? undefined;
 
-    if (!looksLikeOpenLibraryWork(foreignBookId) && bookIsbn) {
-      const looked = await api.lookupBookByIsbn(bookIsbn);
+    if (!looksLikeOpenLibraryWork(foreignBookId) && bridgeIsbn) {
+      const looked = await api.lookupBookByIsbn(bridgeIsbn);
       if (looked?.foreignBookId) {
         logger.info(
-          `Bridged Bindery IDs via ISBN ${bookIsbn}: ${media.foreignBookId} → ${looked.foreignBookId}`,
+          `Bridged Bindery IDs via ISBN ${bridgeIsbn}: ${media.foreignBookId} → ${looked.foreignBookId}`,
           { label: 'bindery' }
         );
         foreignBookId = looked.foreignBookId;
@@ -81,7 +79,7 @@ export async function submitToBindery(
       } else {
         logger.warn(
           `Bindery ISBN lookup returned nothing for ${media.title}; will try authorName fallback`,
-          { label: 'bindery', isbn13: bookIsbn }
+          { label: 'bindery', isbn13: bridgeIsbn }
         );
       }
     }
