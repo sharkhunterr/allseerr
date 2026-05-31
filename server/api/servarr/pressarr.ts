@@ -2,7 +2,25 @@ import logger from '@server/logger';
 import type { QualityProfile } from './base';
 import ServarrBase from './base';
 
-export interface PressarrMagazineCreateOptions {
+/**
+ * Optional cascade enrichment fields the dispatcher forwards when
+ * available. Pressarr also back-fills any missing pieces from its
+ * own cascade by ISSN, so omitting these is fine — passing them
+ * just avoids the extra roundtrip and guarantees the operator
+ * sees the same identity allseerr's search showed.
+ */
+export interface PressarrMagazineIdentityForward {
+  language?: string;
+  wikidataQid?: string;
+  zdbId?: string;
+  wikipediaUrl?: string;
+  categories?: string[];
+  firstIssued?: string;
+  ceasedAt?: string;
+}
+
+export interface PressarrMagazineCreateOptions
+  extends PressarrMagazineIdentityForward {
   title: string;
   // Optional identification + enrichment fields. Pressarr's
   // POST /api/v1/magazine accepts all of these and uses them
@@ -242,6 +260,16 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
           metadataProvider: options.metadataProvider,
           metadataProviderId: options.metadataProviderId,
           searchForMissingIssues: options.searchForMissingIssues ?? true,
+          // Cascade enrichment forwarded when allseerr's search
+          // already resolved them. Omitting is safe — pressarr
+          // back-fills from its own cascade by ISSN.
+          language: options.language,
+          wikidataQid: options.wikidataQid,
+          zdbId: options.zdbId,
+          wikipediaUrl: options.wikipediaUrl,
+          categories: options.categories,
+          firstIssued: options.firstIssued,
+          ceasedAt: options.ceasedAt,
         },
         { timeout: 20000 }
       );

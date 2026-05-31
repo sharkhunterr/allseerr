@@ -77,6 +77,14 @@ export async function submitToPressarr(
       publisher: media.publisher ?? undefined,
       description: media.description ?? undefined,
       frequency: media.frequency ?? undefined,
+      // Allseerr's discovery already carries language when the
+      // cascade resolved it; pressarr uses it for indexer filtering.
+      // Everything else (country / wikidata_qid / zdb_id / wiki url
+      // / categories / dates) is back-filled by pressarr's own
+      // cascade.lookup_issn at create-time when ISSN is set, so we
+      // intentionally don't add columns to MagazineMedia just to
+      // forward them — pressarr's row stays canonical.
+      language: media.language ?? undefined,
       metadataProvider: media.googleBooksId ? 'googlebooks' : undefined,
       metadataProviderId: media.googleBooksId ?? undefined,
       rootFolderId,
