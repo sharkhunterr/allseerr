@@ -49,6 +49,13 @@ export async function submitToBindery(
     // dialect (e.g. "hardcover:428506") which Bindery's primary
     // pipeline can't resolve. Bridge through ISBN → Bindery's own
     // /book/lookup so we hand it the OpenLibrary IDs it expects.
+    //
+    // Audiobooks: AudiobookMedia has no isbn13 column (its identifier
+    // is ASIN, which lives in a different ID space than ISBN). The
+    // bridge therefore only fires for BookMedia. For audiobooks the
+    // dispatcher still falls back to Bindery's author/title fallback
+    // below, which is the only available recovery path until we
+    // plumb ISBN13 through the audiobook discovery flow.
     let foreignBookId = media.foreignBookId;
     let foreignAuthorId = media.foreignAuthorId ?? undefined;
     let resolvedAuthorName = media.authorName;
@@ -56,11 +63,16 @@ export async function submitToBindery(
     const looksLikeOpenLibraryWork = (id?: string | null) =>
       !!id && /^OL\d+W$/i.test(id.replace(/^\/works\//, ''));
 
-    if (!looksLikeOpenLibraryWork(foreignBookId) && media.isbn13) {
-      const looked = await api.lookupBookByIsbn(media.isbn13);
+    const bookIsbn =
+      mediaType === MediaType.BOOK
+        ? (media as BookMedia).isbn13 ?? undefined
+        : undefined;
+
+    if (!looksLikeOpenLibraryWork(foreignBookId) && bookIsbn) {
+      const looked = await api.lookupBookByIsbn(bookIsbn);
       if (looked?.foreignBookId) {
         logger.info(
-          `Bridged Bindery IDs via ISBN ${media.isbn13}: ${media.foreignBookId} → ${looked.foreignBookId}`,
+          `Bridged Bindery IDs via ISBN ${bookIsbn}: ${media.foreignBookId} → ${looked.foreignBookId}`,
           { label: 'bindery' }
         );
         foreignBookId = looked.foreignBookId;
@@ -69,7 +81,7 @@ export async function submitToBindery(
       } else {
         logger.warn(
           `Bindery ISBN lookup returned nothing for ${media.title}; will try authorName fallback`,
-          { label: 'bindery', isbn13: media.isbn13 }
+          { label: 'bindery', isbn13: bookIsbn }
         );
       }
     }

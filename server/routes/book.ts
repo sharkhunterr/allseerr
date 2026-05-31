@@ -1304,7 +1304,15 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       const hc = new HardcoverAPI(bookCfg.hardcoverApiKey);
       const prefLang =
         audioCfg?.preferredLanguage?.toLowerCase().trim() || undefined;
-      const hit = await hc.getAudiobookById(hcId, prefLang);
+      // Fetch the audiobook detail AND the unfiltered parent record
+      // in parallel — the latter surfaces print/ebook editions so we
+      // can capture an ISBN13 to bridge a Hardcover-shaped audiobook
+      // request to Bindery's OpenLibrary IDs at dispatch time. Audio
+      // editions usually only carry ASIN.
+      const [hit, parentForIsbn] = await Promise.all([
+        hc.getAudiobookById(hcId, prefLang),
+        hc.getBookById(hcId).catch(() => null),
+      ]);
       if (!hit) {
         return res
           .status(404)
@@ -1317,6 +1325,15 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         (prefLang
           ? audioEds.find((e) => e.language?.code2?.toLowerCase() === prefLang)
           : undefined) ?? audioEds[0];
+
+      // Audiobook editions rarely carry an ISBN, so look first at
+      // the audio edition (cheap), then fall back to any non-audio
+      // edition of the same book that has one.
+      const bridgeEdWithIsbn =
+        audioEds.find((e) => e.isbn_13 || e.isbn_10) ??
+        (parentForIsbn?.editions ?? []).find((e) => e.isbn_13 || e.isbn_10);
+      const bridgeIsbn13 = bridgeEdWithIsbn?.isbn_13 ?? undefined;
+      const bridgeIsbn10 = bridgeEdWithIsbn?.isbn_10 ?? undefined;
 
       const audiobookMediaRepo = getRepository(AudiobookMedia);
       const asin = firstEd?.asin ?? undefined;
@@ -1375,6 +1392,12 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         durationSeconds: firstEd?.audio_seconds ?? undefined,
         language: firstEd?.language?.code2 ?? undefined,
         releaseDate: firstEd?.release_date ?? hit.release_date ?? undefined,
+        // Optional bridge ISBN — populated when the parent book has
+        // any print/ebook edition with an ISBN. Forwarded to the
+        // create-request endpoint so AudiobookMedia can persist it
+        // and dispatchers (Bindery) can translate to OL IDs.
+        isbn13: bridgeIsbn13,
+        isbn10: bridgeIsbn10,
         authorName: primaryAuthorName,
         authorKey,
         authorPhotoUrl,
@@ -1585,6 +1608,12 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
       let authorBio: string | undefined;
       let authorBirthDate: string | undefined;
       let authorDeathDate: string | undefined;
+      // Bridge ISBN — Audible itself never surfaces ISBN, so we lean
+      // on the Hardcover enrichment (when a book match is found) to
+      // pull any print/ebook edition's ISBN so dispatchers can
+      // translate the Audible-shaped foreignBookId to OL Work IDs.
+      let bridgeIsbn13: string | undefined;
+      let bridgeIsbn10: string | undefined;
       let rating: number | undefined;
       let ratingsCount: number | undefined;
       let readersCount: number | undefined;
@@ -1728,6 +1757,20 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
               } catch {
                 /* best-effort */
               }
+            }
+            // Bridge ISBN — `hit` was fetched with the audio-edition
+            // filter so its editions never carry ISBN. Re-fetch the
+            // same book id without the format filter to pick the
+            // first print/ebook edition that does. Best-effort.
+            try {
+              const parent = await hc.getBookById(hit.id);
+              const edWithIsbn = (parent?.editions ?? []).find(
+                (e) => e.isbn_13 || e.isbn_10
+              );
+              bridgeIsbn13 = edWithIsbn?.isbn_13 ?? undefined;
+              bridgeIsbn10 = edWithIsbn?.isbn_10 ?? undefined;
+            } catch {
+              /* best-effort */
             }
           }
         } catch (e) {
@@ -1893,6 +1936,12 @@ bookRoutes.get('/:id', isAuthenticated(), async (req, res) => {
         publisher: product.publisher,
         durationSeconds: product.durationSeconds,
         language: product.language,
+        // Optional bridge ISBN — Audible has none; populated when
+        // Hardcover enrichment matched a parent book that carries
+        // a print/ebook edition with an ISBN. Forwarded to the
+        // request body so AudiobookMedia stores it for dispatchers.
+        isbn13: bridgeIsbn13,
+        isbn10: bridgeIsbn10,
         // Hardcover-sourced fields (empty when no ASIN match) — the
         // book detail page already guards on presence, so an
         // unmatched audiobook renders the pre-enrichment layout.
@@ -2472,9 +2521,13 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
         assign(m, 'isbn13', body.isbn13);
         assign(m, 'isbn10', body.isbn10);
       } else {
-        // AudiobookMedia-only
+        // AudiobookMedia
         assign(m, 'asin', body.asin);
         assign(m, 'narratorName', body.narratorName);
+        // Optional but lets Bindery / Bookshelf / Livrarr bridge
+        // a Hardcover-shaped foreignBookId to OpenLibrary IDs.
+        assign(m, 'isbn13', body.isbn13);
+        assign(m, 'isbn10', body.isbn10);
       }
       // Reset to PENDING when re-requesting media that was previously
       // declined / had its request removed (leaving status UNKNOWN or
@@ -2525,6 +2578,11 @@ bookRoutes.post('/request', isAuthenticated(), async (req, res) => {
           foreignAuthorId: body.foreignAuthorId,
           openLibraryId: body.openLibraryId,
           asin,
+          // Captured when discovery has it (Hardcover surfaces both
+          // on its edition records) so dispatchers can bridge ISBN →
+          // OL Work IDs via Bindery's /book/lookup.
+          isbn13: body.isbn13,
+          isbn10: body.isbn10,
           coverUrl: body.coverUrl,
           year: body.year,
           publisher: body.publisher,
