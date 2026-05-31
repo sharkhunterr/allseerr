@@ -266,6 +266,22 @@ class BinderyAPI extends ServarrBase<{ bookId: number }> {
   }
 
   /**
+   * Override Bindery's auto-derived mediaType on an existing book.
+   * Bindery's POST /author/book always creates a record with
+   * mediaType="ebook" regardless of what the caller intends — book
+   * vs audiobook is a per-record flag the caller must set after the
+   * fact via PUT /book/{id}. Without this call an audiobook request
+   * lands as an ebook in Bindery and the searcher hands the title to
+   * the wrong indexer category.
+   */
+  public async setBookMediaType(
+    bookId: number,
+    mediaType: 'ebook' | 'audiobook'
+  ): Promise<void> {
+    await this.axios.put(`/book/${bookId}`, { mediaType });
+  }
+
+  /**
    * Find the Bindery author record by its foreign ID (e.g. OpenLibrary
    * "OL23919A"). Returns null if not present.
    */

@@ -205,6 +205,30 @@ export async function submitToBindery(
 
     media.downloadManagerExternalId = String(binderyBookId);
 
+    // Bindery's POST /author/book always creates with mediaType="ebook".
+    // The book/audiobook distinction is a per-record flag the caller
+    // sets after the fact — otherwise an audiobook request lands as
+    // an ebook in Bindery and the searcher hits the wrong indexer
+    // category. The targetType already drives the instance lookup
+    // above, so it's the source of truth for which format the
+    // operator asked for.
+    try {
+      await api.setBookMediaType(
+        binderyBookId,
+        targetType === 'audiobook' ? 'audiobook' : 'ebook'
+      );
+    } catch (e) {
+      logger.warn(
+        `Bindery setBookMediaType failed for book ${binderyBookId}; download may target wrong format`,
+        {
+          label: 'bindery',
+          binderyBookId,
+          targetType,
+          error: e instanceof Error ? e.message : String(e),
+        }
+      );
+    }
+
     logger.info(
       `Dispatched to Bindery (${instance.name}): ${media.title}`,
       {
