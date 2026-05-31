@@ -7,6 +7,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import GameCard from '@app/components/GameCard';
+import MagazineCard from '@app/components/MagazineCard';
 import MangaCard from '@app/components/MangaCard';
 import { SearchLoadingContext } from '@app/context/SearchLoadingContext';
 import useDiscover from '@app/hooks/useDiscover';
@@ -35,6 +36,7 @@ const messages = defineMessages('components.Search', {
   tabGames: 'Games',
   tabManga: 'Manga',
   tabComics: 'Comics',
+  tabMagazines: 'Magazines',
   noResults: 'No results found.',
   bookBadge: 'Book',
   seriesBadge: 'Series',
@@ -46,7 +48,31 @@ const messages = defineMessages('components.Search', {
   collectionCountFmt: '{count, plural, one {# game} other {# games}}',
 });
 
-type MediaTab = 'all' | 'books' | 'audiobooks' | 'games' | 'manga' | 'comics';
+type MediaTab =
+  | 'all'
+  | 'books'
+  | 'audiobooks'
+  | 'games'
+  | 'manga'
+  | 'comics'
+  | 'magazines';
+
+interface MagazineResult {
+  id: string;
+  title: string;
+  publisher?: string;
+  issn?: string;
+  coverUrl?: string;
+  year?: number;
+  language?: string;
+  country?: string;
+  categories?: string[];
+  description?: string;
+}
+
+interface MagazineSearchResponse {
+  results: MagazineResult[];
+}
 
 interface MangaResult {
   anilistId: number;
@@ -340,6 +366,7 @@ const Search = () => {
   const gameEnabled = currentSettings.gameEnabled;
   const mangaEnabled = currentSettings.mangaEnabled;
   const comicEnabled = currentSettings.comicEnabled;
+  const magazineEnabled = currentSettings.magazineEnabled;
   const [activeTab, setActiveTab] = useState<MediaTab>('all');
   const [bookResults, setBookResults] = useState<BookOrSeriesResult[]>([]);
   const [audiobookResults, setAudiobookResults] = useState<
@@ -348,11 +375,13 @@ const Search = () => {
   const [gameResults, setGameResults] = useState<GameOrCollectionResult[]>([]);
   const [mangaResults, setMangaResults] = useState<MangaResult[]>([]);
   const [comicResults, setComicResults] = useState<ComicResult[]>([]);
+  const [magazineResults, setMagazineResults] = useState<MagazineResult[]>([]);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
   const [isLoadingManga, setIsLoadingManga] = useState(false);
   const [isLoadingComics, setIsLoadingComics] = useState(false);
+  const [isLoadingMagazines, setIsLoadingMagazines] = useState(false);
 
   const query = (router.query.query as string) ?? '';
 
@@ -379,6 +408,7 @@ const Search = () => {
       setGameResults([]);
       setMangaResults([]);
       setComicResults([]);
+      setMagazineResults([]);
       return;
     }
 
@@ -469,6 +499,20 @@ const Search = () => {
     } else {
       setComicResults([]);
     }
+
+    if (magazineEnabled) {
+      setIsLoadingMagazines(true);
+      axios
+        .get<MagazineSearchResponse>('/api/v1/magazine/search', {
+          params: { query },
+          paramsSerializer,
+        })
+        .then((res) => setMagazineResults(res.data.results ?? []))
+        .catch(() => setMagazineResults([]))
+        .finally(() => setIsLoadingMagazines(false));
+    } else {
+      setMagazineResults([]);
+    }
   }, [
     query,
     bookEnabled,
@@ -476,6 +520,7 @@ const Search = () => {
     gameEnabled,
     mangaEnabled,
     comicEnabled,
+    magazineEnabled,
   ]);
 
   // Publish a combined "any active fetch" boolean to SearchLoadingContext
@@ -491,7 +536,8 @@ const Search = () => {
       (audiobookEnabled && isLoadingAudiobooks) ||
       (gameEnabled && isLoadingGames) ||
       (mangaEnabled && isLoadingManga) ||
-      (comicEnabled && isLoadingComics));
+      (comicEnabled && isLoadingComics) ||
+      (magazineEnabled && isLoadingMagazines));
   useEffect(() => {
     setIsSearching(isAnySearching);
     // Reset on unmount so navigating away from /search doesn't strand
@@ -562,6 +608,16 @@ const Search = () => {
             label: intl.formatMessage(messages.tabComics),
             count: isLoadingComics ? null : comicResults.length,
             loading: isLoadingComics,
+          },
+        ]
+      : []),
+    ...(magazineEnabled
+      ? [
+          {
+            key: 'magazines' as MediaTab,
+            label: intl.formatMessage(messages.tabMagazines),
+            count: isLoadingMagazines ? null : magazineResults.length,
+            loading: isLoadingMagazines,
           },
         ]
       : []),
@@ -801,6 +857,41 @@ const Search = () => {
                     issueCount={c.issueCount}
                     publisher={c.publisher}
                     deck={c.deck}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Magazines — backed by the ISSN-first cascade (ZDB + Wikidata
+          + BnF via pressarr). Each MagazineCard's id is the cascade
+          key (issn:NNNN-NNNN / wd:Q123 / pressarr:…) which the
+          detail route at /magazine/[id] handles uniformly. */}
+      {activeTab === 'magazines' && (
+        <div>
+          {isLoadingMagazines ? (
+            <LoadingSpinner />
+          ) : magazineResults.length === 0 ? (
+            <p className="py-8 text-center text-gray-400">
+              {intl.formatMessage(messages.noResults)}
+            </p>
+          ) : (
+            <ul className="cards-vertical">
+              {magazineResults.map((m) => (
+                <li key={m.id}>
+                  <MagazineCard
+                    id={m.id}
+                    title={m.title}
+                    publisher={m.publisher}
+                    issn={m.issn}
+                    coverUrl={m.coverUrl}
+                    year={m.year}
+                    language={m.language}
+                    country={m.country}
+                    categories={m.categories}
+                    description={m.description}
                   />
                 </li>
               ))}
