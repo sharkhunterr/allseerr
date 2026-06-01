@@ -230,7 +230,8 @@ const isNonTmdbType = (type: string) =>
   type === MediaType.BOOK ||
   type === MediaType.AUDIOBOOK ||
   type === MediaType.MANGA ||
-  type === MediaType.COMIC;
+  type === MediaType.COMIC ||
+  type === MediaType.MAGAZINE;
 
 const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
   const { ref, inView } = useInView({
