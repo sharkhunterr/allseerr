@@ -8861,7 +8861,8 @@ paths:
       description: Forwards to pressarr's /magazine/lookup (cascade-aggregated)
         when a default instance is configured; falls back to Google
         Books printType=magazines otherwise. Optional locale biases
-        ranking server-side.
+        ranking server-side; optional status filters by publication
+        state (ongoing / ceased / all).
       tags:
         - search
       parameters:
@@ -8875,6 +8876,12 @@ paths:
           required: false
           schema:
             type: string
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [ongoing, ceased, all]
       responses:
         '200':
           description: Results
