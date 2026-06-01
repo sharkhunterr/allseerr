@@ -173,6 +173,12 @@ magazineRoutes.get('/search', isAuthenticated(), async (req, res, next) => {
     statusRaw === 'ongoing' || statusRaw === 'ceased' || statusRaw === 'all'
       ? statusRaw
       : undefined;
+  // Verified filter — when truthy hides BnF/ZDB-only catalogue
+  // records that don't have a Wikidata QID. Cuts the long tail
+  // of edition variants ("L'Equipe Feder (Montpellier)") so the
+  // canonical title surfaces alone.
+  const verified =
+    req.query.verified === 'true' || req.query.verified === '1';
   if (!query?.trim()) {
     return res.status(200).json({ results: [] });
   }
@@ -180,7 +186,11 @@ magazineRoutes.get('/search', isAuthenticated(), async (req, res, next) => {
     const pressarr = getDefaultPressarr();
     if (pressarr) {
       const api = pressarrClient(pressarr);
-      const hits = await api.lookupMagazine(query, { locale, status });
+      const hits = await api.lookupMagazine(query, {
+        locale,
+        status,
+        verified,
+      });
       // Empty cascade response → fall through to Google Books to
       // preserve discovery UX even when ZDB / Wikidata don't know
       // a niche local title.

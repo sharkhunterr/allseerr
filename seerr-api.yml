@@ -8882,6 +8882,11 @@ paths:
           schema:
             type: string
             enum: [ongoing, ceased, all]
+        - in: query
+          name: verified
+          required: false
+          schema:
+            type: boolean
       responses:
         '200':
           description: Results

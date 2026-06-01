@@ -188,7 +188,11 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
    */
   public lookupMagazine = async (
     query: string,
-    opts?: { locale?: string; status?: 'ongoing' | 'ceased' | 'all' }
+    opts?: {
+      locale?: string;
+      status?: 'ongoing' | 'ceased' | 'all';
+      verified?: boolean;
+    }
   ): Promise<PressarrMetadataSearchResult[]> => {
     if (!query?.trim()) return [];
     try {
@@ -202,6 +206,7 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
             // — server-side filtering keeps the response payload
             // small.
             status: opts?.status,
+            verified: opts?.verified ? true : undefined,
           },
         }
       );

@@ -385,6 +385,10 @@ const Search = () => {
   const [magazineStatusFilter, setMagazineStatusFilter] = useState<
     'ongoing' | 'all'
   >('ongoing');
+  // Verified-only filter is ON by default — operators almost
+  // always want to skip the long tail of BnF / ZDB edition
+  // records that share a root title with the canonical magazine.
+  const [magazineVerifiedOnly, setMagazineVerifiedOnly] = useState(true);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
@@ -516,9 +520,10 @@ const Search = () => {
           params: {
             query,
             // Pass-through to pressarr's cascade so server-side
-            // filtering keeps the response small; the chip just
-            // re-fetches when toggled.
+            // filtering keeps the response small; the chips just
+            // re-fetch when toggled.
             status: magazineStatusFilter,
+            verified: magazineVerifiedOnly ? 'true' : undefined,
           },
           paramsSerializer,
         })
@@ -537,6 +542,7 @@ const Search = () => {
     comicEnabled,
     magazineEnabled,
     magazineStatusFilter,
+    magazineVerifiedOnly,
   ]);
 
   // Publish a combined "any active fetch" boolean to SearchLoadingContext
@@ -887,46 +893,83 @@ const Search = () => {
           the detail route at /magazine/[id] handles uniformly. */}
       {activeTab === 'magazines' && (
         <div>
-          {/* Status filter chip-toggle. Two-state on purpose —
-              "Ceased only" is rarely useful and the All view does
-              what an operator who wants it would expect. */}
-          <div className="mb-4 flex items-center gap-2 text-xs">
-            <span className="text-gray-400">
-              {intl.formatMessage({
-                id: 'components.Search.statusFilterLabel',
-                defaultMessage: 'Status',
-              })}
-            </span>
-            {(
-              [
-                {
-                  key: 'ongoing' as const,
-                  label: intl.formatMessage({
-                    id: 'components.Search.statusOngoing',
-                    defaultMessage: 'Ongoing only',
-                  }),
-                },
-                {
-                  key: 'all' as const,
-                  label: intl.formatMessage({
-                    id: 'components.Search.statusAll',
-                    defaultMessage: 'All',
-                  }),
-                },
-              ] as const
-            ).map((opt) => (
+          {/* Filter chip-toggles. Status (ongoing/all) + verified.
+              Both default to the "noise-suppressed" side because
+              that's what an operator typing a magazine name almost
+              always wants. */}
+          <div className="mb-4 flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">
+                {intl.formatMessage({
+                  id: 'components.Search.statusFilterLabel',
+                  defaultMessage: 'Status',
+                })}
+              </span>
+              {(
+                [
+                  {
+                    key: 'ongoing' as const,
+                    label: intl.formatMessage({
+                      id: 'components.Search.statusOngoing',
+                      defaultMessage: 'Ongoing only',
+                    }),
+                  },
+                  {
+                    key: 'all' as const,
+                    label: intl.formatMessage({
+                      id: 'components.Search.statusAll',
+                      defaultMessage: 'All',
+                    }),
+                  },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setMagazineStatusFilter(opt.key)}
+                  className={`rounded-full px-3 py-1 ring-1 ring-inset transition ${
+                    magazineStatusFilter === opt.key
+                      ? 'bg-indigo-500/20 text-indigo-200 ring-indigo-500/40'
+                      : 'text-gray-400 ring-gray-700 hover:bg-gray-700/50 hover:text-gray-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">
+                {intl.formatMessage({
+                  id: 'components.Search.verifiedFilterLabel',
+                  defaultMessage: 'Coverage',
+                })}
+              </span>
               <button
-                key={opt.key}
-                onClick={() => setMagazineStatusFilter(opt.key)}
+                onClick={() => setMagazineVerifiedOnly(true)}
                 className={`rounded-full px-3 py-1 ring-1 ring-inset transition ${
-                  magazineStatusFilter === opt.key
+                  magazineVerifiedOnly
                     ? 'bg-indigo-500/20 text-indigo-200 ring-indigo-500/40'
                     : 'text-gray-400 ring-gray-700 hover:bg-gray-700/50 hover:text-gray-200'
                 }`}
               >
-                {opt.label}
+                {intl.formatMessage({
+                  id: 'components.Search.verifiedOnly',
+                  defaultMessage: 'Verified only',
+                })}
               </button>
-            ))}
+              <button
+                onClick={() => setMagazineVerifiedOnly(false)}
+                className={`rounded-full px-3 py-1 ring-1 ring-inset transition ${
+                  !magazineVerifiedOnly
+                    ? 'bg-indigo-500/20 text-indigo-200 ring-indigo-500/40'
+                    : 'text-gray-400 ring-gray-700 hover:bg-gray-700/50 hover:text-gray-200'
+                }`}
+              >
+                {intl.formatMessage({
+                  id: 'components.Search.allCatalogues',
+                  defaultMessage: 'All catalogues',
+                })}
+              </button>
+            </div>
           </div>
           {isLoadingMagazines ? (
             <LoadingSpinner />
