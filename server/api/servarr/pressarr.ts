@@ -188,13 +188,22 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
    */
   public lookupMagazine = async (
     query: string,
-    opts?: { locale?: string }
+    opts?: { locale?: string; status?: 'ongoing' | 'ceased' | 'all' }
   ): Promise<PressarrMetadataSearchResult[]> => {
     if (!query?.trim()) return [];
     try {
       const response = await this.axios.get<PressarrMetadataSearchResult[]>(
         '/magazine/lookup',
-        { params: { query, locale: opts?.locale } }
+        {
+          params: {
+            query,
+            locale: opts?.locale,
+            // Forwarded straight to pressarr's ``?status`` filter
+            // — server-side filtering keeps the response payload
+            // small.
+            status: opts?.status,
+          },
+        }
       );
       return response.data ?? [];
     } catch (e) {

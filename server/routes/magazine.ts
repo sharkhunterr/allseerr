@@ -164,6 +164,15 @@ magazineRoutes.get('/search', isAuthenticated(), async (req, res, next) => {
     typeof req.query.query === 'string' ? req.query.query : undefined;
   const locale =
     typeof req.query.locale === 'string' ? req.query.locale : undefined;
+  // Optional publication-status filter forwarded to pressarr's
+  // cascade. ``ongoing`` (default in the UI) hides ceased magazines;
+  // ``all`` keeps everything.
+  const statusRaw =
+    typeof req.query.status === 'string' ? req.query.status : undefined;
+  const status =
+    statusRaw === 'ongoing' || statusRaw === 'ceased' || statusRaw === 'all'
+      ? statusRaw
+      : undefined;
   if (!query?.trim()) {
     return res.status(200).json({ results: [] });
   }
@@ -171,7 +180,7 @@ magazineRoutes.get('/search', isAuthenticated(), async (req, res, next) => {
     const pressarr = getDefaultPressarr();
     if (pressarr) {
       const api = pressarrClient(pressarr);
-      const hits = await api.lookupMagazine(query, { locale });
+      const hits = await api.lookupMagazine(query, { locale, status });
       // Empty cascade response → fall through to Google Books to
       // preserve discovery UX even when ZDB / Wikidata don't know
       // a niche local title.

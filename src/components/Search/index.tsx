@@ -68,6 +68,9 @@ interface MagazineResult {
   country?: string;
   categories?: string[];
   description?: string;
+  frequency?: string;
+  firstIssued?: string;
+  ceasedAt?: string;
 }
 
 interface MagazineSearchResponse {
@@ -376,6 +379,12 @@ const Search = () => {
   const [mangaResults, setMangaResults] = useState<MangaResult[]>([]);
   const [comicResults, setComicResults] = useState<ComicResult[]>([]);
   const [magazineResults, setMagazineResults] = useState<MagazineResult[]>([]);
+  // Magazine-specific filter: hide ceased publications by default
+  // (operators almost always want a still-publishing magazine).
+  // Toggleable on the tab via the chip above the result grid.
+  const [magazineStatusFilter, setMagazineStatusFilter] = useState<
+    'ongoing' | 'all'
+  >('ongoing');
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
@@ -504,7 +513,13 @@ const Search = () => {
       setIsLoadingMagazines(true);
       axios
         .get<MagazineSearchResponse>('/api/v1/magazine/search', {
-          params: { query },
+          params: {
+            query,
+            // Pass-through to pressarr's cascade so server-side
+            // filtering keeps the response small; the chip just
+            // re-fetches when toggled.
+            status: magazineStatusFilter,
+          },
           paramsSerializer,
         })
         .then((res) => setMagazineResults(res.data.results ?? []))
@@ -521,6 +536,7 @@ const Search = () => {
     mangaEnabled,
     comicEnabled,
     magazineEnabled,
+    magazineStatusFilter,
   ]);
 
   // Publish a combined "any active fetch" boolean to SearchLoadingContext
@@ -866,11 +882,52 @@ const Search = () => {
       )}
 
       {/* Magazines — backed by the ISSN-first cascade (ZDB + Wikidata
-          + BnF via pressarr). Each MagazineCard's id is the cascade
-          key (issn:NNNN-NNNN / wd:Q123 / pressarr:…) which the
-          detail route at /magazine/[id] handles uniformly. */}
+          + BnF + ISSN Portal via pressarr). Each MagazineCard's id is
+          the cascade key (issn:NNNN-NNNN / wd:Q123 / pressarr:…) which
+          the detail route at /magazine/[id] handles uniformly. */}
       {activeTab === 'magazines' && (
         <div>
+          {/* Status filter chip-toggle. Two-state on purpose —
+              "Ceased only" is rarely useful and the All view does
+              what an operator who wants it would expect. */}
+          <div className="mb-4 flex items-center gap-2 text-xs">
+            <span className="text-gray-400">
+              {intl.formatMessage({
+                id: 'components.Search.statusFilterLabel',
+                defaultMessage: 'Status',
+              })}
+            </span>
+            {(
+              [
+                {
+                  key: 'ongoing' as const,
+                  label: intl.formatMessage({
+                    id: 'components.Search.statusOngoing',
+                    defaultMessage: 'Ongoing only',
+                  }),
+                },
+                {
+                  key: 'all' as const,
+                  label: intl.formatMessage({
+                    id: 'components.Search.statusAll',
+                    defaultMessage: 'All',
+                  }),
+                },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setMagazineStatusFilter(opt.key)}
+                className={`rounded-full px-3 py-1 ring-1 ring-inset transition ${
+                  magazineStatusFilter === opt.key
+                    ? 'bg-indigo-500/20 text-indigo-200 ring-indigo-500/40'
+                    : 'text-gray-400 ring-gray-700 hover:bg-gray-700/50 hover:text-gray-200'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           {isLoadingMagazines ? (
             <LoadingSpinner />
           ) : magazineResults.length === 0 ? (
@@ -892,6 +949,9 @@ const Search = () => {
                     country={m.country}
                     categories={m.categories}
                     description={m.description}
+                    frequency={m.frequency}
+                    firstIssued={m.firstIssued}
+                    ceasedAt={m.ceasedAt}
                   />
                 </li>
               ))}

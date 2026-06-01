@@ -63,6 +63,12 @@ interface MediaTitleCardProps {
    * card used so existing GameCard callers don't have to set
    * anything. */
   typeBadgeClasses?: string;
+  /** Extra badges stacked under the type badge on the top-left.
+   * Each entry is rendered as a small pill with the same shape
+   * as the type badge — caller controls the colour palette via
+   * ``classes``. Used by MagazineCard to surface publication
+   * status (ongoing / ceased) and frequency. */
+  extraBadges?: { label: string; classes: string }[];
   /** Optional 0-100 rating pill in the bottom-right. */
   rating?: number;
   /** Optional in-card visual on top of the cover (e.g. a
@@ -82,6 +88,7 @@ const MediaTitleCard = ({
   mediaStatus,
   typeLabel,
   typeBadgeClasses = 'border-teal-500 bg-teal-600/80',
+  extraBadges,
   rating,
   coverFallback,
 }: MediaTitleCardProps): ReactElement => {
@@ -138,20 +145,36 @@ const MediaTitleCard = ({
           </div>
         )}
 
-        {/* Top row — type label (left) + status badge (right) */}
+        {/* Top row — type label + extra badges (left, stacked)
+            + status badge (right) */}
         <div className="absolute left-0 right-0 top-0 flex items-start justify-between p-2">
-          {typeLabel && (
-            <div
-              className={[
-                'pointer-events-none z-40 self-start rounded-full border shadow-md',
-                typeBadgeClasses,
-              ].join(' ')}
-            >
-              <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
-                {typeLabel}
+          <div className="flex flex-col items-start gap-1">
+            {typeLabel && (
+              <div
+                className={[
+                  'pointer-events-none z-40 self-start rounded-full border shadow-md',
+                  typeBadgeClasses,
+                ].join(' ')}
+              >
+                <div className="flex h-4 items-center px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-white sm:h-5">
+                  {typeLabel}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+            {extraBadges?.map((b, idx) => (
+              <div
+                key={`extra-${idx}-${b.label}`}
+                className={[
+                  'pointer-events-none z-40 self-start rounded-full border shadow-md',
+                  b.classes,
+                ].join(' ')}
+              >
+                <div className="flex h-4 items-center px-2 py-2 text-center text-[10px] font-medium uppercase tracking-wider text-white sm:h-5">
+                  {b.label}
+                </div>
+              </div>
+            ))}
+          </div>
           {showStatusBadge && (
             <div className="pointer-events-none z-40 flex">
               <StatusBadgeMini status={mediaStatus} shrink />
