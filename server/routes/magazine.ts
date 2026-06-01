@@ -6,6 +6,7 @@ import {
 import PressarrAPI, {
   type PressarrMagazineIdentity,
   type PressarrMetadataSearchResult,
+  type PressarrRelatedPublication,
 } from '@server/api/servarr/pressarr';
 import {
   MediaRequestStatus,
@@ -46,13 +47,16 @@ interface MagazineCard {
   frequency?: string;
   country?: string;
   // Enrichment fields contributed by pressarr's ISSN-first cascade
-  // (ZDB + Wikidata + BnF). Absent when the card was sourced from
-  // Google Books only.
+  // (ZDB + Wikidata + BnF + ISSN Portal). Absent when the card was
+  // sourced from Google Books only.
   categories?: string[];
   wikidataQid?: string;
   zdbId?: string;
   wikipediaUrl?: string;
   sources?: string[];
+  firstIssued?: string;
+  ceasedAt?: string;
+  relatedPublications?: PressarrRelatedPublication[];
 }
 
 function getDefaultPressarr() {
@@ -102,6 +106,8 @@ function cascadeToCard(hit: PressarrMetadataSearchResult): MagazineCard {
     zdbId: hit.zdbId ?? undefined,
     wikipediaUrl: hit.wikipediaUrl ?? undefined,
     sources: hit.sources?.map((s) => s.provider),
+    firstIssued: hit.firstIssued ?? undefined,
+    ceasedAt: hit.ceasedAt ?? undefined,
   };
 }
 
@@ -133,6 +139,9 @@ function identityToCard(
     zdbId: identity.zdbId ?? undefined,
     wikipediaUrl: identity.wikipediaUrl ?? undefined,
     sources: identity.sources,
+    firstIssued: identity.firstIssued ?? undefined,
+    ceasedAt: identity.ceasedAt ?? undefined,
+    relatedPublications: identity.relatedPublications ?? undefined,
   };
 }
 

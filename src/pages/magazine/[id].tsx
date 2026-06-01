@@ -24,6 +24,11 @@ const messages = defineMessages('pages.MagazineDetail', {
   requested: 'Requested',
   requestSuccess: 'Magazine request submitted.',
   requestFailed: 'Failed to submit magazine request.',
+  relatedPublications: 'Related publications',
+  relationEdition: 'Edition',
+  relationSupplement: 'Supplement',
+  relationPrecededBy: 'Preceded by',
+  relationFollowedBy: 'Followed by',
   // Facts block (label / value pairs in the right rail).
   publisher: 'Publisher',
   country: 'Country',
@@ -47,6 +52,13 @@ const messages = defineMessages('pages.MagazineDetail', {
   openExternal: 'Open',
 });
 
+interface RelatedPublication {
+  wikidataQid?: string;
+  title: string;
+  issn?: string;
+  relation?: string;
+}
+
 interface MagazineDetailData {
   source: 'pressarr' | 'googlebooks';
   id: string;
@@ -66,6 +78,7 @@ interface MagazineDetailData {
   sources?: string[];
   firstIssued?: string;
   ceasedAt?: string;
+  relatedPublications?: RelatedPublication[];
   mediaStatus?: MediaStatus | null;
 }
 
@@ -257,6 +270,79 @@ const MagazineDetailPage: NextPage = () => {
             {data.description ||
               intl.formatMessage(messages.overviewunavailable)}
           </p>
+
+          {data.relatedPublications && data.relatedPublications.length > 0 && (
+            <div className="mt-8">
+              <h3 className="mb-3 text-lg font-bold text-gray-100">
+                {intl.formatMessage(messages.relatedPublications)}
+              </h3>
+              <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {data.relatedPublications.map((rp) => {
+                  const relationLabel = ((): string => {
+                    switch (rp.relation) {
+                      case 'edition':
+                        return intl.formatMessage(messages.relationEdition);
+                      case 'supplement':
+                        return intl.formatMessage(messages.relationSupplement);
+                      case 'preceded_by':
+                        return intl.formatMessage(messages.relationPrecededBy);
+                      case 'followed_by':
+                        return intl.formatMessage(messages.relationFollowedBy);
+                      default:
+                        return '';
+                    }
+                  })();
+                  const inner = (
+                    <div className="flex items-center justify-between gap-3 rounded-md bg-gray-800 p-3 ring-1 ring-gray-700 transition hover:ring-indigo-500">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-gray-100">
+                          {rp.title}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-400">
+                          {relationLabel && (
+                            <span className="rounded-full bg-indigo-600/20 px-2 py-0.5 uppercase tracking-wider text-indigo-300 ring-1 ring-indigo-500/30">
+                              {relationLabel}
+                            </span>
+                          )}
+                          {rp.issn && (
+                            <span className="font-mono">{rp.issn}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                  // Link to magazine detail when we have an ISSN; else
+                  // fall through to a plain row (Wikidata QID-only
+                  // entries don't have a corresponding detail page).
+                  return (
+                    <li
+                      key={`rp-${rp.wikidataQid ?? rp.issn ?? rp.title}`}
+                    >
+                      {rp.issn ? (
+                        <a
+                          href={`/magazine/${encodeURIComponent(`issn:${rp.issn}`)}`}
+                          className="block"
+                        >
+                          {inner}
+                        </a>
+                      ) : rp.wikidataQid ? (
+                        <a
+                          href={`https://www.wikidata.org/wiki/${rp.wikidataQid}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block"
+                        >
+                          {inner}
+                        </a>
+                      ) : (
+                        inner
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Right rail — same media-facts pattern as the book detail

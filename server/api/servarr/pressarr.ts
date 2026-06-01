@@ -90,6 +90,13 @@ export interface PressarrMetadataSearchResult {
  * ``GET /magazine/identity?issn=…`` endpoint. Used when the operator
  * pastes an ISSN or when a discovery card needs the full record.
  */
+export interface PressarrRelatedPublication {
+  wikidataQid?: string | null;
+  title: string;
+  issn?: string | null;
+  relation?: string | null;
+}
+
 export interface PressarrMagazineIdentity {
   title: string;
   issn?: string | null;
@@ -106,6 +113,7 @@ export interface PressarrMagazineIdentity {
   wikipediaUrl?: string | null;
   categories?: string[];
   sources?: string[];
+  relatedPublications?: PressarrRelatedPublication[];
 }
 
 export interface PressarrRootFolder {
