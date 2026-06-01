@@ -2,6 +2,7 @@ import Button from '@app/components/Common/Button';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import MediaPageBackdrop from '@app/components/Common/MediaPageBackdrop';
 import PageTitle from '@app/components/Common/PageTitle';
+import Tag from '@app/components/Common/Tag';
 import StatusBadge from '@app/components/StatusBadge';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
@@ -19,15 +20,31 @@ const messages = defineMessages('pages.MagazineDetail', {
   notFound: 'Magazine not found.',
   overview: 'Overview',
   overviewunavailable: 'Overview unavailable.',
-  publisher: 'Publisher',
-  identity: 'Identity',
-  sources: 'Sources',
-  wikipedia: 'Wikipedia',
   request: 'Request',
   requested: 'Requested',
   requestSuccess: 'Magazine request submitted.',
   requestFailed: 'Failed to submit magazine request.',
+  // Facts block (label / value pairs in the right rail).
+  publisher: 'Publisher',
+  country: 'Country',
+  language: 'Language',
+  frequency: 'Frequency',
+  firstPublished: 'First published',
+  ceased: 'Ceased',
+  issn: 'ISSN',
+  zdb: 'ZDB',
+  wikidata: 'Wikidata',
+  wikipedia: 'Wikipedia',
+  sources: 'Sources',
+  // Publication status — surfaced as a chip near the title so the
+  // operator immediately knows whether it's an ongoing publication,
+  // a defunct title, or unknown.
+  statusOngoing: 'Ongoing — since {year}',
+  statusCeased: 'Ceased in {year}',
+  statusOngoingNoYear: 'Ongoing',
+  statusUnknown: 'Status unknown',
   categories: 'Categories',
+  openExternal: 'Open',
 });
 
 interface MagazineDetailData {
@@ -47,14 +64,11 @@ interface MagazineDetailData {
   zdbId?: string;
   wikipediaUrl?: string;
   sources?: string[];
-  // Available when the magazine is already in the library / has a
-  // pending request — populated by future scanners. Carried here
-  // so the StatusBadge can render the right colour without an
-  // extra round-trip.
+  firstIssued?: string;
+  ceasedAt?: string;
   mediaStatus?: MediaStatus | null;
 }
 
-// ISO-3166-1 alpha-2 → regional indicator emoji.
 const countryFlag = (code?: string): string => {
   if (!code || !/^[A-Z]{2}$/i.test(code)) return '';
   return code
@@ -115,8 +129,6 @@ const MagazineDetailPage: NextPage = () => {
     } catch (e) {
       const status = (e as { response?: { status?: number } })?.response
         ?.status;
-      // 409 = duplicate request — treat as success for the user
-      // (the magazine is already on the way).
       if (status === 409) {
         setDidRequest(true);
         addToast(intl.formatMessage(messages.requestSuccess), {
@@ -134,16 +146,40 @@ const MagazineDetailPage: NextPage = () => {
     }
   };
 
-  // Subtitle: country flag · language · frequency. Each piece is
-  // dropped silently when missing so a sparse record doesn't show
-  // dot separators with nothing between.
-  const subtitleParts: string[] = [];
-  if (data.country) {
-    const flag = countryFlag(data.country);
-    subtitleParts.push(flag ? `${flag} ${data.country}` : data.country);
+  // Publication status — most useful single piece of info for the
+  // operator. Computed from first_issued + ceased_at:
+  //   * ceased_at set       → "Cessé en YYYY"
+  //   * first_issued only   → "En cours depuis YYYY"
+  //   * neither             → "Statut inconnu"
+  const ceasedYear = data.ceasedAt?.slice(0, 4);
+  const firstYear = data.firstIssued?.slice(0, 4);
+  let statusLabel: string;
+  let statusTone: 'ongoing' | 'ceased' | 'unknown';
+  if (ceasedYear && /^\d{4}$/.test(ceasedYear)) {
+    statusLabel = intl.formatMessage(messages.statusCeased, {
+      year: ceasedYear,
+    });
+    statusTone = 'ceased';
+  } else if (firstYear && /^\d{4}$/.test(firstYear)) {
+    statusLabel = intl.formatMessage(messages.statusOngoing, {
+      year: firstYear,
+    });
+    statusTone = 'ongoing';
+  } else if (data.issn || data.wikidataQid) {
+    // Have identity but no dates — likely ongoing.
+    statusLabel = intl.formatMessage(messages.statusOngoingNoYear);
+    statusTone = 'ongoing';
+  } else {
+    statusLabel = intl.formatMessage(messages.statusUnknown);
+    statusTone = 'unknown';
   }
-  if (data.language) subtitleParts.push(data.language.toUpperCase());
-  if (data.frequency) subtitleParts.push(data.frequency);
+
+  const statusClass =
+    statusTone === 'ongoing'
+      ? 'border-emerald-500 bg-emerald-600/20 text-emerald-200'
+      : statusTone === 'ceased'
+        ? 'border-rose-500 bg-rose-600/20 text-rose-200'
+        : 'border-gray-500 bg-gray-600/20 text-gray-300';
 
   return (
     <div className="media-page" style={{ height: 493 }}>
@@ -160,8 +196,8 @@ const MagazineDetailPage: NextPage = () => {
               style={{ width: '100%', height: 'auto' }}
             />
           ) : (
-            <div className="flex h-full items-center justify-center rounded-lg bg-gray-700">
-              <NewspaperIcon className="h-16 w-16 text-gray-500" />
+            <div className="flex h-full items-center justify-center rounded-lg bg-gray-800 ring-1 ring-gray-700">
+              <NewspaperIcon className="h-20 w-20 text-gray-500" />
             </div>
           )}
         </div>
@@ -171,39 +207,27 @@ const MagazineDetailPage: NextPage = () => {
               status={data.mediaStatus ?? undefined}
               title={data.title}
             />
+            {/* Publication-status chip (different from request-status
+                badge above). Tells the operator whether the magazine
+                is still being published — the #1 thing they want to
+                know before requesting. */}
+            <span
+              className={`ml-2 inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium uppercase tracking-wider ${statusClass}`}
+            >
+              {statusLabel}
+            </span>
           </div>
           <h1 data-testid="media-title">
-            {data.title}{' '}
-            {data.year && <span className="media-year">({data.year})</span>}
+            {data.title}
+            {data.year && <span className="media-year"> ({data.year})</span>}
           </h1>
           {data.publisher && (
             <p className="text-sm text-gray-300">{data.publisher}</p>
           )}
-          {subtitleParts.length > 0 && (
-            <span className="media-attributes">
-              {subtitleParts.map((label, k) => <span key={k}>{label}</span>)
-                .reduce<React.ReactNode>(
-                  (prev, curr, idx) =>
-                    idx === 0 ? curr : (
-                      <>
-                        {prev}
-                        <span>|</span>
-                        {curr}
-                      </>
-                    ),
-                  null,
-                )}
-            </span>
-          )}
           {data.categories && data.categories.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {data.categories.map((c) => (
-                <span
-                  key={c}
-                  className="inline-block rounded-full bg-indigo-600/20 px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide text-indigo-300 ring-1 ring-indigo-500/40"
-                >
-                  {c}
-                </span>
+                <Tag key={c}>{c}</Tag>
               ))}
             </div>
           )}
@@ -235,67 +259,114 @@ const MagazineDetailPage: NextPage = () => {
           </p>
         </div>
 
+        {/* Right rail — same media-facts pattern as the book detail
+            page so the visual rhythm matches. Each row is
+            label / value with the value right-aligned. Empty fields
+            are omitted entirely rather than rendered with "—" so the
+            block stays tight. */}
         <div className="media-overview-right">
-          <div className="rounded-lg bg-gray-800/60 p-4 ring-1 ring-gray-700">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-400">
-              {intl.formatMessage(messages.identity)}
-            </h3>
-            <dl className="space-y-2 text-sm">
-              {data.issn && (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">ISSN</dt>
-                  <dd className="font-mono text-gray-200">{data.issn}</dd>
-                </div>
-              )}
-              {data.zdbId && (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">ZDB</dt>
-                  <dd className="font-mono text-gray-200">{data.zdbId}</dd>
-                </div>
-              )}
-              {data.wikidataQid && (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">Wikidata</dt>
-                  <dd>
-                    <a
-                      href={`https://www.wikidata.org/wiki/${data.wikidataQid}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-mono text-indigo-400 hover:text-indigo-300"
-                    >
-                      {data.wikidataQid}
-                    </a>
-                  </dd>
-                </div>
-              )}
-              {data.wikipediaUrl && (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">
-                    {intl.formatMessage(messages.wikipedia)}
-                  </dt>
-                  <dd>
-                    <a
-                      href={data.wikipediaUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-indigo-400 hover:text-indigo-300"
-                    >
-                      →
-                    </a>
-                  </dd>
-                </div>
-              )}
-              {data.sources && data.sources.length > 0 && (
-                <div className="flex justify-between gap-3">
-                  <dt className="text-gray-500">
-                    {intl.formatMessage(messages.sources)}
-                  </dt>
-                  <dd className="text-xs uppercase tracking-wider text-gray-300">
-                    {data.sources.join(' · ')}
-                  </dd>
-                </div>
-              )}
-            </dl>
+          <div className="media-facts">
+            {data.publisher && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.publisher)}</span>
+                <span className="media-fact-value">{data.publisher}</span>
+              </div>
+            )}
+            {data.country && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.country)}</span>
+                <span className="media-fact-value inline-flex items-center gap-1 uppercase">
+                  {countryFlag(data.country) && (
+                    <span className="text-base leading-none">
+                      {countryFlag(data.country)}
+                    </span>
+                  )}
+                  <span>{data.country}</span>
+                </span>
+              </div>
+            )}
+            {data.language && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.language)}</span>
+                <span className="media-fact-value uppercase">
+                  {data.language}
+                </span>
+              </div>
+            )}
+            {data.frequency && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.frequency)}</span>
+                <span className="media-fact-value capitalize">
+                  {data.frequency}
+                </span>
+              </div>
+            )}
+            {firstYear && /^\d{4}$/.test(firstYear) && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.firstPublished)}</span>
+                <span className="media-fact-value">{firstYear}</span>
+              </div>
+            )}
+            {ceasedYear && /^\d{4}$/.test(ceasedYear) && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.ceased)}</span>
+                <span className="media-fact-value">{ceasedYear}</span>
+              </div>
+            )}
+            {data.issn && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.issn)}</span>
+                <span className="media-fact-value font-mono">
+                  {data.issn}
+                </span>
+              </div>
+            )}
+            {data.zdbId && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.zdb)}</span>
+                <span className="media-fact-value font-mono">
+                  {data.zdbId}
+                </span>
+              </div>
+            )}
+            {data.wikidataQid && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.wikidata)}</span>
+                <span className="media-fact-value">
+                  <a
+                    href={`https://www.wikidata.org/wiki/${data.wikidataQid}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-indigo-400 hover:text-indigo-300"
+                  >
+                    {data.wikidataQid}
+                  </a>
+                </span>
+              </div>
+            )}
+            {data.wikipediaUrl && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.wikipedia)}</span>
+                <span className="media-fact-value">
+                  <a
+                    href={data.wikipediaUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-indigo-400 hover:text-indigo-300"
+                  >
+                    {intl.formatMessage(messages.openExternal)} →
+                  </a>
+                </span>
+              </div>
+            )}
+            {data.sources && data.sources.length > 0 && (
+              <div className="media-fact">
+                <span>{intl.formatMessage(messages.sources)}</span>
+                <span className="media-fact-value text-xs uppercase tracking-wider text-gray-300">
+                  {data.sources.join(' · ')}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
