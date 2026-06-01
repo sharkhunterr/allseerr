@@ -17,10 +17,10 @@ import { MediaRequest } from '@server/entity/MediaRequest';
 import { User } from '@server/entity/User';
 import { Permission } from '@server/lib/permissions';
 import { hasPermission } from '@server/lib/permissions';
+import { getRepository } from '@server/datasource';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { Router } from 'express';
-import { getRepository } from 'typeorm';
 
 const magazineRoutes = Router();
 
