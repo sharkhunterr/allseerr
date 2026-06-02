@@ -59,6 +59,11 @@ interface RelatedPublication {
   relation?: string;
 }
 
+interface IssnEntry {
+  issn: string;
+  format?: string;
+}
+
 interface MagazineDetailData {
   source: 'pressarr' | 'googlebooks';
   id: string;
@@ -79,6 +84,7 @@ interface MagazineDetailData {
   firstIssued?: string;
   ceasedAt?: string;
   relatedPublications?: RelatedPublication[];
+  issns?: IssnEntry[];
   mediaStatus?: MediaStatus | null;
 }
 
@@ -399,14 +405,35 @@ const MagazineDetailPage: NextPage = () => {
                 <span className="media-fact-value">{ceasedYear}</span>
               </div>
             )}
-            {data.issn && (
-              <div className="media-fact">
-                <span>{intl.formatMessage(messages.issn)}</span>
-                <span className="media-fact-value font-mono">
-                  {data.issn}
-                </span>
-              </div>
-            )}
+            {(() => {
+              // Prefer the full ISSN-L sibling list when ISSN Portal
+              // returned one — surfaces print + online + CD-ROM etc.
+              // under the same fiche. Falls back to the single
+              // primary ISSN when no group data is available.
+              const list = data.issns?.length
+                ? data.issns
+                : data.issn
+                  ? [{ issn: data.issn }]
+                  : [];
+              if (list.length === 0) return null;
+              return (
+                <div className="media-fact">
+                  <span>{intl.formatMessage(messages.issn)}</span>
+                  <span className="media-fact-value flex flex-col items-end gap-0.5 font-mono">
+                    {list.map((e) => (
+                      <span key={e.issn} className="inline-flex items-baseline gap-1.5">
+                        <span>{e.issn}</span>
+                        {e.format && (
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400 font-sans">
+                            {e.format}
+                          </span>
+                        )}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+              );
+            })()}
             {data.zdbId && (
               <div className="media-fact">
                 <span>{intl.formatMessage(messages.zdb)}</span>

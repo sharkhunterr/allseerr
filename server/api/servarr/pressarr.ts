@@ -97,6 +97,11 @@ export interface PressarrRelatedPublication {
   relation?: string | null;
 }
 
+export interface PressarrIssnEntry {
+  issn: string;
+  format?: string | null;
+}
+
 export interface PressarrMagazineIdentity {
   title: string;
   issn?: string | null;
@@ -114,6 +119,7 @@ export interface PressarrMagazineIdentity {
   categories?: string[];
   sources?: string[];
   relatedPublications?: PressarrRelatedPublication[];
+  issns?: PressarrIssnEntry[];
 }
 
 export interface PressarrRootFolder {

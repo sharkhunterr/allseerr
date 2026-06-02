@@ -4,6 +4,7 @@ import {
   searchMagazines,
 } from '@server/api/googlebooks/magazines';
 import PressarrAPI, {
+  type PressarrIssnEntry,
   type PressarrMagazineIdentity,
   type PressarrMetadataSearchResult,
   type PressarrRelatedPublication,
@@ -57,6 +58,7 @@ interface MagazineCard {
   firstIssued?: string;
   ceasedAt?: string;
   relatedPublications?: PressarrRelatedPublication[];
+  issns?: PressarrIssnEntry[];
 }
 
 function getDefaultPressarr() {
@@ -142,6 +144,7 @@ function identityToCard(
     firstIssued: identity.firstIssued ?? undefined,
     ceasedAt: identity.ceasedAt ?? undefined,
     relatedPublications: identity.relatedPublications ?? undefined,
+    issns: identity.issns ?? undefined,
   };
 }
 
