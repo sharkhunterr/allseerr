@@ -1,5 +1,6 @@
 import AudiobookCard from '@app/components/AudiobookCard';
 import BookCard from '@app/components/BookCard';
+import Button from '@app/components/Common/Button';
 import ComicCard from '@app/components/ComicCard';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
@@ -9,6 +10,12 @@ import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import GameCard from '@app/components/GameCard';
 import MagazineCard from '@app/components/MagazineCard';
 import MangaCard from '@app/components/MangaCard';
+import MagazineSearchFilterSlideover, {
+  countMagazineActiveFilters,
+  MAGAZINE_FILTER_DEFAULTS,
+  type MagazineFilterValues,
+} from '@app/components/Search/MagazineSearchFilterSlideover';
+import { FunnelIcon } from '@heroicons/react/24/solid';
 import { SearchLoadingContext } from '@app/context/SearchLoadingContext';
 import useDiscover from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
@@ -381,22 +388,14 @@ const Search = () => {
   const [mangaResults, setMangaResults] = useState<MangaResult[]>([]);
   const [comicResults, setComicResults] = useState<ComicResult[]>([]);
   const [magazineResults, setMagazineResults] = useState<MagazineResult[]>([]);
-  // Magazine-specific filter: hide ceased publications by default
-  // (operators almost always want a still-publishing magazine).
-  // Toggleable on the tab via the chip above the result grid.
-  const [magazineStatusFilter, setMagazineStatusFilter] = useState<
-    'ongoing' | 'all'
-  >('ongoing');
-  // Verified-only filter is ON by default — operators almost
-  // always want to skip the long tail of BnF / ZDB edition
-  // records that share a root title with the canonical magazine.
-  const [magazineVerifiedOnly, setMagazineVerifiedOnly] = useState(true);
-  // Multi-ISSN filter — opt-in. When ON, only shows magazines whose
-  // ISSN Portal record has 2+ ISSNs registered under the same
-  // ISSN-L (= a publication that exists across formats, typical
-  // for canonical titles). Useful for cutting one-shots / obscure
-  // edition records.
-  const [magazineMultiIssnOnly, setMagazineMultiIssnOnly] = useState(false);
+  // Magazine-specific filters, mirroring the discover slideover
+  // pattern — three dimensions (publication status, source
+  // coverage, format breadth) all defaulting to the noise-
+  // suppressed bucket. Opt out via the Filters slideover.
+  const [magazineFilters, setMagazineFilters] = useState<MagazineFilterValues>(
+    MAGAZINE_FILTER_DEFAULTS
+  );
+  const [showMagazineFilters, setShowMagazineFilters] = useState(false);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
@@ -528,11 +527,11 @@ const Search = () => {
           params: {
             query,
             // Pass-through to pressarr's cascade so server-side
-            // filtering keeps the response small; the chips just
-            // re-fetch when toggled.
-            status: magazineStatusFilter,
-            verified: magazineVerifiedOnly ? 'true' : undefined,
-            multi_issn: magazineMultiIssnOnly ? 'true' : undefined,
+            // filtering keeps the response small; the slideover
+            // just re-fetches when the operator commits a change.
+            status: magazineFilters.statusOngoing ? 'ongoing' : 'all',
+            verified: magazineFilters.verifiedOnly ? 'true' : undefined,
+            multi_issn: magazineFilters.multiIssnOnly ? 'true' : undefined,
           },
           paramsSerializer,
         })
@@ -550,9 +549,7 @@ const Search = () => {
     mangaEnabled,
     comicEnabled,
     magazineEnabled,
-    magazineStatusFilter,
-    magazineVerifiedOnly,
-    magazineMultiIssnOnly,
+    magazineFilters,
   ]);
 
   // Publish a combined "any active fetch" boolean to SearchLoadingContext
@@ -903,106 +900,30 @@ const Search = () => {
           the detail route at /magazine/[id] handles uniformly. */}
       {activeTab === 'magazines' && (
         <div>
-          {/* Filter chip-toggles. Status (ongoing/all) + verified.
-              Both default to the "noise-suppressed" side because
-              that's what an operator typing a magazine name almost
-              always wants. */}
-          <div className="mb-4 flex flex-wrap items-center gap-3 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400">
-                {intl.formatMessage({
-                  id: 'components.Search.statusFilterLabel',
-                  defaultMessage: 'Status',
-                })}
-              </span>
-              {(
-                [
+          {/* Filters Button + SlideOver — same visual rhythm as
+              the discover pages. Each magazine-specific filter
+              lives inside the slideover; the button shows the
+              active-filter count next to the funnel icon. */}
+          <div className="mb-4 flex">
+            <MagazineSearchFilterSlideover
+              show={showMagazineFilters}
+              onClose={() => setShowMagazineFilters(false)}
+              currentFilters={magazineFilters}
+              onChange={setMagazineFilters}
+            />
+            <Button onClick={() => setShowMagazineFilters(true)}>
+              <FunnelIcon />
+              <span>
+                {intl.formatMessage(
                   {
-                    key: 'ongoing' as const,
-                    label: intl.formatMessage({
-                      id: 'components.Search.statusOngoing',
-                      defaultMessage: 'Ongoing only',
-                    }),
+                    id: 'components.Search.magazineActiveFilters',
+                    defaultMessage:
+                      '{count, plural, one {# Active Filter} other {# Active Filters}}',
                   },
-                  {
-                    key: 'all' as const,
-                    label: intl.formatMessage({
-                      id: 'components.Search.statusAll',
-                      defaultMessage: 'All',
-                    }),
-                  },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => setMagazineStatusFilter(opt.key)}
-                  className={`rounded-full px-3 py-1 ring-1 ring-inset transition ${
-                    magazineStatusFilter === opt.key
-                      ? 'bg-indigo-500/20 text-indigo-200 ring-indigo-500/40'
-                      : 'text-gray-400 ring-gray-700 hover:bg-gray-700/50 hover:text-gray-200'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400">
-                {intl.formatMessage({
-                  id: 'components.Search.verifiedFilterLabel',
-                  defaultMessage: 'Coverage',
-                })}
+                  { count: countMagazineActiveFilters(magazineFilters) }
+                )}
               </span>
-              <button
-                onClick={() => setMagazineVerifiedOnly(true)}
-                className={`rounded-full px-3 py-1 ring-1 ring-inset transition ${
-                  magazineVerifiedOnly
-                    ? 'bg-indigo-500/20 text-indigo-200 ring-indigo-500/40'
-                    : 'text-gray-400 ring-gray-700 hover:bg-gray-700/50 hover:text-gray-200'
-                }`}
-              >
-                {intl.formatMessage({
-                  id: 'components.Search.verifiedOnly',
-                  defaultMessage: 'Verified only',
-                })}
-              </button>
-              <button
-                onClick={() => setMagazineVerifiedOnly(false)}
-                className={`rounded-full px-3 py-1 ring-1 ring-inset transition ${
-                  !magazineVerifiedOnly
-                    ? 'bg-indigo-500/20 text-indigo-200 ring-indigo-500/40'
-                    : 'text-gray-400 ring-gray-700 hover:bg-gray-700/50 hover:text-gray-200'
-                }`}
-              >
-                {intl.formatMessage({
-                  id: 'components.Search.allCatalogues',
-                  defaultMessage: 'All catalogues',
-                })}
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400">
-                {intl.formatMessage({
-                  id: 'components.Search.formatsLabel',
-                  defaultMessage: 'Formats',
-                })}
-              </span>
-              <button
-                onClick={() =>
-                  setMagazineMultiIssnOnly(!magazineMultiIssnOnly)
-                }
-                className={`rounded-full px-3 py-1 ring-1 ring-inset transition ${
-                  magazineMultiIssnOnly
-                    ? 'bg-indigo-500/20 text-indigo-200 ring-indigo-500/40'
-                    : 'text-gray-400 ring-gray-700 hover:bg-gray-700/50 hover:text-gray-200'
-                }`}
-              >
-                {intl.formatMessage({
-                  id: 'components.Search.multiIssnOnly',
-                  defaultMessage: 'Multi-ISSN only',
-                })}
-              </button>
-            </div>
+            </Button>
           </div>
           {isLoadingMagazines ? (
             <LoadingSpinner />
