@@ -71,6 +71,7 @@ interface MagazineDetailData {
   publisher?: string;
   issn?: string;
   coverUrl?: string;
+  coverIsLogo?: boolean;
   year?: number;
   language?: string;
   description?: string;
@@ -202,18 +203,43 @@ const MagazineDetailPage: NextPage = () => {
 
   return (
     <div className="media-page" style={{ height: 493 }}>
-      <MediaPageBackdrop src={data.coverUrl} mode="cover" />
+      {/* Skip the cover backdrop when the artwork is a logo —
+          stretching a logo to fill the page background looks
+          worse than no backdrop at all (jagged blow-up + wrong
+          colour palette bleeding behind the header). */}
+      {!data.coverIsLogo && (
+        <MediaPageBackdrop src={data.coverUrl} mode="cover" />
+      )}
       <PageTitle title={data.title} />
 
       <div className="media-header">
         <div className="media-poster">
           {data.coverUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={data.coverUrl}
-              alt={data.title}
-              style={{ width: '100%', height: 'auto' }}
-            />
+            data.coverIsLogo ? (
+              // Same contained-logo treatment as MagazineCard
+              // (off-white background + padding) so the brand
+              // mark stays readable + the visual rhythm with
+              // the search tile matches.
+              <div className="flex aspect-[2/3] w-full items-center justify-center rounded-lg bg-gray-100 p-6 ring-1 ring-gray-700">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={data.coverUrl}
+                  alt={data.title}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    objectFit: 'contain',
+                  }}
+                />
+              </div>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={data.coverUrl}
+                alt={data.title}
+                style={{ width: '100%', height: 'auto' }}
+              />
+            )
           ) : (
             <div className="flex h-full items-center justify-center rounded-lg bg-gray-800 ring-1 ring-gray-700">
               <NewspaperIcon className="h-20 w-20 text-gray-500" />
