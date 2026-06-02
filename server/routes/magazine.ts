@@ -59,6 +59,10 @@ interface MagazineCard {
   ceasedAt?: string;
   relatedPublications?: PressarrRelatedPublication[];
   issns?: PressarrIssnEntry[];
+  // True when ``coverUrl`` is a brand logo (Wikidata P154) — the
+  // card renderer switches to a contained layout with a neutral
+  // background instead of zoom-cropping the image.
+  coverIsLogo?: boolean;
 }
 
 function getDefaultPressarr() {
@@ -110,6 +114,8 @@ function cascadeToCard(hit: PressarrMetadataSearchResult): MagazineCard {
     sources: hit.sources?.map((s) => s.provider),
     firstIssued: hit.firstIssued ?? undefined,
     ceasedAt: hit.ceasedAt ?? undefined,
+    issns: hit.issns ?? undefined,
+    coverIsLogo: hit.coverIsLogo,
   };
 }
 
@@ -145,6 +151,7 @@ function identityToCard(
     ceasedAt: identity.ceasedAt ?? undefined,
     relatedPublications: identity.relatedPublications ?? undefined,
     issns: identity.issns ?? undefined,
+    coverIsLogo: identity.coverIsLogo,
   };
 }
 
@@ -182,6 +189,8 @@ magazineRoutes.get('/search', isAuthenticated(), async (req, res, next) => {
   // canonical title surfaces alone.
   const verified =
     req.query.verified === 'true' || req.query.verified === '1';
+  const multiIssn =
+    req.query.multi_issn === 'true' || req.query.multi_issn === '1';
   if (!query?.trim()) {
     return res.status(200).json({ results: [] });
   }
@@ -193,6 +202,7 @@ magazineRoutes.get('/search', isAuthenticated(), async (req, res, next) => {
         locale,
         status,
         verified,
+        multiIssn,
       });
       // Empty cascade response → fall through to Google Books to
       // preserve discovery UX even when ZDB / Wikidata don't know

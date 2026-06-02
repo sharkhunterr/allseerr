@@ -70,7 +70,9 @@ export interface PressarrMetadataSearchResult {
   country?: string | null;
   description?: string | null;
   coverUrl?: string | null;
+  coverIsLogo?: boolean;
   issn?: string | null;
+  issns?: PressarrIssnEntry[];
   frequency?: string | null;
   // ISSN-first cascade enrichment fields. Surfaced by pressarr's
   // ZDB / Wikidata / BnF providers; older Google Books / Internet
@@ -120,6 +122,7 @@ export interface PressarrMagazineIdentity {
   sources?: string[];
   relatedPublications?: PressarrRelatedPublication[];
   issns?: PressarrIssnEntry[];
+  coverIsLogo?: boolean;
 }
 
 export interface PressarrRootFolder {
@@ -198,6 +201,7 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
       locale?: string;
       status?: 'ongoing' | 'ceased' | 'all';
       verified?: boolean;
+      multiIssn?: boolean;
     }
   ): Promise<PressarrMetadataSearchResult[]> => {
     if (!query?.trim()) return [];
@@ -213,6 +217,7 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
             // small.
             status: opts?.status,
             verified: opts?.verified ? true : undefined,
+            multi_issn: opts?.multiIssn ? true : undefined,
           },
         }
       );

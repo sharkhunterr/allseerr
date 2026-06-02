@@ -8887,6 +8887,11 @@ paths:
           required: false
           schema:
             type: boolean
+        - in: query
+          name: multi_issn
+          required: false
+          schema:
+            type: boolean
       responses:
         '200':
           description: Results

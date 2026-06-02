@@ -62,7 +62,9 @@ interface MagazineResult {
   title: string;
   publisher?: string;
   issn?: string;
+  issns?: { issn: string; format?: string }[];
   coverUrl?: string;
+  coverIsLogo?: boolean;
   year?: number;
   language?: string;
   country?: string;
@@ -389,6 +391,12 @@ const Search = () => {
   // always want to skip the long tail of BnF / ZDB edition
   // records that share a root title with the canonical magazine.
   const [magazineVerifiedOnly, setMagazineVerifiedOnly] = useState(true);
+  // Multi-ISSN filter — opt-in. When ON, only shows magazines whose
+  // ISSN Portal record has 2+ ISSNs registered under the same
+  // ISSN-L (= a publication that exists across formats, typical
+  // for canonical titles). Useful for cutting one-shots / obscure
+  // edition records.
+  const [magazineMultiIssnOnly, setMagazineMultiIssnOnly] = useState(false);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
@@ -524,6 +532,7 @@ const Search = () => {
             // re-fetch when toggled.
             status: magazineStatusFilter,
             verified: magazineVerifiedOnly ? 'true' : undefined,
+            multi_issn: magazineMultiIssnOnly ? 'true' : undefined,
           },
           paramsSerializer,
         })
@@ -543,6 +552,7 @@ const Search = () => {
     magazineEnabled,
     magazineStatusFilter,
     magazineVerifiedOnly,
+    magazineMultiIssnOnly,
   ]);
 
   // Publish a combined "any active fetch" boolean to SearchLoadingContext
@@ -970,6 +980,29 @@ const Search = () => {
                 })}
               </button>
             </div>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">
+                {intl.formatMessage({
+                  id: 'components.Search.formatsLabel',
+                  defaultMessage: 'Formats',
+                })}
+              </span>
+              <button
+                onClick={() =>
+                  setMagazineMultiIssnOnly(!magazineMultiIssnOnly)
+                }
+                className={`rounded-full px-3 py-1 ring-1 ring-inset transition ${
+                  magazineMultiIssnOnly
+                    ? 'bg-indigo-500/20 text-indigo-200 ring-indigo-500/40'
+                    : 'text-gray-400 ring-gray-700 hover:bg-gray-700/50 hover:text-gray-200'
+                }`}
+              >
+                {intl.formatMessage({
+                  id: 'components.Search.multiIssnOnly',
+                  defaultMessage: 'Multi-ISSN only',
+                })}
+              </button>
+            </div>
           </div>
           {isLoadingMagazines ? (
             <LoadingSpinner />
@@ -987,6 +1020,7 @@ const Search = () => {
                     publisher={m.publisher}
                     issn={m.issn}
                     coverUrl={m.coverUrl}
+                    coverIsLogo={m.coverIsLogo}
                     year={m.year}
                     language={m.language}
                     country={m.country}

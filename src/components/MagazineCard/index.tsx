@@ -45,6 +45,7 @@ interface MagazineCardProps {
   frequency?: string;
   firstIssued?: string;
   ceasedAt?: string;
+  coverIsLogo?: boolean;
 }
 
 const MagazineCard = ({
@@ -64,6 +65,7 @@ const MagazineCard = ({
   frequency,
   firstIssued,
   ceasedAt,
+  coverIsLogo,
 }: MagazineCardProps) => {
   const intl = useIntl();
 
@@ -162,6 +164,7 @@ const MagazineCard = ({
       // amber Comics and orange Books tiles in mixed rows.
       typeBadgeClasses="border-indigo-500 bg-indigo-600/80"
       extraBadges={extraBadges}
+      coverIsLogo={coverIsLogo}
     />
   );
 };

@@ -69,6 +69,13 @@ interface MediaTitleCardProps {
    * ``classes``. Used by MagazineCard to surface publication
    * status (ongoing / ceased) and frequency. */
   extraBadges?: { label: string; classes: string }[];
+  /** When true, render the cover as a contained image on a neutral
+   * background instead of zoom-cropping it to fill the 2:3 tile.
+   * Used by MagazineCard when the cascade returned a brand logo
+   * (Wikidata P154) instead of a content image — logos butcher
+   * under ``object-cover`` because they're built for transparent
+   * backgrounds at a specific aspect ratio. */
+  coverIsLogo?: boolean;
   /** Optional 0-100 rating pill in the bottom-right. */
   rating?: number;
   /** Optional in-card visual on top of the cover (e.g. a
@@ -89,6 +96,7 @@ const MediaTitleCard = ({
   typeLabel,
   typeBadgeClasses = 'border-teal-500 bg-teal-600/80',
   extraBadges,
+  coverIsLogo = false,
   rating,
   coverFallback,
 }: MediaTitleCardProps): ReactElement => {
@@ -130,13 +138,33 @@ const MediaTitleCard = ({
     >
       <div className="absolute inset-0 h-full w-full overflow-hidden">
         {coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={coverUrl}
-            alt=""
-            className="absolute inset-0 h-full w-full"
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
+          coverIsLogo ? (
+            // Logo-specific treatment: contain on a neutral
+            // off-white background with padding so the brand
+            // mark stays readable + centred. The detail-page
+            // hover overlay still works the same way since this
+            // sits underneath the absolute-positioned badges.
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={coverUrl}
+                alt=""
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
+                }}
+              />
+            </div>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={coverUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          )
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-700">
             {coverFallback ?? (
