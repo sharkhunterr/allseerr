@@ -408,11 +408,73 @@ services:
       - ./data/pressarr/data:/app/data
       - ./data/downloads:/downloads
       - ./data/library/magazines:/magazines
+      # Shared with the JDownloader 2 sidecar — pressarr writes
+      # .crawljob files into ``folderwatch``, JD2 picks them up
+      # and downloads into ``complete``.
+      - ./data/jd2/folderwatch:/downloads/jd2/folderwatch
+      - ./data/jd2/complete:/downloads/jd2/complete
     ports:
       - "18084:8585"
     depends_on:
       - grabarr
+      # Soft dependencies — pressarr starts fine without them
+      # (Bookys returns nothing, JD2 grabs return 502) but the
+      # full magazine pipeline needs both.
+      - flaresolverr
+      - jdownloader2
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # FlareSolverr — headless-Chromium Cloudflare bypass sidecar.
+  # Pressarr's Bookys scraper routes every HTTP through this
+  # service because www6.bookys-ebooks.com is behind the
+  # "Just a moment…" challenge. Grabarr can also reuse the
+  # same instance (point GRABARR_SHELFMARK_EXT_BYPASSER_URL
+  # at http://flaresolverr:8191/v1).
+  # ===========================================================
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: allseerr-test-flaresolverr
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: "info"
+      TZ: "Europe/Paris"
+    ports:
+      - "18191:8191"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # JDownloader 2 — the actual file-hoster downloader.
+  # Pressarr emits .crawljob files into ``/jdownloader/cfg/folderwatch``
+  # (== ./data/jd2/folderwatch on the host) and JD2's built-in
+  # Folder Watch extension picks them up, downloads to
+  # ``/jdownloader/downloads`` (== ./data/jd2/complete) which
+  # pressarr's importer scans for completed releases.
+  #
+  # First boot: open http://localhost:15800 (noVNC), accept the
+  # licence, enable Settings → Extensions → Folder Watch, set
+  # its watch path to ``/jdownloader/cfg/folderwatch``. Optional:
+  # add your premium hoster accounts (1fichier, Rapidgator,
+  # Nitroflare, …) under Settings → Accounts.
+  # ===========================================================
+  jdownloader2:
+    image: jlesage/jdownloader-2:latest
+    container_name: allseerr-test-jdownloader2
+    restart: unless-stopped
+    environment:
+      USER_ID: "1000"
+      GROUP_ID: "1000"
+      TZ: "Europe/Paris"
+      KEEP_APP_RUNNING: "1"
+    ports:
+      - "15800:5800"   # noVNC
+    volumes:
+      - ./data/jd2/cfg:/config
+      - ./data/jd2/folderwatch:/jdownloader/cfg/folderwatch
+      - ./data/jd2/complete:/jdownloader/downloads
     networks:
       - allseerr-test
