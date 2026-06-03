@@ -404,7 +404,7 @@ services:
     environment:
       LOG_LEVEL: "INFO"
     volumes:
-      - ./data/pressarr/config:/app/config
+      - ./data/pressarr/config:/config
       - ./data/pressarr/data:/app/data
       - ./data/downloads:/downloads
       - ./data/library/magazines:/magazines
@@ -424,26 +424,6 @@ services:
       - jdownloader2
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks:
-      - allseerr-test
-
-  # ===========================================================
-  # FlareSolverr — headless-Chromium Cloudflare bypass sidecar.
-  # Pressarr's Bookys scraper routes every HTTP through this
-  # service because www6.bookys-ebooks.com is behind the
-  # "Just a moment…" challenge. Grabarr can also reuse the
-  # same instance (point GRABARR_SHELFMARK_EXT_BYPASSER_URL
-  # at http://flaresolverr:8191/v1).
-  # ===========================================================
-  flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
-    container_name: allseerr-test-flaresolverr
-    restart: unless-stopped
-    environment:
-      LOG_LEVEL: "info"
-      TZ: "Europe/Paris"
-    ports:
-      - "18191:8191"
     networks:
       - allseerr-test
 
