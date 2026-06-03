@@ -353,6 +353,81 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
       return null;
     }
   };
+
+  /**
+   * One row per scene release scraped from the configured
+   * magazine indexers (Bookys, telecharger-magazines.org, …).
+   * GET reads what's already in pressarr's DB; POST kicks a
+   * fresh scrape against every enabled indexer and returns the
+   * upserted list.
+   */
+  public listMagazineReleases = async (
+    magazineId: number
+  ): Promise<PressarrMagazineRelease[]> => {
+    try {
+      const response = await this.axios.get<PressarrMagazineRelease[]>(
+        `/magazine/${magazineId}/releases`
+      );
+      return response.data ?? [];
+    } catch (e) {
+      logger.warn('Pressarr listMagazineReleases failed', {
+        label: 'pressarr',
+        magazineId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return [];
+    }
+  };
+
+  public scanMagazineReleases = async (
+    magazineId: number
+  ): Promise<PressarrMagazineRelease[]> => {
+    // Scrape time is dominated by FlareSolverr; bump the
+    // axios timeout for this one call so the scan doesn't get
+    // cut short while Bookys is solving its CF challenge.
+    const response = await this.axios.post<PressarrMagazineRelease[]>(
+      `/magazine/${magazineId}/releases/scan`,
+      {},
+      { timeout: 120_000 }
+    );
+    return response.data ?? [];
+  };
+
+  public grabMagazineRelease = async (
+    magazineId: number,
+    releaseId: number
+  ): Promise<PressarrMagazineRelease> => {
+    const response = await this.axios.post<PressarrMagazineRelease>(
+      `/magazine/${magazineId}/releases/${releaseId}/grab`,
+      {}
+    );
+    return response.data;
+  };
+}
+
+export interface PressarrMagazineReleaseHoster {
+  hoster: string;
+  url: string;
+}
+
+export interface PressarrMagazineRelease {
+  id: number;
+  magazineId: number;
+  source: string;
+  sourceUrl: string;
+  title: string;
+  issueLabel?: string | null;
+  year?: number | null;
+  language?: string | null;
+  fileFormat?: string | null;
+  sizeBytes?: number | null;
+  publishedAt?: string | null;
+  coverUrl?: string | null;
+  hosterLinks: PressarrMagazineReleaseHoster[];
+  status: 'available' | 'grabbed' | 'imported' | 'failed';
+  statusMessage?: string | null;
+  grabbedAt?: string | null;
+  discoveredAt?: string | null;
 }
 
 export default PressarrAPI;
