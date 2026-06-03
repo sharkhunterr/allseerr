@@ -48,6 +48,18 @@ export interface PressarrMagazineCreateOptions
    * Omit for "monitor everything" (pressarr's default).
    */
   monitoringStartDate?: string;
+  /**
+   * 'subscription' (default) keeps the magazine in pressarr's
+   * monitored set so future issues are auto-grabbed; 'one_shot'
+   * tells pressarr to grab the single matching back-issue and
+   * then stop. See ``targetIssueLabel`` / ``targetIssueDate``
+   * for how the one-shot target is identified.
+   */
+  requestType?: 'subscription' | 'one_shot';
+  targetIssueLabel?: string;
+  /** ISO ``YYYY-MM-DD``. Required when ``requestType='one_shot'``
+   *  and the operator picked the date variant. */
+  targetIssueDate?: string;
 }
 
 export interface PressarrMagazine {
@@ -300,6 +312,9 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
           metadataProviderId: options.metadataProviderId,
           searchForMissingIssues: options.searchForMissingIssues ?? true,
           monitoringStartDate: options.monitoringStartDate,
+          requestType: options.requestType,
+          targetIssueLabel: options.targetIssueLabel,
+          targetIssueDate: options.targetIssueDate,
           // Cascade enrichment forwarded when allseerr's search
           // already resolved them. Omitting is safe — pressarr
           // back-fills from its own cascade by ISSN.
@@ -354,80 +369,6 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
     }
   };
 
-  /**
-   * One row per scene release scraped from the configured
-   * magazine indexers (Bookys, telecharger-magazines.org, …).
-   * GET reads what's already in pressarr's DB; POST kicks a
-   * fresh scrape against every enabled indexer and returns the
-   * upserted list.
-   */
-  public listMagazineReleases = async (
-    magazineId: number
-  ): Promise<PressarrMagazineRelease[]> => {
-    try {
-      const response = await this.axios.get<PressarrMagazineRelease[]>(
-        `/magazine/${magazineId}/releases`
-      );
-      return response.data ?? [];
-    } catch (e) {
-      logger.warn('Pressarr listMagazineReleases failed', {
-        label: 'pressarr',
-        magazineId,
-        error: e instanceof Error ? e.message : String(e),
-      });
-      return [];
-    }
-  };
-
-  public scanMagazineReleases = async (
-    magazineId: number
-  ): Promise<PressarrMagazineRelease[]> => {
-    // Scrape time is dominated by FlareSolverr; bump the
-    // axios timeout for this one call so the scan doesn't get
-    // cut short while Bookys is solving its CF challenge.
-    const response = await this.axios.post<PressarrMagazineRelease[]>(
-      `/magazine/${magazineId}/releases/scan`,
-      {},
-      { timeout: 120_000 }
-    );
-    return response.data ?? [];
-  };
-
-  public grabMagazineRelease = async (
-    magazineId: number,
-    releaseId: number
-  ): Promise<PressarrMagazineRelease> => {
-    const response = await this.axios.post<PressarrMagazineRelease>(
-      `/magazine/${magazineId}/releases/${releaseId}/grab`,
-      {}
-    );
-    return response.data;
-  };
-}
-
-export interface PressarrMagazineReleaseHoster {
-  hoster: string;
-  url: string;
-}
-
-export interface PressarrMagazineRelease {
-  id: number;
-  magazineId: number;
-  source: string;
-  sourceUrl: string;
-  title: string;
-  issueLabel?: string | null;
-  year?: number | null;
-  language?: string | null;
-  fileFormat?: string | null;
-  sizeBytes?: number | null;
-  publishedAt?: string | null;
-  coverUrl?: string | null;
-  hosterLinks: PressarrMagazineReleaseHoster[];
-  status: 'available' | 'grabbed' | 'imported' | 'failed';
-  statusMessage?: string | null;
-  grabbedAt?: string | null;
-  discoveredAt?: string | null;
 }
 
 export default PressarrAPI;

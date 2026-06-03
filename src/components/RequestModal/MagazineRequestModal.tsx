@@ -18,15 +18,34 @@ const messages = defineMessages('components.RequestModal.MagazineRequestModal', 
   requestFailed: 'Failed to submit request.',
   alreadyRequested: 'This magazine has already been requested.',
   autoApprove: 'This request will be approved automatically.',
+  // Subscription vs one-shot toggle.
+  requestTypeLabel: 'What do you want?',
+  requestTypeSubscription: 'Subscribe — get new issues',
+  requestTypeSubscriptionHelp:
+    'Monitor this magazine going forward. Every new issue published on or after the "Watch from" date is grabbed automatically.',
+  requestTypeOneShot: 'One specific issue',
+  requestTypeOneShotHelp:
+    'Grab a single back issue, no monitoring. Give the issue number or its publication date — whichever the magazine is identified by.',
+  // Subscription-mode fields
   watchFrom: 'Watch from',
   watchFromHelp:
     'Pressarr will only grab issues published on or after this date. Leave blank to monitor the entire back catalogue.',
   todayShortcut: 'Today',
   clear: 'Clear',
+  // One-shot-mode fields
+  targetIssueLabel: 'Issue identifier',
+  targetIssueHelp:
+    'Either an issue number ("594" or "N°594" or "HS 14") OR an issue date (YYYY-MM-DD for dailies like L\'Équipe). One of the two is enough.',
+  targetIssueDate: 'Issue date',
+  targetIssueDateHelp:
+    "Useful for dailies where the issue is identified by its date instead of a number (L'Équipe du 03/06/2026).",
+  // Static info row
   frequencyLabel: 'Frequency',
   frequencyValue: '{value}',
   publisherLabel: 'Publisher',
 });
+
+type RequestType = 'subscription' | 'one_shot';
 
 interface MagazineRequestModalProps {
   show: boolean;
@@ -71,6 +90,17 @@ const MagazineRequestModal = ({
   // back catalogue clear the field.
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [monitoringStartDate, setMonitoringStartDate] = useState<string>(today);
+  // Subscription (recurring monitor) vs one_shot (single back
+  // issue). Subscription is the common case so it's the
+  // default; toggling to one_shot swaps the date picker for a
+  // pair of identifier fields.
+  const [requestType, setRequestType] = useState<RequestType>('subscription');
+  const [targetIssueLabel, setTargetIssueLabel] = useState('');
+  const [targetIssueDate, setTargetIssueDate] = useState('');
+  const oneShotValid =
+    requestType === 'subscription' ||
+    targetIssueLabel.trim().length > 0 ||
+    targetIssueDate.trim().length > 0;
 
   const willAutoApprove = hasPermission(
     [
@@ -87,8 +117,34 @@ const MagazineRequestModal = ({
   );
 
   const submit = async () => {
+    if (!oneShotValid) return;
     setIsSubmitting(true);
     try {
+      // Subscription = recurring monitor; pressarr keeps the
+      // magazine in its scheduled-scan list and auto-grabs every
+      // new issue published on/after ``monitoringStartDate``.
+      // One-shot = the operator wants a single back issue and
+      // does NOT want pressarr to keep monitoring afterwards;
+      // pressarr resolves the target (issue number or date) and
+      // grabs exactly that one release.
+      const subscriptionFields =
+        requestType === 'subscription'
+          ? monitoringStartDate
+            ? { monitoringStartDate }
+            : {}
+          : {};
+      const oneShotFields =
+        requestType === 'one_shot'
+          ? {
+              requestType: 'one_shot' as const,
+              ...(targetIssueLabel.trim()
+                ? { targetIssueLabel: targetIssueLabel.trim() }
+                : {}),
+              ...(targetIssueDate.trim()
+                ? { targetIssueDate: targetIssueDate.trim() }
+                : {}),
+            }
+          : { requestType: 'subscription' as const };
       await axios.post('/api/v1/magazine/request', {
         id,
         title,
@@ -102,11 +158,8 @@ const MagazineRequestModal = ({
         frequency,
         googleBooksId,
         userId: requestAsUser?.id,
-        // Empty string = "no preference" → don't send the field at
-        // all; pressarr falls back to monitoring everything.
-        ...(monitoringStartDate
-          ? { monitoringStartDate }
-          : {}),
+        ...subscriptionFields,
+        ...oneShotFields,
       });
       addToast(intl.formatMessage(messages.requestSuccess), {
         appearance: 'success',
@@ -150,7 +203,7 @@ const MagazineRequestModal = ({
             ? intl.formatMessage(globalMessages.loading)
             : intl.formatMessage(globalMessages.request)
         }
-        okDisabled={isSubmitting}
+        okDisabled={isSubmitting || !oneShotValid}
         okButtonType="primary"
         cancelText={intl.formatMessage(globalMessages.cancel)}
         // The detail page already styles logo covers on a light
@@ -196,44 +249,131 @@ const MagazineRequestModal = ({
           </div>
         )}
 
-        {/* Start-watching date — the one mandatory choice. Defaults
-            to today because it's by far the most common case
-            ("only grab new issues"); operators who want the back
-            catalogue blank the field. */}
+        {/* Subscription vs one-shot picker — radio pair styled
+            as cards. Each option has its own help line so the
+            operator picks confidently without skimming the
+            tooltips. */}
         <div className="mt-6">
-          <label
-            htmlFor="monitoringStartDate"
-            className="mb-2 block text-sm font-medium text-gray-100"
-          >
-            {intl.formatMessage(messages.watchFrom)}
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              id="monitoringStartDate"
-              type="date"
-              value={monitoringStartDate}
-              onChange={(e) => setMonitoringStartDate(e.target.value)}
-              className="block w-full max-w-xs rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-            <button
-              type="button"
-              onClick={() => setMonitoringStartDate(today)}
-              className="rounded-md bg-gray-700/60 px-3 py-2 text-xs uppercase tracking-wider text-gray-200 ring-1 ring-gray-600 hover:bg-gray-700"
-            >
-              {intl.formatMessage(messages.todayShortcut)}
-            </button>
-            <button
-              type="button"
-              onClick={() => setMonitoringStartDate('')}
-              className="rounded-md bg-gray-700/60 px-3 py-2 text-xs uppercase tracking-wider text-gray-200 ring-1 ring-gray-600 hover:bg-gray-700"
-            >
-              {intl.formatMessage(messages.clear)}
-            </button>
+          <span className="mb-2 block text-sm font-medium text-gray-100">
+            {intl.formatMessage(messages.requestTypeLabel)}
+          </span>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {(
+              [
+                {
+                  value: 'subscription' as const,
+                  label: messages.requestTypeSubscription,
+                  help: messages.requestTypeSubscriptionHelp,
+                },
+                {
+                  value: 'one_shot' as const,
+                  label: messages.requestTypeOneShot,
+                  help: messages.requestTypeOneShotHelp,
+                },
+              ]
+            ).map((opt) => {
+              const active = requestType === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setRequestType(opt.value)}
+                  className={`rounded-md border p-3 text-left transition ${
+                    active
+                      ? 'border-indigo-500 bg-indigo-500/10 ring-1 ring-indigo-500/40'
+                      : 'border-gray-700 bg-gray-700/30 hover:border-gray-600'
+                  }`}
+                >
+                  <div
+                    className={`text-sm font-semibold ${active ? 'text-indigo-200' : 'text-gray-100'}`}
+                  >
+                    {intl.formatMessage(opt.label)}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {intl.formatMessage(opt.help)}
+                  </p>
+                </button>
+              );
+            })}
           </div>
-          <p className="mt-2 text-xs text-gray-400">
-            {intl.formatMessage(messages.watchFromHelp)}
-          </p>
         </div>
+
+        {requestType === 'subscription' ? (
+          <div className="mt-4">
+            <label
+              htmlFor="monitoringStartDate"
+              className="mb-2 block text-sm font-medium text-gray-100"
+            >
+              {intl.formatMessage(messages.watchFrom)}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="monitoringStartDate"
+                type="date"
+                value={monitoringStartDate}
+                onChange={(e) => setMonitoringStartDate(e.target.value)}
+                className="block w-full max-w-xs rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={() => setMonitoringStartDate(today)}
+                className="rounded-md bg-gray-700/60 px-3 py-2 text-xs uppercase tracking-wider text-gray-200 ring-1 ring-gray-600 hover:bg-gray-700"
+              >
+                {intl.formatMessage(messages.todayShortcut)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMonitoringStartDate('')}
+                className="rounded-md bg-gray-700/60 px-3 py-2 text-xs uppercase tracking-wider text-gray-200 ring-1 ring-gray-600 hover:bg-gray-700"
+              >
+                {intl.formatMessage(messages.clear)}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-gray-400">
+              {intl.formatMessage(messages.watchFromHelp)}
+            </p>
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="targetIssueLabel"
+                className="mb-1 block text-sm font-medium text-gray-100"
+              >
+                {intl.formatMessage(messages.targetIssueLabel)}
+              </label>
+              <input
+                id="targetIssueLabel"
+                type="text"
+                value={targetIssueLabel}
+                onChange={(e) => setTargetIssueLabel(e.target.value)}
+                placeholder="N°594  |  HS 14  |  594"
+                className="block w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                {intl.formatMessage(messages.targetIssueHelp)}
+              </p>
+            </div>
+            <div>
+              <label
+                htmlFor="targetIssueDate"
+                className="mb-1 block text-sm font-medium text-gray-100"
+              >
+                {intl.formatMessage(messages.targetIssueDate)}
+              </label>
+              <input
+                id="targetIssueDate"
+                type="date"
+                value={targetIssueDate}
+                onChange={(e) => setTargetIssueDate(e.target.value)}
+                className="block w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                {intl.formatMessage(messages.targetIssueDateHelp)}
+              </p>
+            </div>
+          </div>
+        )}
 
         <RequestAsUserSelect
           requiredPermissions={requestAsRequiredPermissions}

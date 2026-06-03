@@ -3,7 +3,6 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import MediaPageBackdrop from '@app/components/Common/MediaPageBackdrop';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tag from '@app/components/Common/Tag';
-import ReleasesPanel from '@app/components/Magazine/ReleasesPanel';
 import MagazineRequestModal from '@app/components/RequestModal/MagazineRequestModal';
 import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import StatusBadge from '@app/components/StatusBadge';
@@ -259,12 +258,6 @@ const MagazineDetailPage: NextPage = () => {
             {data.description ||
               intl.formatMessage(messages.overviewunavailable)}
           </p>
-
-          {/* Scene release panel — only meaningful after the
-              magazine has been dispatched to pressarr (the panel
-              itself shows a "request first" hint when it isn't,
-              based on the 409 from the proxy route). */}
-          <ReleasesPanel magazineId={data.id} />
 
           {data.relatedPublications && data.relatedPublications.length > 0 && (
             <div className="mt-8">

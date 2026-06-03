@@ -292,146 +292,6 @@ magazineRoutes.get('/:id', isAuthenticated(), async (req, res) => {
 });
 
 /**
- * Release endpoints proxy to pressarr's per-magazine release
- * list / scan / grab routes. The id-shape on our side
- * (``issn:NNNN-NNNN`` / ``wd:Q123`` / ``slug:…`` / numeric
- * legacy) is translated to pressarr's internal magazine id
- * by looking the local MagazineMedia row up by externalKey
- * and reading ``downloadManagerExternalId`` (set by the
- * dispatcher when the request was approved).
- *
- * Operator can hit these endpoints only after the magazine
- * has been requested + dispatched to pressarr — they 409
- * otherwise so the UI can show "request first" without
- * inventing a different error path.
- */
-async function resolvePressarrMagazineId(
-  externalKey: string
-): Promise<number | null> {
-  const media = await getRepository(MagazineMedia).findOne({
-    where: { externalKey },
-  });
-  if (!media?.downloadManagerExternalId) return null;
-  const parsed = Number.parseInt(media.downloadManagerExternalId, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function buildExternalKey(id: string): string {
-  // Mirror the slugify in POST /magazine/request so the lookup
-  // here finds the same row the dispatcher created.
-  if (id.startsWith('issn:') || id.startsWith('slug:')) return id;
-  return id;
-}
-
-magazineRoutes.get(
-  '/:id/releases',
-  isAuthenticated(),
-  async (req, res, next) => {
-    const pressarr = getDefaultPressarr();
-    if (!pressarr) {
-      return next({
-        status: 503,
-        message: 'No Pressarr instance configured for magazines.',
-      });
-    }
-    const pressarrId = await resolvePressarrMagazineId(
-      buildExternalKey(req.params.id)
-    );
-    if (pressarrId == null) {
-      return res.status(409).json({
-        status: 409,
-        message:
-          'This magazine has not been dispatched to pressarr yet — request and approve it first to enable release scraping.',
-      });
-    }
-    try {
-      const api = pressarrClient(pressarr);
-      const rows = await api.listMagazineReleases(pressarrId);
-      return res.status(200).json(rows);
-    } catch (e) {
-      return next({
-        status: 502,
-        message: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }
-);
-
-magazineRoutes.post(
-  '/:id/releases/scan',
-  isAuthenticated(),
-  async (req, res, next) => {
-    const pressarr = getDefaultPressarr();
-    if (!pressarr) {
-      return next({
-        status: 503,
-        message: 'No Pressarr instance configured for magazines.',
-      });
-    }
-    const pressarrId = await resolvePressarrMagazineId(
-      buildExternalKey(req.params.id)
-    );
-    if (pressarrId == null) {
-      return res.status(409).json({
-        status: 409,
-        message:
-          'Request and approve this magazine first so pressarr can scan release indexers for it.',
-      });
-    }
-    try {
-      const api = pressarrClient(pressarr);
-      const rows = await api.scanMagazineReleases(pressarrId);
-      return res.status(200).json(rows);
-    } catch (e) {
-      return next({
-        status: 502,
-        message: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }
-);
-
-magazineRoutes.post(
-  '/:id/releases/:releaseId/grab',
-  isAuthenticated(),
-  async (req, res, next) => {
-    const pressarr = getDefaultPressarr();
-    if (!pressarr) {
-      return next({
-        status: 503,
-        message: 'No Pressarr instance configured for magazines.',
-      });
-    }
-    const pressarrId = await resolvePressarrMagazineId(
-      buildExternalKey(req.params.id)
-    );
-    if (pressarrId == null) {
-      return res.status(409).json({
-        status: 409,
-        message:
-          'Request and approve this magazine first so pressarr can dispatch releases for it.',
-      });
-    }
-    const releaseId = Number.parseInt(req.params.releaseId, 10);
-    if (!Number.isFinite(releaseId)) {
-      return res
-        .status(400)
-        .json({ status: 400, message: 'Invalid release id.' });
-    }
-    try {
-      const api = pressarrClient(pressarr);
-      const row = await api.grabMagazineRelease(pressarrId, releaseId);
-      return res.status(200).json(row);
-    } catch (e) {
-      return next({
-        status: 502,
-        message: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }
-);
-
-/**
  * POST /api/v1/magazine/request — create a MagazineMedia + a
  * MediaRequest, mirroring the comic.ts / book.ts request shape.
  *
@@ -466,6 +326,18 @@ magazineRoutes.post('/request', isAuthenticated(), async (req, res) => {
      * earlier are ignored. Omit for "monitor everything".
      */
     monitoringStartDate?: string;
+    /**
+     * 'subscription' (default) = recurring monitor on the
+     * magazine; pressarr auto-grabs every new issue published
+     * on/after ``monitoringStartDate``.
+     * 'one_shot' = single back-issue. Pressarr resolves the
+     * target identified by ``targetIssueLabel`` or
+     * ``targetIssueDate`` and grabs only that one, no further
+     * monitoring.
+     */
+    requestType?: 'subscription' | 'one_shot';
+    targetIssueLabel?: string;
+    targetIssueDate?: string;
   };
 
   if (!body.id || !body.title) {
@@ -576,6 +448,14 @@ magazineRoutes.post('/request', isAuthenticated(), async (req, res) => {
           body.monitoringStartDate &&
           /^\d{4}-\d{2}-\d{2}$/.test(body.monitoringStartDate)
             ? body.monitoringStartDate
+            : null,
+        requestType:
+          body.requestType === 'one_shot' ? 'one_shot' : 'subscription',
+        targetIssueLabel: body.targetIssueLabel?.trim() || null,
+        targetIssueDate:
+          body.targetIssueDate &&
+          /^\d{4}-\d{2}-\d{2}$/.test(body.targetIssueDate)
+            ? body.targetIssueDate
             : null,
         status: MediaStatus.PENDING,
       });

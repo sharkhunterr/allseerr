@@ -94,6 +94,13 @@ export async function submitToPressarr(
       // Operator-chosen "watch from" anchor; absent = pressarr
       // default (everything available).
       monitoringStartDate: media.monitoringStartDate ?? undefined,
+      // Subscription vs one-shot — drives pressarr's
+      // auto-grab scheduler (subscription = keep monitoring;
+      // one_shot = grab the matching back-issue and stop).
+      requestType:
+        media.requestType === 'one_shot' ? 'one_shot' : 'subscription',
+      targetIssueLabel: media.targetIssueLabel ?? undefined,
+      targetIssueDate: media.targetIssueDate ?? undefined,
     });
 
     media.downloadManagerExternalId = String(magazine.id);

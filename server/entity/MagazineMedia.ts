@@ -111,6 +111,31 @@ export class MagazineMedia {
   public monitoringStartDate?: string | null;
 
   /**
+   * Request shape — 'subscription' (default, recurring monitor)
+   * or 'one_shot' (single back-issue, no further monitoring).
+   * Pressarr's scheduler reads this to decide whether to keep
+   * scanning indexers for new releases after the first grab.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  public requestType?: 'subscription' | 'one_shot' | null;
+
+  /**
+   * One-shot mode only. Operator-typed issue identifier
+   * ("N°594", "HS 14", "594") used by pressarr's auto-grabber
+   * to pick the matching MagazineRelease.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  public targetIssueLabel?: string | null;
+
+  /**
+   * One-shot mode only, alternative to targetIssueLabel for
+   * dailies whose issues are identified by publication date
+   * (L'Équipe du 03/06/2026). ISO ``YYYY-MM-DD``.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  public targetIssueDate?: string | null;
+
+  /**
    * Free-text language code (ISO 639-1 when we can resolve it,
    * the indexer's raw string otherwise). Mirrors what
    * BookMedia.language carries — surfaced on the request card.
