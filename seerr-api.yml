@@ -6005,6 +6005,83 @@ paths:
             application/json:
               schema:
                 type: object
+  /settings/notices:
+    get:
+      summary: List admin-defined notices
+      description: |
+        Returns every NoticeEntry stored by the operator. Empty
+        array when no notices are configured. Each entry carries
+        its message, severity, media-type scope, list of contexts
+        (detail/search/discover), enabled flag, and optional
+        admin-only label.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+    post:
+      summary: Create a new notice
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /settings/notices/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      summary: Update an existing notice
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: Not found
+    delete:
+      summary: Delete a notice
+      tags:
+        - settings
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
   /settings/media-types:
     get:
       summary: Get the master on/off toggles for non-TMDB media types

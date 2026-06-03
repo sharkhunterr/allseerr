@@ -40,6 +40,29 @@ export interface RequestNotices {
   magazine: RequestNoticeEntry;
 }
 
+export type NoticeMediaScope =
+  | 'global'
+  | 'movie'
+  | 'tv'
+  | 'book'
+  | 'audiobook'
+  | 'game'
+  | 'manga'
+  | 'comic'
+  | 'magazine';
+
+export type NoticeContext = 'detail' | 'search' | 'discover';
+
+export interface NoticeEntry {
+  id: string;
+  message: string;
+  severity: RequestNoticeSeverity;
+  mediaScope: NoticeMediaScope;
+  contexts: NoticeContext[];
+  enabled: boolean;
+  label?: string;
+}
+
 export interface PublicSettingsResponse {
   jellyfinHost?: string;
   jellyfinExternalHost?: string;
@@ -77,6 +100,7 @@ export interface PublicSettingsResponse {
   comicEnabled: boolean;
   magazineEnabled: boolean;
   requestNotices: RequestNotices;
+  notices: NoticeEntry[];
 }
 
 export interface CacheItem {

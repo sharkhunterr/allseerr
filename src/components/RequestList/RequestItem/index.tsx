@@ -174,6 +174,7 @@ const getNonTmdbInfo = (
 ): {
   title: string;
   coverUrl?: string;
+  coverIsLogo?: boolean;
   href: string;
   typeLabel: string;
   platform?: string;
@@ -225,6 +226,17 @@ const getNonTmdbInfo = (
         title: string;
         coverUrl?: string;
         comicVineId: number;
+        status?: MediaStatus | null;
+        statusReason?: string | null;
+      }
+    | undefined;
+  const zm = request.magazineMedia as
+    | {
+        title: string;
+        coverUrl?: string;
+        coverIsLogo?: boolean | null;
+        issn?: string | null;
+        id?: number;
         status?: MediaStatus | null;
         statusReason?: string | null;
       }
@@ -292,6 +304,20 @@ const getNonTmdbInfo = (
       href: `/comic/${cm.comicVineId}`,
       typeLabel: 'Comic',
       statusReason: cm.statusReason,
+    };
+  }
+  if (request.type === MediaType.MAGAZINE && zm) {
+    // Detail URL prefers ISSN (canonical cascade key); falls back to
+    // the local MagazineMedia id for free-text entries that have no
+    // ISSN registered.
+    const detailKey = zm.issn ? `issn:${zm.issn}` : zm.id?.toString() ?? '';
+    return {
+      title: zm.title,
+      coverUrl: zm.coverUrl,
+      coverIsLogo: zm.coverIsLogo ?? undefined,
+      href: detailKey ? `/magazine/${encodeURIComponent(detailKey)}` : '#',
+      typeLabel: 'Magazine',
+      statusReason: zm.statusReason,
     };
   }
   return { title: 'Unknown', href: '#', typeLabel: request.type };
@@ -646,13 +672,31 @@ const RequestItem = ({ request, revalidateList }: RequestItemProps) => {
               className="relative h-auto w-12 flex-shrink-0 scale-100 transform-gpu overflow-hidden rounded-md transition duration-300 hover:scale-105"
             >
               {info.coverUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={info.coverUrl}
-                  alt={info.title}
-                  className="h-full w-full object-cover"
-                  style={{ width: '100%', height: 'auto' }}
-                />
+                info.coverIsLogo ? (
+                  // Contained-on-light-bg treatment so brand logos
+                  // (Wikidata P154) stay readable instead of being
+                  // zoom-cropped to fill the tile.
+                  <div className="flex aspect-[2/3] w-full items-center justify-center rounded-md bg-gray-100 p-1.5 ring-1 ring-gray-300/40">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={info.coverUrl}
+                      alt={info.title}
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        objectFit: 'contain',
+                      }}
+                    />
+                  </div>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={info.coverUrl}
+                    alt={info.title}
+                    className="h-full w-full object-cover"
+                    style={{ width: '100%', height: 'auto' }}
+                  />
+                )
               ) : (
                 <div className="flex aspect-[2/3] w-full items-center justify-center rounded-md bg-gray-700 text-lg">
                   {request.type === MediaType.GAME

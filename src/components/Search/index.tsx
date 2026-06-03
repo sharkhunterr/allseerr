@@ -5,17 +5,19 @@ import ComicCard from '@app/components/ComicCard';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import NoticesAlert from '@app/components/Common/NoticesAlert';
 import PageTitle from '@app/components/Common/PageTitle';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import GameCard from '@app/components/GameCard';
 import MagazineCard from '@app/components/MagazineCard';
 import MangaCard from '@app/components/MangaCard';
+import MagazineManualRequestModal from '@app/components/RequestModal/MagazineManualRequestModal';
 import MagazineSearchFilterSlideover, {
   countMagazineActiveFilters,
   MAGAZINE_FILTER_DEFAULTS,
   type MagazineFilterValues,
 } from '@app/components/Search/MagazineSearchFilterSlideover';
-import { FunnelIcon } from '@heroicons/react/24/solid';
+import { FunnelIcon, PlusIcon } from '@heroicons/react/24/solid';
 import { SearchLoadingContext } from '@app/context/SearchLoadingContext';
 import useDiscover from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
@@ -396,6 +398,8 @@ const Search = () => {
     MAGAZINE_FILTER_DEFAULTS
   );
   const [showMagazineFilters, setShowMagazineFilters] = useState(false);
+  const [showMagazineManualRequest, setShowMagazineManualRequest] =
+    useState(false);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
@@ -691,6 +695,33 @@ const Search = () => {
         ))}
       </div>
 
+      {/* Admin notices targeted to the active search tab. Picks
+          the right media-type bucket for each tab; global
+          notices (no specific scope) render here too. */}
+      {(() => {
+        const tabToMediaType: Record<
+          MediaTab,
+          Parameters<typeof NoticesAlert>[0]['mediaType'] | null
+        > = {
+          all: null, // Movies & TV is dual-typed — keep this slot clean.
+          books: 'book',
+          audiobooks: 'audiobook',
+          games: 'game',
+          manga: 'manga',
+          comics: 'comic',
+          magazines: 'magazine',
+        };
+        const mediaType = tabToMediaType[activeTab];
+        if (!mediaType) return null;
+        return (
+          <NoticesAlert
+            mediaType={mediaType}
+            context="search"
+            className="mb-4"
+          />
+        );
+      })()}
+
       {/* Movies & TV (existing) */}
       {activeTab === 'all' && (
         <ListView
@@ -904,7 +935,7 @@ const Search = () => {
               the discover pages. Each magazine-specific filter
               lives inside the slideover; the button shows the
               active-filter count next to the funnel icon. */}
-          <div className="mb-4 flex">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
             <MagazineSearchFilterSlideover
               show={showMagazineFilters}
               onClose={() => setShowMagazineFilters(false)}
@@ -922,6 +953,23 @@ const Search = () => {
                   },
                   { count: countMagazineActiveFilters(magazineFilters) }
                 )}
+              </span>
+            </Button>
+            {/* Escape hatch — when the cascade can't find the
+                operator's magazine (very local title, defunct, etc.)
+                they can dispatch a manual entry instead. Sits next
+                to Filters because that's where the "I can't find what
+                I want" eye-flow lands. */}
+            <Button
+              buttonType="primary"
+              onClick={() => setShowMagazineManualRequest(true)}
+            >
+              <PlusIcon />
+              <span>
+                {intl.formatMessage({
+                  id: 'components.Search.magazineManualRequest',
+                  defaultMessage: 'Request a magazine not listed',
+                })}
               </span>
             </Button>
           </div>
@@ -955,6 +1003,11 @@ const Search = () => {
               ))}
             </ul>
           )}
+          <MagazineManualRequestModal
+            show={showMagazineManualRequest}
+            onCancel={() => setShowMagazineManualRequest(false)}
+            onComplete={() => setShowMagazineManualRequest(false)}
+          />
         </div>
       )}
     </>

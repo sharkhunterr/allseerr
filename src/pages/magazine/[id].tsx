@@ -3,17 +3,17 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import MediaPageBackdrop from '@app/components/Common/MediaPageBackdrop';
 import PageTitle from '@app/components/Common/PageTitle';
 import Tag from '@app/components/Common/Tag';
+import MagazineRequestModal from '@app/components/RequestModal/MagazineRequestModal';
+import RequestNoticesAlert from '@app/components/RequestModal/RequestNoticesAlert';
 import StatusBadge from '@app/components/StatusBadge';
 import { Permission, useUser } from '@app/hooks/useUser';
 import defineMessages from '@app/utils/defineMessages';
 import { NewspaperIcon } from '@heroicons/react/24/solid';
 import { MediaStatus } from '@server/constants/media';
-import axios from 'axios';
 import type { NextPage } from 'next';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 import { useIntl } from 'react-intl';
-import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 
 const messages = defineMessages('pages.MagazineDetail', {
@@ -22,8 +22,6 @@ const messages = defineMessages('pages.MagazineDetail', {
   overviewunavailable: 'Overview unavailable.',
   request: 'Request',
   requested: 'Requested',
-  requestSuccess: 'Magazine request submitted.',
-  requestFailed: 'Failed to submit magazine request.',
   relatedPublications: 'Related publications',
   relationEdition: 'Edition',
   relationSupplement: 'Supplement',
@@ -43,10 +41,10 @@ const messages = defineMessages('pages.MagazineDetail', {
   sources: 'Sources',
   // Publication status — surfaced as a chip near the title so the
   // operator immediately knows whether it's an ongoing publication,
-  // a defunct title, or unknown.
-  statusOngoing: 'Ongoing — since {year}',
-  statusCeased: 'Ceased in {year}',
-  statusOngoingNoYear: 'Ongoing',
+  // a defunct title, or unknown. The exact year sits in the right
+  // rail (firstPublished / ceased rows) so the chip stays terse.
+  statusOngoing: 'Ongoing',
+  statusCeased: 'Ceased',
   statusUnknown: 'Status unknown',
   categories: 'Categories',
   openExternal: 'Open',
@@ -101,9 +99,8 @@ const countryFlag = (code?: string): string => {
 const MagazineDetailPage: NextPage = () => {
   const router = useRouter();
   const intl = useIntl();
-  const { addToast } = useToasts();
   const { hasPermission } = useUser();
-  const [isRequesting, setIsRequesting] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
   const [didRequest, setDidRequest] = useState(false);
   const id =
     typeof router.query.id === 'string' ? router.query.id : undefined;
@@ -126,68 +123,22 @@ const MagazineDetailPage: NextPage = () => {
     );
   }
 
-  const submitRequest = async () => {
-    setIsRequesting(true);
-    try {
-      await axios.post('/api/v1/magazine/request', {
-        id: data.id,
-        title: data.title,
-        issn: data.issn,
-        publisher: data.publisher,
-        coverUrl: data.coverUrl,
-        year: data.year,
-        language: data.language,
-        description: data.description,
-        frequency: data.frequency,
-        googleBooksId: data.source === 'googlebooks' ? data.id : undefined,
-      });
-      setDidRequest(true);
-      addToast(intl.formatMessage(messages.requestSuccess), {
-        appearance: 'success',
-        autoDismiss: true,
-      });
-    } catch (e) {
-      const status = (e as { response?: { status?: number } })?.response
-        ?.status;
-      if (status === 409) {
-        setDidRequest(true);
-        addToast(intl.formatMessage(messages.requestSuccess), {
-          appearance: 'info',
-          autoDismiss: true,
-        });
-      } else {
-        addToast(intl.formatMessage(messages.requestFailed), {
-          appearance: 'error',
-          autoDismiss: true,
-        });
-      }
-    } finally {
-      setIsRequesting(false);
-    }
-  };
-
-  // Publication status — most useful single piece of info for the
-  // operator. Computed from first_issued + ceased_at:
-  //   * ceased_at set       → "Cessé en YYYY"
-  //   * first_issued only   → "En cours depuis YYYY"
-  //   * neither             → "Statut inconnu"
+  // Publication status — short, tone-only chip. The exact year is
+  // already surfaced in the right-rail facts table (firstPublished
+  // / ceased) so repeating it in the header badge is just noise.
   const ceasedYear = data.ceasedAt?.slice(0, 4);
   const firstYear = data.firstIssued?.slice(0, 4);
   let statusLabel: string;
   let statusTone: 'ongoing' | 'ceased' | 'unknown';
   if (ceasedYear && /^\d{4}$/.test(ceasedYear)) {
-    statusLabel = intl.formatMessage(messages.statusCeased, {
-      year: ceasedYear,
-    });
+    statusLabel = intl.formatMessage(messages.statusCeased);
     statusTone = 'ceased';
-  } else if (firstYear && /^\d{4}$/.test(firstYear)) {
-    statusLabel = intl.formatMessage(messages.statusOngoing, {
-      year: firstYear,
-    });
-    statusTone = 'ongoing';
-  } else if (data.issn || data.wikidataQid) {
-    // Have identity but no dates — likely ongoing.
-    statusLabel = intl.formatMessage(messages.statusOngoingNoYear);
+  } else if (
+    (firstYear && /^\d{4}$/.test(firstYear)) ||
+    data.issn ||
+    data.wikidataQid
+  ) {
+    statusLabel = intl.formatMessage(messages.statusOngoing);
     statusTone = 'ongoing';
   } else {
     statusLabel = intl.formatMessage(messages.statusUnknown);
@@ -281,8 +232,8 @@ const MagazineDetailPage: NextPage = () => {
           <div className="media-actions">
             <Button
               buttonType={didRequest ? 'default' : 'primary'}
-              onClick={submitRequest}
-              disabled={isRequesting || didRequest}
+              onClick={() => setShowRequestModal(true)}
+              disabled={didRequest}
             >
               <NewspaperIcon />
               <span>
@@ -294,6 +245,11 @@ const MagazineDetailPage: NextPage = () => {
           </div>
         )}
       </div>
+
+      {/* Admin-defined notices targeting ``magazine`` (and global
+          notices) — same placement as the comic / book / game
+          detail pages so the visual rhythm matches. */}
+      <RequestNoticesAlert scope="magazine" className="my-4" />
 
       <div className="media-overview">
         <div className="media-overview-left">
@@ -509,6 +465,26 @@ const MagazineDetailPage: NextPage = () => {
           </div>
         </div>
       </div>
+
+      <MagazineRequestModal
+        show={showRequestModal}
+        id={data.id}
+        title={data.title}
+        issn={data.issn}
+        publisher={data.publisher}
+        coverUrl={data.coverUrl}
+        coverIsLogo={data.coverIsLogo}
+        year={data.year}
+        language={data.language}
+        description={data.description}
+        frequency={data.frequency}
+        googleBooksId={data.source === 'googlebooks' ? data.id : undefined}
+        onCancel={() => setShowRequestModal(false)}
+        onComplete={() => {
+          setShowRequestModal(false);
+          setDidRequest(true);
+        }}
+      />
     </div>
   );
 };

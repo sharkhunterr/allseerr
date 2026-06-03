@@ -51,6 +51,7 @@ const defaultSettings: PublicSettingsResponse = {
     comic: { message: '', severity: 'info' },
     magazine: { message: '', severity: 'info' },
   },
+  notices: [],
 };
 
 export const SettingsContext = React.createContext<SettingsContextProps>({

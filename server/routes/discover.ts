@@ -1546,6 +1546,10 @@ interface DiscoverMagazineCard {
   publisher?: string;
   issn?: string;
   coverUrl?: string;
+  // Drives the tile's "contained-on-light-bg" treatment when the
+  // cascade resolved a brand logo (Wikidata P154) rather than a
+  // real cover. Same flag MagazineCard consumes on the search tab.
+  coverIsLogo?: boolean;
   year?: number;
   language?: string;
   country?: string;
@@ -1608,6 +1612,7 @@ discoverRoutes.get(
               publisher: h.publisher ?? undefined,
               issn: h.issn ?? undefined,
               coverUrl: h.coverUrl ?? undefined,
+              coverIsLogo: h.coverIsLogo ?? undefined,
               year: h.firstIssued
                 ? Number.parseInt(h.firstIssued, 10) || undefined
                 : undefined,

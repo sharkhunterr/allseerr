@@ -47,6 +47,7 @@ const DiscoverAudiobooksPage: NextPage = () => {
         defaultMessage: 'Audiobooks',
       })}
       endpoint="/api/v1/discover/audiobooks"
+      noticeMediaType="audiobook"
       cardKey={(a) => a.openLibraryId}
       sortOptions={[
         {

@@ -308,12 +308,24 @@ magazineRoutes.post('/request', isAuthenticated(), async (req, res) => {
     issn?: string;
     publisher?: string;
     coverUrl?: string;
+    /**
+     * Forwarded from the search/catalog hit so the card renders
+     * its contained-logo treatment in the request list. Same
+     * meaning as on the cascade response.
+     */
+    coverIsLogo?: boolean;
     year?: number;
     language?: string;
     description?: string;
     frequency?: string;
     googleBooksId?: string;
     userId?: number;
+    /**
+     * Operator-chosen "watch from" date (ISO ``YYYY-MM-DD``).
+     * Forwarded to pressarr on dispatch — issues released
+     * earlier are ignored. Omit for "monitor everything".
+     */
+    monitoringStartDate?: string;
   };
 
   if (!body.id || !body.title) {
@@ -412,10 +424,19 @@ magazineRoutes.post('/request', isAuthenticated(), async (req, res) => {
         googleBooksId: body.googleBooksId ?? null,
         publisher: body.publisher ?? null,
         coverUrl: body.coverUrl ?? null,
+        coverIsLogo: body.coverIsLogo ?? null,
         year: body.year ?? null,
         language: body.language ?? null,
         description: body.description ?? null,
         frequency: body.frequency ?? null,
+        // Cheap sanity check — basic ISO date shape ("2026-06-01").
+        // Anything else is dropped rather than rejected so the
+        // overall request still goes through.
+        monitoringStartDate:
+          body.monitoringStartDate &&
+          /^\d{4}-\d{2}-\d{2}$/.test(body.monitoringStartDate)
+            ? body.monitoringStartDate
+            : null,
         status: MediaStatus.PENDING,
       });
       await magazineMediaRepo.save(magazineMedia);

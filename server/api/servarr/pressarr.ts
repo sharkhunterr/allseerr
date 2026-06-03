@@ -42,6 +42,12 @@ export interface PressarrMagazineCreateOptions
   qualityProfileId: number;
   monitored?: boolean;
   searchForMissingIssues?: boolean;
+  /**
+   * ISO ``YYYY-MM-DD`` — pressarr's "start watching from" anchor.
+   * Issues with a release date earlier than this are ignored.
+   * Omit for "monitor everything" (pressarr's default).
+   */
+  monitoringStartDate?: string;
 }
 
 export interface PressarrMagazine {
@@ -293,6 +299,7 @@ class PressarrAPI extends ServarrBase<{ magazineId: number }> {
           metadataProvider: options.metadataProvider,
           metadataProviderId: options.metadataProviderId,
           searchForMissingIssues: options.searchForMissingIssues ?? true,
+          monitoringStartDate: options.monitoringStartDate,
           // Cascade enrichment forwarded when allseerr's search
           // already resolved them. Omitting is safe — pressarr
           // back-fills from its own cascade by ISSN.

@@ -383,9 +383,21 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           statusReason?: string | null;
         }
       | undefined;
+    const zm = typedRequest.magazineMedia as
+      | {
+          title: string;
+          coverUrl?: string;
+          coverIsLogo?: boolean | null;
+          issn?: string | null;
+          id?: number;
+          status?: MediaStatus | null;
+          statusReason?: string | null;
+        }
+      | undefined;
 
     let infoTitle = 'Unknown';
     let coverUrl: string | undefined;
+    let coverIsLogo = false;
     let href = '#';
     let typeLabel = request.type as string;
 
@@ -422,6 +434,13 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
       coverUrl = cm.coverUrl;
       href = `/comic/${cm.comicVineId}`;
       typeLabel = 'Comic';
+    } else if (request.type === MediaType.MAGAZINE && zm) {
+      infoTitle = zm.title;
+      coverUrl = zm.coverUrl;
+      coverIsLogo = !!zm.coverIsLogo;
+      const detailKey = zm.issn ? `issn:${zm.issn}` : zm.id?.toString() ?? '';
+      href = detailKey ? `/magazine/${encodeURIComponent(detailKey)}` : '#';
+      typeLabel = 'Magazine';
     }
 
     const statusBadge = (() => {
@@ -440,6 +459,7 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
           gm?.status ??
           mm?.status ??
           cm?.status ??
+          zm?.status ??
           undefined;
         return <StatusBadge status={mediaStatus} title={infoTitle} />;
       }
@@ -508,7 +528,9 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                       ? 'border-fuchsia-500 bg-fuchsia-600/80'
                       : request.type === MediaType.COMIC
                         ? 'border-amber-500 bg-amber-600/80'
-                        : 'border-orange-500 bg-orange-600/80'
+                        : request.type === MediaType.MAGAZINE
+                          ? 'border-sky-500 bg-sky-600/80'
+                          : 'border-orange-500 bg-orange-600/80'
               }`}
             >
               {typeLabel}
@@ -521,7 +543,8 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
                 am?.statusReason ??
                 gm?.statusReason ??
                 mm?.statusReason ??
-                cm?.statusReason
+                cm?.statusReason ??
+                zm?.statusReason
               }
             />
           </div>
@@ -582,12 +605,30 @@ const RequestCard = ({ request, onTitleData }: RequestCardProps) => {
         >
           <div className="w-full" style={{ paddingBottom: '150%' }}>
             {coverUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={coverUrl}
-                alt={infoTitle}
-                className="absolute inset-0 h-full w-full object-cover"
-              />
+              coverIsLogo ? (
+                // Same contained-logo treatment as the search tile
+                // / detail page — keeps brand logos legible instead
+                // of zoom-cropping them to fill the tile.
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-100 p-3 ring-1 ring-gray-300/40">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={coverUrl}
+                    alt={infoTitle}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      objectFit: 'contain',
+                    }}
+                  />
+                </div>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={coverUrl}
+                  alt={infoTitle}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              )
             ) : (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-700 text-2xl">
                 {request.type === MediaType.GAME

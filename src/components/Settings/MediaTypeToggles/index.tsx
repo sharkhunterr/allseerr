@@ -28,6 +28,9 @@ const messages = defineMessages('components.Settings.MediaTypeToggles', {
   comic: 'Comics',
   comicHelp:
     'When off: the Comics tab disappears from search and /comic/request returns 503.',
+  magazine: 'Magazines',
+  magazineHelp:
+    'When off: the Magazines tab disappears from search and /magazine/request returns 503.',
   saved: 'Media type toggles saved.',
   saveFailed: 'Failed to save media type toggles.',
 });
@@ -38,6 +41,7 @@ interface MediaTypeTogglesValues {
   game: boolean;
   manga: boolean;
   comic: boolean;
+  magazine: boolean;
 }
 
 const ROWS: {
@@ -50,6 +54,7 @@ const ROWS: {
   { key: 'game', label: 'game', help: 'gameHelp' },
   { key: 'manga', label: 'manga', help: 'mangaHelp' },
   { key: 'comic', label: 'comic', help: 'comicHelp' },
+  { key: 'magazine', label: 'magazine', help: 'magazineHelp' },
 ];
 
 const MediaTypeTogglesSection = () => {
@@ -68,6 +73,7 @@ const MediaTypeTogglesSection = () => {
     game: true,
     manga: true,
     comic: true,
+    magazine: true,
   };
 
   return (

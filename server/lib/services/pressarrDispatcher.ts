@@ -91,6 +91,9 @@ export async function submitToPressarr(
       qualityProfileId: instance.activeProfileId,
       monitored: true,
       searchForMissingIssues: !instance.preventSearch,
+      // Operator-chosen "watch from" anchor; absent = pressarr
+      // default (everything available).
+      monitoringStartDate: media.monitoringStartDate ?? undefined,
     });
 
     media.downloadManagerExternalId = String(magazine.id);

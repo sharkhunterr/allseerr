@@ -57,6 +57,7 @@ const DiscoverGamesPage: NextPage = () => {
         defaultMessage: 'Games',
       })}
       endpoint="/api/v1/discover/games"
+      noticeMediaType="game"
       cardKey={(g) => g.igdbId}
       sortOptions={[
         { value: 'popularity', label: 'Popularity' },

@@ -49,6 +49,7 @@ const DiscoverComicsPage: NextPage = () => {
         defaultMessage: 'Comics',
       })}
       endpoint="/api/v1/discover/comics"
+      noticeMediaType="comic"
       cardKey={(c) => c.comicVineId}
       sortOptions={[
         { value: 'recent', label: 'Recently updated' },

@@ -317,6 +317,12 @@ interface FullPublicSettings extends PublicSettings {
   // public settings endpoint so the modals (which run as any user)
   // can read them without an admin-scoped request.
   requestNotices: RequestNotices;
+  // New, richer notice model — list of per-(scope × context)
+  // entries. Replaces the single-message-per-type ``requestNotices``
+  // shape; the legacy field is still emitted alongside this list
+  // so older clients keep rendering, but new code should consume
+  // ``notices`` instead. Empty array = no notices configured.
+  notices: NoticeEntry[];
 }
 
 export interface NotificationAgentConfig {
@@ -695,6 +701,11 @@ export interface RequestNoticeEntry {
  * of each request modal AND on the matching content detail page.
  * The `global` field shows on every request regardless of type;
  * per-type fields stack with it (global on top, per-type below).
+ *
+ * NOTE: superseded by ``NoticeEntry[]`` (see ``notices`` below).
+ * Kept for backward compatibility — when the operator has only
+ * configured legacy entries, ``Settings.notices`` derives a list
+ * from them so the new renderer sees a unified shape.
  */
 export interface RequestNotices {
   global: RequestNoticeEntry;
@@ -706,6 +717,51 @@ export interface RequestNotices {
   manga: RequestNoticeEntry;
   comic: RequestNoticeEntry;
   magazine: RequestNoticeEntry;
+}
+
+/**
+ * One of the media-type buckets a NoticeEntry can target.
+ * ``global`` = shown for every media type (the entry is rendered
+ * once at every matching context regardless of the type).
+ */
+export type NoticeMediaScope =
+  | 'global'
+  | 'movie'
+  | 'tv'
+  | 'book'
+  | 'audiobook'
+  | 'game'
+  | 'manga'
+  | 'comic'
+  | 'magazine';
+
+/**
+ * Surfaces a notice can be rendered on:
+ *  - ``detail``   — the per-item detail page (book/[id], game/[id], …)
+ *                   plus the request modal that opens from it
+ *  - ``search``   — the per-type tab inside ``/search``
+ *  - ``discover`` — the ``/discover/<type>`` browse page
+ */
+export type NoticeContext = 'detail' | 'search' | 'discover';
+
+/**
+ * A single admin-defined notice. ``mediaScope`` decides which
+ * type's surfaces it appears on (or ``global`` for all), and
+ * ``contexts`` picks the surfaces themselves. Disabled entries
+ * stay in storage but never render — convenient for stashing
+ * seasonal notices without losing the wording.
+ */
+export interface NoticeEntry {
+  id: string;
+  message: string;
+  severity: RequestNoticeSeverity;
+  mediaScope: NoticeMediaScope;
+  contexts: NoticeContext[];
+  enabled: boolean;
+  /** Optional admin label — surfaced in the editor list so the
+   * operator can tell similar notices apart. Not shown to end
+   * users. */
+  label?: string;
 }
 
 export interface AllSettings {
@@ -736,6 +792,13 @@ export interface AllSettings {
   comic: ComicSettings;
   mediaTypes: MediaTypeToggles;
   requestNotices: RequestNotices;
+  /**
+   * New rich notice list — superset of ``requestNotices``. See
+   * ``NoticeEntry`` for the per-entry shape. Persisted alongside
+   * the legacy field; ``Settings.notices`` returns a unified
+   * list (auto-derived from legacy if this is empty).
+   */
+  notices: NoticeEntry[];
   oidc: OidcSettings;
   migrations: string[];
 }
@@ -1133,6 +1196,7 @@ class Settings {
         comic: { message: '', severity: 'info' },
         magazine: { message: '', severity: 'info' },
       },
+      notices: [],
       oidc: {
         enabled: false,
         issuerUrl: '',
@@ -1356,6 +1420,89 @@ class Settings {
     this.data.requestNotices = { ...this.requestNotices, ...data };
   }
 
+  /**
+   * Sanitised list of NoticeEntry. Reads ``data.notices`` when
+   * present; falls back to deriving one entry per non-empty
+   * legacy ``requestNotices`` field with ``contexts: ['detail']``
+   * (preserves the pre-rewrite behaviour where notices showed
+   * only on the request modal / detail page).
+   */
+  get notices(): NoticeEntry[] {
+    const stored = this.data.notices;
+    if (Array.isArray(stored)) {
+      const validSeverities: RequestNoticeSeverity[] = [
+        'info',
+        'warning',
+        'error',
+      ];
+      const validScopes: NoticeMediaScope[] = [
+        'global',
+        'movie',
+        'tv',
+        'book',
+        'audiobook',
+        'game',
+        'manga',
+        'comic',
+        'magazine',
+      ];
+      const validContexts: NoticeContext[] = ['detail', 'search', 'discover'];
+      return stored
+        .filter(
+          (e): e is NoticeEntry =>
+            !!e &&
+            typeof e === 'object' &&
+            typeof e.id === 'string' &&
+            typeof e.message === 'string'
+        )
+        .map((e) => ({
+          id: e.id,
+          message: e.message,
+          severity: validSeverities.includes(e.severity)
+            ? e.severity
+            : 'info',
+          mediaScope: validScopes.includes(e.mediaScope)
+            ? e.mediaScope
+            : 'global',
+          contexts: Array.isArray(e.contexts)
+            ? e.contexts.filter((c) => validContexts.includes(c))
+            : ['detail'],
+          enabled: e.enabled !== false,
+          label: typeof e.label === 'string' ? e.label : undefined,
+        }));
+    }
+    // Legacy fallback — derive from ``requestNotices`` so an
+    // operator who only configured the old single-entry-per-type
+    // shape keeps seeing their notices on detail pages.
+    const legacy = this.requestNotices;
+    const derived: NoticeEntry[] = [];
+    const push = (key: NoticeMediaScope, entry: RequestNoticeEntry) => {
+      if (!entry.message.trim()) return;
+      derived.push({
+        id: `legacy-${key}`,
+        message: entry.message,
+        severity: entry.severity,
+        mediaScope: key,
+        contexts: ['detail'],
+        enabled: true,
+      });
+    };
+    push('global', legacy.global);
+    push('movie', legacy.movie);
+    push('tv', legacy.tv);
+    push('book', legacy.book);
+    push('audiobook', legacy.audiobook);
+    push('game', legacy.game);
+    push('manga', legacy.manga);
+    push('comic', legacy.comic);
+    push('magazine', legacy.magazine);
+    return derived;
+  }
+
+  set notices(list: NoticeEntry[]) {
+    this.data.notices = list;
+  }
+
   get oidc(): OidcSettings {
     return this.data.oidc;
   }
@@ -1467,6 +1614,7 @@ class Settings {
         // when neither suggestion nor dispatcher are wired.
         types.magazine,
       requestNotices: this.requestNotices,
+      notices: this.notices,
     };
   }
 

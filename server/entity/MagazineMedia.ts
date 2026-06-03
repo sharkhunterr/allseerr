@@ -77,6 +77,16 @@ export class MagazineMedia {
   @Column({ type: 'varchar', nullable: true })
   public coverUrl?: string | null;
 
+  /**
+   * True when ``coverUrl`` is a brand logo (Wikidata P154) rather
+   * than a real magazine cover. Card renderers (search tile,
+   * detail page, request card) switch to a "contained on light
+   * background" layout when this is set so the logo isn't
+   * zoom-cropped to fill the tile.
+   */
+  @Column({ type: 'boolean', nullable: true })
+  public coverIsLogo?: boolean | null;
+
   @Column({ type: 'integer', nullable: true })
   public year?: number | null;
 
@@ -87,6 +97,18 @@ export class MagazineMedia {
    */
   @Column({ type: 'varchar', nullable: true })
   public frequency?: string | null;
+
+  /**
+   * Operator-chosen "start watching from" date (ISO
+   * ``YYYY-MM-DD``). Forwarded to pressarr at dispatch time as
+   * ``monitoring_start_date`` so the magazine entry only grabs
+   * issues published on/after that date — useful when the
+   * operator only cares about new issues going forward and not
+   * the full back catalogue. Null = pressarr's default
+   * (monitor everything available).
+   */
+  @Column({ type: 'varchar', nullable: true })
+  public monitoringStartDate?: string | null;
 
   /**
    * Free-text language code (ISO 639-1 when we can resolve it,

@@ -45,6 +45,7 @@ const DiscoverBooksPage: NextPage = () => {
         defaultMessage: 'Books',
       })}
       endpoint="/api/v1/discover/books"
+      noticeMediaType="book"
       cardKey={(b) => b.openLibraryId}
       sortOptions={[
         {
