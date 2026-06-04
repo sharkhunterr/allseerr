@@ -460,7 +460,13 @@ services:
       - "15800:5800"   # noVNC
     volumes:
       - ./data/jd2/cfg:/config
-      - ./data/jd2/folderwatch:/jdownloader/cfg/folderwatch
+      # JD2's Folder Watch extension defaults its watch path
+      # to ``/config/folderwatch`` inside the container (its
+      # own settings dir). Mount the shared host folderwatch
+      # at that exact path so the operator doesn't have to
+      # reconfigure the watch dir manually after enabling the
+      # extension.
+      - ./data/jd2/folderwatch:/config/folderwatch
       - ./data/jd2/complete:/jdownloader/downloads
     networks:
       - allseerr-test
