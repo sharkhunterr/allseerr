@@ -435,17 +435,25 @@ services:
 
   # ===========================================================
   # JDownloader 2 — the actual file-hoster downloader.
-  # Pressarr emits .crawljob files into ``/jdownloader/cfg/folderwatch``
-  # (== ./data/jd2/folderwatch on the host) and JD2's built-in
-  # Folder Watch extension picks them up, downloads to
-  # ``/jdownloader/downloads`` (== ./data/jd2/complete) which
-  # pressarr's importer scans for completed releases.
+  # Pressarr emits .crawljob files into ``/config/folderwatch``
+  # (== ./data/jd2/folderwatch on the host) — that's JD2's
+  # *default* Folder Watch path so the extension picks it up
+  # the moment the operator enables it without reconfiguring
+  # paths. Downloads land in ``/jdownloader/downloads`` (==
+  # ./data/jd2/complete) where pressarr's importer scans for
+  # completed releases.
   #
   # First boot: open http://localhost:15800 (noVNC), accept the
-  # licence, enable Settings → Extensions → Folder Watch, set
-  # its watch path to ``/jdownloader/cfg/folderwatch``. Optional:
-  # add your premium hoster accounts (1fichier, Rapidgator,
-  # Nitroflare, …) under Settings → Accounts.
+  # licence, Settings → Extensions Modules → Folder Watch →
+  # ☑ Enabled. The required settings below are pre-seeded at
+  # boot — operator doesn't have to touch them.
+  # Optional: Settings → Accounts to add premium hoster
+  # accounts (1fichier, Rapidgator, Nitroflare, …) so JD2
+  # skips the free-tier wait timers.
+  #
+  # Pre-seed via the post-install entry point: ``startapp.sh``
+  # writes default cfg files only when missing, so existing
+  # operator overrides survive container restarts.
   # ===========================================================
   jdownloader2:
     image: jlesage/jdownloader-2:latest
