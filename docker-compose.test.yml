@@ -406,13 +406,19 @@ services:
     volumes:
       - ./data/pressarr/config:/config
       - ./data/pressarr/data:/app/data
-      - ./data/downloads:/downloads
+      # qBit (running standalone for romarr) saves to romarr's
+      # data dir; pressarr needs to see the SAME host path so
+      # the importer can move completed files into the
+      # magazine library. Mount romarr's downloads directly.
+      - /home/jeremie/Documents/Developpement/romarr/romarr/data/downloads:/downloads
       - ./data/library/magazines:/magazines
       # Shared with the JDownloader 2 sidecar — pressarr writes
       # .crawljob files into ``folderwatch``, JD2 picks them up
-      # and downloads into ``complete``.
-      - ./data/jd2/folderwatch:/downloads/jd2/folderwatch
-      - ./data/jd2/complete:/downloads/jd2/complete
+      # and downloads into ``complete``. Kept OUTSIDE
+      # ``/downloads`` so the JD2 paths don't collide with qBit's
+      # save dir (sub-mount precedence inside Docker is fragile).
+      - ./data/jd2/folderwatch:/jd2/folderwatch
+      - ./data/jd2/complete:/jd2/complete
     ports:
       - "18084:8585"
     depends_on:
