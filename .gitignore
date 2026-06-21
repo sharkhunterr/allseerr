@@ -81,3 +81,9 @@ compose.override.yaml
 .npmrc.bak
 .npmrc.bak2
 .npmrc.tmp
+
+# Local docker-compose.test data mounts (jd2 cfg, pressarr db, etc.)
+data/
+
+# settings.json backups produced by pressarr re-add migrations
+config/settings.json.bak.*
