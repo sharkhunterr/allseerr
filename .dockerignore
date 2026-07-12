@@ -17,6 +17,7 @@ config/db/*
 config/logs/*
 config/*.json
 cypress
+data
 dist
 Dockerfile*
 compose.yaml
