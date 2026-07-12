@@ -1,0 +1,480 @@
+# docker-compose.test.yml — full integration stack for allseerr
+# ============================================================
+#
+# Spins up every downstream service allseerr knows how to talk
+# to (skipping radarr/sonarr per the test plan) so you can
+# exercise end-to-end request workflows against a real backend:
+#
+#   ROMM           → game library  (http://localhost:18181)
+#   Romarr         → game acquisition  (http://localhost:18585)
+#   Audiobookshelf → audiobook library  (http://localhost:13378)
+#   Bindery        → book + audiobook acquisition  (http://localhost:18787)
+#   Grabarr        → magazine acquisition  (http://localhost:18086)
+#   Pressarr       → magazine manager  (http://localhost:18084)
+#   MariaDB        → ROMM + Grimmory persistence  (internal only)
+#
+# Download client (qBittorrent) is NOT bundled — the operator
+# already runs a standalone qBit on the host. Each *arr's
+# download-client setting points at the host's qBit via
+# ``http://host.docker.internal:<port>`` (Docker on Linux needs
+# ``extra_hosts: ["host.docker.internal:host-gateway"]`` per
+# service that needs it, already wired below).
+#
+# Allseerr itself runs on the host (``pnpm dev``) and reaches
+# each service via the ``localhost:<port>`` host-side mapping.
+#
+# First-run sequence (TL;DR):
+#   1. docker compose -f docker-compose.test.yml up -d
+#   2. Capture initial admin tokens / passwords:
+#        docker compose -f docker-compose.test.yml logs romarr  | grep setup_token
+#        docker compose -f docker-compose.test.yml logs bindery | grep "initial admin"
+#   3. Open each WebUI, create admin / accept setup wizard, grab API keys.
+#   4. Run scripts/bootstrap-test-stack.sh to patch the allseerr
+#      settings.json with the URLs (API keys you fill manually).
+#
+# Volumes are stored under ./data/<service>/ so a full reset is
+# ``docker compose -f docker-compose.test.yml down -v && rm -rf data/``.
+
+# ============================================================
+# Shared host paths (created on first ``up``)
+# ============================================================
+#
+# ./data/downloads        ← qBit drops here, every *arr reads
+# ./data/library/books    ← Bindery + Livrarr + Audiobookshelf + Grimmory + CWA share
+# ./data/library/audiobooks ← Bindery + Livrarr + Audiobookshelf share
+# ./data/library/comics   ← Grimmory + Mylar share
+# ./data/library/magazines ← Pressarr stores here
+# ./data/library/games    ← Romarr writes, ROMM reads
+#
+# Every container that mounts the same host path mounts it at
+# the SAME target inside its container so importers + library
+# scanners see identical absolute paths — no remote-path
+# mappings required between services.
+
+volumes:
+  romm_redis:
+  romm_db:
+  grimmory_db:
+
+networks:
+  allseerr-test:
+    driver: bridge
+
+services:
+  # ===========================================================
+  # ROMM — game library (acquisition role goes to Romarr below).
+  # Needs a MariaDB sidecar.
+  # ===========================================================
+  romm-db:
+    image: mariadb:latest
+    container_name: allseerr-test-romm-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: "rommrootpw"
+      MARIADB_DATABASE: "romm"
+      MARIADB_USER: "romm"
+      MARIADB_PASSWORD: "rommpw"
+    volumes:
+      - romm_db:/var/lib/mysql
+    healthcheck:
+      test:
+        ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - allseerr-test
+
+  romm:
+    image: rommapp/romm:latest
+    container_name: allseerr-test-romm
+    restart: unless-stopped
+    depends_on:
+      romm-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: "romm-db"
+      DB_NAME: "romm"
+      DB_USER: "romm"
+      DB_PASSWD: "rommpw"
+      # ROMM requires this for session token signing — replace
+      # with a real 32-char secret before exposing this stack
+      # past your LAN.
+      ROMM_AUTH_SECRET_KEY: "test-only-32char-secret-replace-please"
+      HASHEOUS_API_ENABLED: "true"
+    volumes:
+      - ./data/romm/resources:/romm/resources
+      - romm_redis:/redis-data
+      - ./data/romm/library:/romm/library
+      - ./data/romm/assets:/romm/assets
+      - ./data/romm/config:/romm/config
+    ports:
+      - "18181:8080"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Romarr — game acquisition (the "Radarr" for ROMs). Pulls
+  # from qBittorrent → drops ROMs into ROMM's library mount.
+  # Builds from your local checkout so we always run the
+  # current dev tip.
+  # ===========================================================
+  romarr:
+    build: /home/jeremie/Documents/Developpement/romarr/romarr
+    image: romarr:dev
+    container_name: allseerr-test-romarr
+    restart: unless-stopped
+    environment:
+      # Same dev secret the standalone Romarr compose uses — keep
+      # in sync so the Fernet-encrypted credential rows are
+      # readable across both stacks.
+      ROMARR_AUTH_SECRET_KEY: "dev-only-do-not-use-in-prod-replace-with-32-chars-please"
+      ROMARR_BOOTSTRAP_ENABLED: "true"
+      ROMARR_AUTO_MIGRATE: "true"
+      ROMARR_SCHEDULER_ENABLED: "true"
+      ROMARR_SPA_ENABLED: "true"
+      ROMARR_IMPORTER_WATCHER_ENABLED: "true"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./data/romarr:/data
+      - ./data/downloads:/downloads
+      # Romarr drops imported ROMs into ROMM's library directly
+      # via the same host mount.
+      - ./data/romm/library:/library
+    ports:
+      - "18585:8585"
+    # Reach the operator's standalone qBit on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Audiobookshelf — audiobook + ebook library server.
+  # ===========================================================
+  audiobookshelf:
+    image: ghcr.io/advplyr/audiobookshelf:latest
+    container_name: allseerr-test-audiobookshelf
+    restart: unless-stopped
+    environment:
+      PORT: "80"
+    volumes:
+      - ./data/audiobookshelf/config:/config
+      - ./data/audiobookshelf/metadata:/metadata
+      # Audiobookshelf scans all four library mounts. Same host
+      # paths Bindery / Livrarr / Grimmory write to so a single
+      # imported file surfaces in every library server that has
+      # the matching library type configured.
+      - ./data/library/audiobooks:/audiobooks
+      - ./data/library/books:/books
+      - ./data/library/podcasts:/podcasts
+      - ./data/library/comics:/comics
+    ports:
+      - "13378:80"
+    networks:
+      - allseerr-test
+    # ABS's default port 13378 doesn't collide with anything in
+    # the operator's standalone dev so we keep it.
+
+  # ===========================================================
+  # Bindery — book + audiobook acquisition (the *arr for books
+  # post-Readarr-death). Reads downloads from qBit's mount,
+  # writes imported files to the shared library paths
+  # Audiobookshelf scans above.
+  # ===========================================================
+  bindery:
+    image: ghcr.io/vavallee/bindery:latest
+    container_name: allseerr-test-bindery
+    restart: unless-stopped
+    environment:
+      BINDERY_LOG_LEVEL: "info"
+      # Allow private-network webhooks (allseerr is on the
+      # docker host, which Bindery sees as a non-public IP).
+      BINDERY_NOTIFICATIONS_ALLOW_PRIVATE: "true"
+    volumes:
+      - ./data/bindery:/config
+      - ./data/library/books:/books
+      - ./data/library/audiobooks:/audiobooks
+      - ./data/downloads:/downloads
+    ports:
+      - "18787:8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Livrarr — alternative book + audiobook acquisition service
+  # (kkodecs/livrarr — Rust + React, Hardcover / OpenLibrary /
+  # Audnexus metadata, ships finished files to CWA / ABS). Same
+  # /books + /audiobooks library mounts as Bindery so both can
+  # coexist + an operator can A/B them by toggling which is the
+  # default in allseerr's Settings → Services → Books.
+  # ===========================================================
+  livrarr:
+    # Livrarr is alpha — no ``:latest`` tag yet, pin to the
+    # most recent alpha release. Bump when a stable lands.
+    image: ghcr.io/kkodecs/livrarr:0.1.0-alpha5
+    container_name: allseerr-test-livrarr
+    restart: unless-stopped
+    volumes:
+      - ./data/livrarr:/config
+      - ./data/library/books:/books
+      - ./data/library/audiobooks:/audiobooks
+      - ./data/downloads:/downloads
+    ports:
+      - "18789:8789"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Grimmory — self-hosted digital library for ebooks + comics
+  # (Booklore community fork). Reads the SAME ``./data/library/
+  # books`` directory Bindery / Livrarr write to, so books
+  # imported by either of them surface in Grimmory's reader
+  # automatically. Also mounts ``./data/library/comics`` so
+  # CBR/CBZ files land in a dedicated reader catalogue.
+  #
+  # Needs its own MariaDB (separate from ROMM's because
+  # Grimmory's schema is incompatible).
+  # ===========================================================
+  grimmory-db:
+    image: lscr.io/linuxserver/mariadb:11.4.5
+    container_name: allseerr-test-grimmory-db
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Europe/Paris"
+      MYSQL_ROOT_PASSWORD: "grimmoryrootpw"
+      MYSQL_DATABASE: "grimmory"
+      MYSQL_USER: "grimmory"
+      MYSQL_PASSWORD: "grimmorypw"
+    volumes:
+      - grimmory_db:/config
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - allseerr-test
+
+  grimmory:
+    image: grimmory/grimmory:latest
+    container_name: allseerr-test-grimmory
+    restart: unless-stopped
+    depends_on:
+      grimmory-db:
+        condition: service_healthy
+    environment:
+      USER_ID: "1000"
+      GROUP_ID: "1000"
+      TZ: "Europe/Paris"
+      DATABASE_URL: "jdbc:mariadb://grimmory-db:3306/grimmory"
+      DATABASE_USERNAME: "grimmory"
+      DATABASE_PASSWORD: "grimmorypw"
+      API_DOCS_ENABLED: "true"
+      DISK_TYPE: "LOCAL"
+    volumes:
+      - ./data/grimmory/data:/app/data
+      # Shared with Bindery + Livrarr — same host path mounted
+      # at /books inside Grimmory so all three see identical
+      # absolute paths.
+      - ./data/library/books:/books
+      - ./data/library/comics:/comics
+      # Dedicated "bookdrop" Grimmory scans for opportunistic
+      # imports — operator can drop a stray PDF here without
+      # routing it through Bindery.
+      - ./data/grimmory/bookdrop:/bookdrop
+    ports:
+      - "16060:6060"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Suwayomi (Tachidesk) — manga download manager + reader.
+  # Allseerr's submitToSuwayomi dispatcher posts approved manga
+  # requests here; Suwayomi pulls them from its catalogue of
+  # online sources and stores them under /downloads.
+  # ===========================================================
+  suwayomi:
+    image: ghcr.io/suwayomi/tachidesk:latest
+    container_name: allseerr-test-suwayomi
+    restart: unless-stopped
+    environment:
+      TZ: "Europe/Paris"
+      # Default-deny basic auth (admin sets a password from the
+      # WebUI on first visit). Open WebUI defaults are fine on
+      # a LAN-only test stack.
+      BIND_IP: "0.0.0.0"
+      BIND_PORT: "4567"
+    volumes:
+      - ./data/suwayomi:/home/suwayomi/.local/share/Tachidesk
+      - ./data/library/manga:/manga
+      - ./data/downloads:/downloads
+    ports:
+      - "14567:4567"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Mylar3 — comic acquisition + monitor (Sonarr-shaped). Reads
+  # qBit-completed CBR/CBZ files from /downloads, writes
+  # imported comics into /comics where Grimmory + ABS see them.
+  # ===========================================================
+  mylar:
+    image: lscr.io/linuxserver/mylar3:latest
+    container_name: allseerr-test-mylar
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Europe/Paris"
+    volumes:
+      - ./data/mylar:/config
+      - ./data/library/comics:/comics
+      - ./data/downloads:/downloads
+    ports:
+      - "18090:8090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Grabarr — magazine grabber (Bookys + AnnaArchive + IA…).
+  # Depends on flaresolverr to bypass CloudFlare on some
+  # sources. Builds from local repo.
+  # ===========================================================
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:v3.3.25
+    container_name: allseerr-test-flaresolverr
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: "info"
+    ports:
+      - "18191:8191"
+    networks:
+      - allseerr-test
+
+  grabarr:
+    build: /home/jeremie/Documents/Developpement/grabarr
+    image: grabarr:dev
+    container_name: allseerr-test-grabarr
+    restart: unless-stopped
+    environment:
+      GRABARR_LOG_LEVEL: "INFO"
+      LOG_FORMAT: "text"
+      GRABARR_SHELFMARK_EXT_BYPASSER_URL: "http://flaresolverr:8191/v1"
+      GRABARR_SHELFMARK_USING_EXTERNAL_BYPASSER: "true"
+      # Required by Internet Archive ToS — replace with your
+      # contact email before any real use.
+      GRABARR_IA_CONTACT_EMAIL: "test@example.com"
+      GRABARR_TORRENT_MODE: "active_seed"
+      GRABARR_TORRENT_LISTEN_PORT_MIN: "45000"
+      GRABARR_TORRENT_LISTEN_PORT_MAX: "45100"
+    volumes:
+      - ./data/grabarr/config:/config
+      - ./data/grabarr/data:/data
+      - ./data/downloads:/downloads
+    ports:
+      - "18086:8080"
+      # Decal libtorrent peer range away from operator's
+      # standalone grabarr (which uses 45000-45100).
+      - "46000-46100:45000-45100/tcp"
+      - "46000-46100:45000-45100/udp"
+    depends_on:
+      - flaresolverr
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # Pressarr — magazine manager. Reads completed downloads
+  # from qBit (via the shared /downloads mount) and organizes
+  # them into the magazine library.
+  # ===========================================================
+  pressarr:
+    build: /home/jeremie/Documents/Developpement/pressarr/pressarr
+    image: pressarr:dev
+    container_name: allseerr-test-pressarr
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: "INFO"
+    volumes:
+      - ./data/pressarr/config:/config
+      - ./data/pressarr/data:/app/data
+      # qBit (running standalone for romarr) saves to romarr's
+      # data dir; pressarr needs to see the SAME host path so
+      # the importer can move completed files into the
+      # magazine library. Mount romarr's downloads directly.
+      - /home/jeremie/Documents/Developpement/romarr/romarr/data/downloads:/downloads
+      - ./data/library/magazines:/magazines
+      # Shared with the JDownloader 2 sidecar — pressarr writes
+      # .crawljob files into ``folderwatch``, JD2 picks them up
+      # and downloads into ``complete``. Kept OUTSIDE
+      # ``/downloads`` so the JD2 paths don't collide with qBit's
+      # save dir (sub-mount precedence inside Docker is fragile).
+      - ./data/jd2/folderwatch:/jd2/folderwatch
+      - ./data/jd2/complete:/jd2/complete
+    ports:
+      - "18084:8585"
+    depends_on:
+      - grabarr
+      # Soft dependencies — pressarr starts fine without them
+      # (Bookys returns nothing, JD2 grabs return 502) but the
+      # full magazine pipeline needs both.
+      - flaresolverr
+      - jdownloader2
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - allseerr-test
+
+  # ===========================================================
+  # JDownloader 2 — the actual file-hoster downloader.
+  # Pressarr emits .crawljob files into ``/config/folderwatch``
+  # (== ./data/jd2/folderwatch on the host) — that's JD2's
+  # *default* Folder Watch path so the extension picks it up
+  # the moment the operator enables it without reconfiguring
+  # paths. Downloads land in ``/jdownloader/downloads`` (==
+  # ./data/jd2/complete) where pressarr's importer scans for
+  # completed releases.
+  #
+  # First boot: open http://localhost:15800 (noVNC), accept the
+  # licence, Settings → Extensions Modules → Folder Watch →
+  # ☑ Enabled. The required settings below are pre-seeded at
+  # boot — operator doesn't have to touch them.
+  # Optional: Settings → Accounts to add premium hoster
+  # accounts (1fichier, Rapidgator, Nitroflare, …) so JD2
+  # skips the free-tier wait timers.
+  #
+  # Pre-seed via the post-install entry point: ``startapp.sh``
+  # writes default cfg files only when missing, so existing
+  # operator overrides survive container restarts.
+  # ===========================================================
+  jdownloader2:
+    image: jlesage/jdownloader-2:latest
+    container_name: allseerr-test-jdownloader2
+    restart: unless-stopped
+    environment:
+      USER_ID: "1000"
+      GROUP_ID: "1000"
+      TZ: "Europe/Paris"
+      KEEP_APP_RUNNING: "1"
+    ports:
+      - "15800:5800"   # noVNC
+    volumes:
+      - ./data/jd2/cfg:/config
+      # JD2's Folder Watch extension defaults its watch path
+      # to ``/config/folderwatch`` inside the container (its
+      # own settings dir). Mount the shared host folderwatch
+      # at that exact path so the operator doesn't have to
+      # reconfigure the watch dir manually after enabling the
+      # extension.
+      - ./data/jd2/folderwatch:/config/folderwatch
+      - ./data/jd2/complete:/jdownloader/downloads
+    networks:
+      - allseerr-test

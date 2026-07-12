@@ -7,7 +7,7 @@ import LanguageSelector from '@app/components/LanguageSelector';
 import RegionSelector from '@app/components/RegionSelector';
 import CopyButton from '@app/components/Settings/CopyButton';
 import MediaTypeTogglesSection from '@app/components/Settings/MediaTypeToggles';
-import RequestNoticesSection from '@app/components/Settings/RequestNotices';
+import NoticesSection from '@app/components/Settings/Notices';
 import SettingsBadge from '@app/components/Settings/SettingsBadge';
 import { availableLanguages } from '@app/context/LanguageContext';
 import useLocale from '@app/hooks/useLocale';
@@ -633,7 +633,7 @@ const SettingsMain = () => {
         </Formik>
       </div>
       <MediaTypeTogglesSection />
-      <RequestNoticesSection />
+      <NoticesSection />
     </>
   );
 };

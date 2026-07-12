@@ -43,6 +43,12 @@ export enum Permission {
   AUTO_APPROVE_MANGA = 137438953472,
   REQUEST_COMIC = 274877906944,
   AUTO_APPROVE_COMIC = 549755813888,
+  // Magazine permission bits — bits 40 / 41 (continuation of
+  // the per-mediaType pair allocation pattern). Both arithmetic
+  // values fit in JS number safely (< 2^53) so the BigInt code
+  // path keeps working unchanged.
+  REQUEST_MAGAZINE = 1099511627776,
+  AUTO_APPROVE_MAGAZINE = 2199023255552,
 }
 
 export interface PermissionCheckOptions {

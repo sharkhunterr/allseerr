@@ -25,7 +25,7 @@ const messages = defineMessages(
     urlTip: 'e.g., https://grimmory.example.com',
     publicUrl: 'Public URL',
     publicUrlTip: 'External URL for "Open in Grimmory" links (optional)',
-    email: 'Email',
+    username: 'Username',
     password: 'Password',
     pollInterval: 'Polling Interval (minutes)',
     syncNow: 'Sync Now',
@@ -37,7 +37,7 @@ const messages = defineMessages(
 interface GrimmorySettingsData {
   url: string;
   publicUrl: string;
-  email: string;
+  username: string;
   password: string;
   passwordSet: boolean;
   pollIntervalMinutes: number;
@@ -59,7 +59,7 @@ const SettingsGrimmory = () => {
 
   const testConnection = async (
     url: string,
-    email: string,
+    username: string,
     password: string
   ) => {
     setIsTesting(true);
@@ -67,7 +67,7 @@ const SettingsGrimmory = () => {
     try {
       const res = await axios.post('/api/v1/settings/grimmory/test', {
         url,
-        email,
+        username,
         password,
       });
       setTestResult(res.data);
@@ -95,7 +95,7 @@ const SettingsGrimmory = () => {
       initialValues={{
         url: data?.url ?? '',
         publicUrl: data?.publicUrl ?? '',
-        email: data?.email ?? '',
+        username: data?.username ?? '',
         password: '',
         pollIntervalMinutes: data?.pollIntervalMinutes ?? 15,
         enabled: data?.enabled ?? false,
@@ -106,7 +106,7 @@ const SettingsGrimmory = () => {
           await axios.put('/api/v1/settings/grimmory', {
             url: values.url,
             publicUrl: values.publicUrl,
-            email: values.email,
+            username: values.username,
             password: values.password || undefined,
             pollIntervalMinutes: values.pollIntervalMinutes,
             enabled: values.enabled,
@@ -151,12 +151,14 @@ const SettingsGrimmory = () => {
                 </span>
               </label>
               <div className="form-input-area">
-                <Field
-                  type="text"
-                  id="url"
-                  name="url"
-                  placeholder="https://grimmory.example.com"
-                />
+                <div className="form-input-field">
+                  <Field
+                    type="text"
+                    id="url"
+                    name="url"
+                    placeholder="https://grimmory.example.com"
+                  />
+                </div>
               </div>
             </div>
 
@@ -168,16 +170,29 @@ const SettingsGrimmory = () => {
                 </span>
               </label>
               <div className="form-input-area">
-                <Field type="text" id="publicUrl" name="publicUrl" />
+                <div className="form-input-field">
+                  <Field type="text" id="publicUrl" name="publicUrl" />
+                </div>
               </div>
             </div>
 
             <div className="form-row">
-              <label htmlFor="email" className="text-label">
-                {intl.formatMessage(messages.email)}
+              <label htmlFor="username" className="text-label">
+                {intl.formatMessage(messages.username)}
               </label>
               <div className="form-input-area">
-                <Field type="email" id="email" name="email" />
+                <div className="form-input-field">
+                  <Field
+                    type="text"
+                    id="username"
+                    name="username"
+                    autoComplete="off"
+                    data-form-type="other"
+                    data-1pignore="true"
+                    data-lpignore="true"
+                    data-bwignore="true"
+                  />
+                </div>
               </div>
             </div>
 
@@ -204,13 +219,15 @@ const SettingsGrimmory = () => {
                 {intl.formatMessage(messages.pollInterval)}
               </label>
               <div className="form-input-area">
-                <Field
-                  type="text"
-                  inputMode="numeric"
-                  id="pollIntervalMinutes"
-                  name="pollIntervalMinutes"
-                  className="short"
-                />
+                <div className="form-input-field">
+                  <Field
+                    type="text"
+                    inputMode="numeric"
+                    id="pollIntervalMinutes"
+                    name="pollIntervalMinutes"
+                    className="short"
+                  />
+                </div>
               </div>
             </div>
 
@@ -243,12 +260,12 @@ const SettingsGrimmory = () => {
                   buttonType="warning"
                   type="button"
                   disabled={
-                    isTesting || !values.url || !values.email
+                    isTesting || !values.url || !values.username
                   }
                   onClick={() =>
                     testConnection(
                       values.url,
-                      values.email,
+                      values.username,
                       values.password
                     )
                   }

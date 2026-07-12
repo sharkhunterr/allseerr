@@ -12,7 +12,7 @@ grimmorySettingsRoutes.get('/', (_req, res) => {
   return res.status(200).json({
     url: g.url,
     publicUrl: g.publicUrl,
-    email: g.email,
+    username: g.username,
     password: '',
     passwordSet: !!g.password,
     pollIntervalMinutes: g.pollIntervalMinutes,
@@ -25,7 +25,7 @@ grimmorySettingsRoutes.put('/', async (req, res) => {
   const body = req.body as {
     url?: string;
     publicUrl?: string;
-    email?: string;
+    username?: string;
     password?: string;
     pollIntervalMinutes?: number;
     enabled?: boolean;
@@ -36,7 +36,7 @@ grimmorySettingsRoutes.put('/', async (req, res) => {
     grimmory: {
       url: body.url ?? settings.book.grimmory.url,
       publicUrl: body.publicUrl ?? settings.book.grimmory.publicUrl,
-      email: body.email ?? settings.book.grimmory.email,
+      username: body.username ?? settings.book.grimmory.username,
       password: body.password || settings.book.grimmory.password,
       pollIntervalMinutes:
         body.pollIntervalMinutes ??
@@ -50,7 +50,7 @@ grimmorySettingsRoutes.put('/', async (req, res) => {
   return res.status(200).json({
     url: settings.book.grimmory.url,
     publicUrl: settings.book.grimmory.publicUrl,
-    email: settings.book.grimmory.email,
+    username: settings.book.grimmory.username,
     password: '',
     passwordSet: !!settings.book.grimmory.password,
     pollIntervalMinutes: settings.book.grimmory.pollIntervalMinutes,
@@ -60,9 +60,9 @@ grimmorySettingsRoutes.put('/', async (req, res) => {
 
 grimmorySettingsRoutes.post('/test', async (req, res) => {
   const settings = getSettings();
-  const { url, email, password } = req.body as {
+  const { url, username, password } = req.body as {
     url?: string;
-    email?: string;
+    username?: string;
     password?: string;
   };
 
@@ -74,7 +74,7 @@ grimmorySettingsRoutes.post('/test', async (req, res) => {
         parseInt(parsedUrl.port) ||
         (parsedUrl.protocol === 'https:' ? 443 : 80),
       useSsl: parsedUrl.protocol === 'https:',
-      email: email || settings.book.grimmory.email,
+      username: username || settings.book.grimmory.username,
       password: password || settings.book.grimmory.password,
     });
 

@@ -15,6 +15,7 @@ import {
   EyeSlashIcon,
   FilmIcon,
   MusicalNoteIcon,
+  NewspaperIcon,
   RectangleStackIcon,
   SparklesIcon,
   TvIcon,
@@ -29,6 +30,7 @@ import {
   EyeSlashIcon as FilledEyeSlashIcon,
   FilmIcon as FilledFilmIcon,
   MusicalNoteIcon as FilledMusicalNoteIcon,
+  NewspaperIcon as FilledNewspaperIcon,
   RectangleStackIcon as FilledRectangleStackIcon,
   SparklesIcon as FilledSparklesIcon,
   TvIcon as FilledTvIcon,
@@ -65,7 +67,8 @@ interface MenuLink {
     | 'mangaEnabled'
     | 'comicEnabled'
     | 'bookEnabled'
-    | 'audiobookEnabled';
+    | 'audiobookEnabled'
+    | 'magazineEnabled';
 }
 
 const MobileMenu = ({
@@ -154,6 +157,14 @@ const MobileMenu = ({
       svgIconSelected: <FilledMusicalNoteIcon className="h-6 w-6" />,
       activeRegExp: /^\/discover\/audiobooks$/,
       settingsFlag: 'audiobookEnabled',
+    },
+    {
+      href: '/discover/magazines',
+      content: intl.formatMessage(menuMessages.browsemagazines),
+      svgIcon: <NewspaperIcon className="h-6 w-6" />,
+      svgIconSelected: <FilledNewspaperIcon className="h-6 w-6" />,
+      activeRegExp: /^\/discover\/magazines$/,
+      settingsFlag: 'magazineEnabled',
     },
     {
       href: '/requests',

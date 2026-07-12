@@ -27,6 +27,7 @@ const messages = defineMessages('components.Settings.RequestNotices', {
   game: 'Games',
   manga: 'Manga',
   comic: 'Comics',
+  magazine: 'Magazines',
   perTypeHelp:
     'Shown only on the matching detail page / request modal. Stacks with the global notice when both are set.',
   message: 'Message',
@@ -48,6 +49,7 @@ const PER_TYPE_FIELDS: { key: Scope; label: keyof typeof messages }[] = [
   { key: 'game', label: 'game' },
   { key: 'manga', label: 'manga' },
   { key: 'comic', label: 'comic' },
+  { key: 'magazine', label: 'magazine' },
 ];
 
 const NoticeRow = ({
@@ -132,6 +134,7 @@ const RequestNoticesSection = () => {
     game: blank,
     manga: blank,
     comic: blank,
+    magazine: blank,
   };
 
   return (

@@ -29,6 +29,7 @@ import LoadingSpinner from '@app/components/Common/LoadingSpinner';
 import PageTitle from '@app/components/Common/PageTitle';
 import { useUpdateQueryParams } from '@app/hooks/useUpdateQueryParams';
 import useVerticalScroll from '@app/hooks/useVerticalScroll';
+import NoticesAlert from '@app/components/Common/NoticesAlert';
 import { BarsArrowDownIcon, FunnelIcon } from '@heroicons/react/24/solid';
 import { useRouter } from 'next/router';
 import { useState, type ReactElement, type ReactNode } from 'react';
@@ -69,6 +70,16 @@ interface DiscoverExtendedProps<T> {
   /** Number of active filters — drives the count shown on the
    * Filters button. Used only when ``renderFilters`` is set. */
   activeFilterCount?: number;
+  /** Extra toolbar buttons / nodes rendered to the right of the
+   * Filters button. Mounted alongside the rest of the toolbar
+   * so a page can attach a "Request something not listed" CTA
+   * (or any other action) without re-implementing the layout. */
+  extraToolbarActions?: ReactNode;
+  /** When set, admin notices targeting this media type with
+   * ``context: 'discover'`` render between the toolbar and the
+   * card grid. Pages just declare the type — the rendering /
+   * filtering happens in ``NoticesAlert``. */
+  noticeMediaType?: import('@server/interfaces/api/settingsInterfaces').NoticeMediaScope;
 }
 
 function DiscoverExtended<T>(props: DiscoverExtendedProps<T>): ReactElement {
@@ -150,7 +161,8 @@ function DiscoverExtended<T>(props: DiscoverExtendedProps<T>): ReactElement {
       <div className="mb-4 flex flex-col justify-between lg:flex-row lg:items-end">
         <Header>{props.title}</Header>
         {(props.sortOptions && props.sortOptions.length > 1) ||
-        props.renderFilters ? (
+        props.renderFilters ||
+        props.extraToolbarActions ? (
           <div className="mt-2 flex flex-grow flex-col sm:flex-row lg:flex-grow-0">
             {props.sortOptions && props.sortOptions.length > 1 && (
               <div className="mb-2 flex flex-grow sm:mb-0 sm:mr-2 lg:flex-grow-0">
@@ -201,9 +213,22 @@ function DiscoverExtended<T>(props: DiscoverExtendedProps<T>): ReactElement {
                 </div>
               </>
             )}
+            {props.extraToolbarActions && (
+              <div className="mb-2 flex flex-grow sm:mb-0 sm:ml-2 lg:flex-grow-0">
+                {props.extraToolbarActions}
+              </div>
+            )}
           </div>
         ) : null}
       </div>
+
+      {props.noticeMediaType && props.noticeMediaType !== 'global' && (
+        <NoticesAlert
+          mediaType={props.noticeMediaType}
+          context="discover"
+          className="mb-4"
+        />
+      )}
 
       {isLoadingInitial ? (
         <LoadingSpinner />

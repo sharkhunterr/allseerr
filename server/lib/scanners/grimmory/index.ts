@@ -66,7 +66,7 @@ class GrimmoryScanner {
           parseInt(parsedUrl.port) ||
           (parsedUrl.protocol === 'https:' ? 443 : 80),
         useSsl: parsedUrl.protocol === 'https:',
-        email: grimmory.email,
+        username: grimmory.username,
         password: grimmory.password,
       });
 

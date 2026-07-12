@@ -17,6 +17,8 @@ export type AvailableCacheIds =
   | 'grimmory'
   | 'bindery'
   | 'bookshelf'
+  | 'livrarr'
+  | 'pressarr'
   | 'openlibrary'
   | 'googlebooks'
   | 'hardcover'
@@ -64,6 +66,8 @@ class CacheManager {
     sonarr: new Cache('sonarr', 'Sonarr API'),
     bindery: new Cache('bindery', 'Bindery API'),
     bookshelf: new Cache('bookshelf', 'Bookshelf API'),
+    livrarr: new Cache('livrarr', 'Livrarr API'),
+    pressarr: new Cache('pressarr', 'Pressarr API'),
     openlibrary: new Cache('openlibrary', 'OpenLibrary API', {
       // Work/author/editions records change rarely; 24h keeps things
       // fresh without hammering OL on every book page refresh.

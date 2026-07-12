@@ -51,6 +51,7 @@ const DiscoverMangaPage: NextPage = () => {
         defaultMessage: 'Manga',
       })}
       endpoint="/api/v1/discover/manga"
+      noticeMediaType="manga"
       cardKey={(m) => m.anilistId}
       sortOptions={[
         { value: 'trending', label: 'Trending' },

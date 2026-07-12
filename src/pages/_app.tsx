@@ -267,6 +267,7 @@ CoreApp.getInitialProps = async (initialProps) => {
     gameEnabled: false,
     mangaEnabled: false,
     comicEnabled: false,
+    magazineEnabled: false,
     requestNotices: {
       global: { message: '', severity: 'info' },
       movie: { message: '', severity: 'info' },
@@ -276,6 +277,7 @@ CoreApp.getInitialProps = async (initialProps) => {
       game: { message: '', severity: 'info' },
       manga: { message: '', severity: 'info' },
       comic: { message: '', severity: 'info' },
+      magazine: { message: '', severity: 'info' },
     },
   };
 

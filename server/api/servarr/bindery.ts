@@ -129,6 +129,43 @@ class BinderyAPI extends ServarrBase<{ bookId: number }> {
     }
   };
 
+  /**
+   * Resolve a book through Bindery's metadata pipeline by ISBN. Returns the
+   * foreignBookId / foreignAuthorId Bindery's currently-active primary
+   * provider would use — i.e. always OpenLibrary `OL...W` / `OL...A` IDs.
+   * Lets us bridge from a different upstream catalogue (e.g. Hardcover)
+   * by funnelling an ISBN through this single call.
+   */
+  public lookupBookByIsbn = async (
+    isbn: string
+  ): Promise<{
+    foreignBookId: string;
+    foreignAuthorId?: string;
+    authorName?: string;
+    title: string;
+  } | null> => {
+    try {
+      const response = await this.axios.get<{
+        foreignBookId: string;
+        title: string;
+        author?: { foreignAuthorId?: string; authorName?: string };
+      }>('/book/lookup', { params: { isbn } });
+      return {
+        foreignBookId: response.data.foreignBookId,
+        foreignAuthorId: response.data.author?.foreignAuthorId,
+        authorName: response.data.author?.authorName,
+        title: response.data.title,
+      };
+    } catch (e) {
+      logger.warn('Bindery ISBN lookup failed', {
+        label: 'Bindery API',
+        errorMessage: e.message,
+        isbn,
+      });
+      return null;
+    }
+  };
+
   public getBooks = async (): Promise<BinderyBook[]> => {
     try {
       const response = await this.axios.get<BinderyBook[]>('/book');
@@ -226,6 +263,22 @@ class BinderyAPI extends ServarrBase<{ bookId: number }> {
     monitored: boolean
   ): Promise<void> {
     await this.axios.put(`/book/${bookId}`, { monitored });
+  }
+
+  /**
+   * Override Bindery's auto-derived mediaType on an existing book.
+   * Bindery's POST /author/book always creates a record with
+   * mediaType="ebook" regardless of what the caller intends — book
+   * vs audiobook is a per-record flag the caller must set after the
+   * fact via PUT /book/{id}. Without this call an audiobook request
+   * lands as an ebook in Bindery and the searcher hands the title to
+   * the wrong indexer category.
+   */
+  public async setBookMediaType(
+    bookId: number,
+    mediaType: 'ebook' | 'audiobook'
+  ): Promise<void> {
+    await this.axios.put(`/book/${bookId}`, { mediaType });
   }
 
   /**

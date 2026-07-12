@@ -37,6 +37,30 @@ export interface RequestNotices {
   game: RequestNoticeEntry;
   manga: RequestNoticeEntry;
   comic: RequestNoticeEntry;
+  magazine: RequestNoticeEntry;
+}
+
+export type NoticeMediaScope =
+  | 'global'
+  | 'movie'
+  | 'tv'
+  | 'book'
+  | 'audiobook'
+  | 'game'
+  | 'manga'
+  | 'comic'
+  | 'magazine';
+
+export type NoticeContext = 'detail' | 'search' | 'discover';
+
+export interface NoticeEntry {
+  id: string;
+  message: string;
+  severity: RequestNoticeSeverity;
+  mediaScope: NoticeMediaScope;
+  contexts: NoticeContext[];
+  enabled: boolean;
+  label?: string;
 }
 
 export interface PublicSettingsResponse {
@@ -74,7 +98,9 @@ export interface PublicSettingsResponse {
   gameEnabled: boolean;
   mangaEnabled: boolean;
   comicEnabled: boolean;
+  magazineEnabled: boolean;
   requestNotices: RequestNotices;
+  notices: NoticeEntry[];
 }
 
 export interface CacheItem {

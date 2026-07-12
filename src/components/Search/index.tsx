@@ -1,13 +1,23 @@
 import AudiobookCard from '@app/components/AudiobookCard';
 import BookCard from '@app/components/BookCard';
+import Button from '@app/components/Common/Button';
 import ComicCard from '@app/components/ComicCard';
 import Header from '@app/components/Common/Header';
 import ListView from '@app/components/Common/ListView';
 import LoadingSpinner from '@app/components/Common/LoadingSpinner';
+import NoticesAlert from '@app/components/Common/NoticesAlert';
 import PageTitle from '@app/components/Common/PageTitle';
 import StatusBadgeMini from '@app/components/Common/StatusBadgeMini';
 import GameCard from '@app/components/GameCard';
+import MagazineCard from '@app/components/MagazineCard';
 import MangaCard from '@app/components/MangaCard';
+import MagazineManualRequestModal from '@app/components/RequestModal/MagazineManualRequestModal';
+import MagazineSearchFilterSlideover, {
+  countMagazineActiveFilters,
+  MAGAZINE_FILTER_DEFAULTS,
+  type MagazineFilterValues,
+} from '@app/components/Search/MagazineSearchFilterSlideover';
+import { FunnelIcon, PlusIcon } from '@heroicons/react/24/solid';
 import { SearchLoadingContext } from '@app/context/SearchLoadingContext';
 import useDiscover from '@app/hooks/useDiscover';
 import useSettings from '@app/hooks/useSettings';
@@ -35,6 +45,7 @@ const messages = defineMessages('components.Search', {
   tabGames: 'Games',
   tabManga: 'Manga',
   tabComics: 'Comics',
+  tabMagazines: 'Magazines',
   noResults: 'No results found.',
   bookBadge: 'Book',
   seriesBadge: 'Series',
@@ -46,7 +57,36 @@ const messages = defineMessages('components.Search', {
   collectionCountFmt: '{count, plural, one {# game} other {# games}}',
 });
 
-type MediaTab = 'all' | 'books' | 'audiobooks' | 'games' | 'manga' | 'comics';
+type MediaTab =
+  | 'all'
+  | 'books'
+  | 'audiobooks'
+  | 'games'
+  | 'manga'
+  | 'comics'
+  | 'magazines';
+
+interface MagazineResult {
+  id: string;
+  title: string;
+  publisher?: string;
+  issn?: string;
+  issns?: { issn: string; format?: string }[];
+  coverUrl?: string;
+  coverIsLogo?: boolean;
+  year?: number;
+  language?: string;
+  country?: string;
+  categories?: string[];
+  description?: string;
+  frequency?: string;
+  firstIssued?: string;
+  ceasedAt?: string;
+}
+
+interface MagazineSearchResponse {
+  results: MagazineResult[];
+}
 
 interface MangaResult {
   anilistId: number;
@@ -340,6 +380,7 @@ const Search = () => {
   const gameEnabled = currentSettings.gameEnabled;
   const mangaEnabled = currentSettings.mangaEnabled;
   const comicEnabled = currentSettings.comicEnabled;
+  const magazineEnabled = currentSettings.magazineEnabled;
   const [activeTab, setActiveTab] = useState<MediaTab>('all');
   const [bookResults, setBookResults] = useState<BookOrSeriesResult[]>([]);
   const [audiobookResults, setAudiobookResults] = useState<
@@ -348,11 +389,23 @@ const Search = () => {
   const [gameResults, setGameResults] = useState<GameOrCollectionResult[]>([]);
   const [mangaResults, setMangaResults] = useState<MangaResult[]>([]);
   const [comicResults, setComicResults] = useState<ComicResult[]>([]);
+  const [magazineResults, setMagazineResults] = useState<MagazineResult[]>([]);
+  // Magazine-specific filters, mirroring the discover slideover
+  // pattern — three dimensions (publication status, source
+  // coverage, format breadth) all defaulting to the noise-
+  // suppressed bucket. Opt out via the Filters slideover.
+  const [magazineFilters, setMagazineFilters] = useState<MagazineFilterValues>(
+    MAGAZINE_FILTER_DEFAULTS
+  );
+  const [showMagazineFilters, setShowMagazineFilters] = useState(false);
+  const [showMagazineManualRequest, setShowMagazineManualRequest] =
+    useState(false);
   const [isLoadingBooks, setIsLoadingBooks] = useState(false);
   const [isLoadingAudiobooks, setIsLoadingAudiobooks] = useState(false);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
   const [isLoadingManga, setIsLoadingManga] = useState(false);
   const [isLoadingComics, setIsLoadingComics] = useState(false);
+  const [isLoadingMagazines, setIsLoadingMagazines] = useState(false);
 
   const query = (router.query.query as string) ?? '';
 
@@ -379,6 +432,7 @@ const Search = () => {
       setGameResults([]);
       setMangaResults([]);
       setComicResults([]);
+      setMagazineResults([]);
       return;
     }
 
@@ -469,6 +523,28 @@ const Search = () => {
     } else {
       setComicResults([]);
     }
+
+    if (magazineEnabled) {
+      setIsLoadingMagazines(true);
+      axios
+        .get<MagazineSearchResponse>('/api/v1/magazine/search', {
+          params: {
+            query,
+            // Pass-through to pressarr's cascade so server-side
+            // filtering keeps the response small; the slideover
+            // just re-fetches when the operator commits a change.
+            status: magazineFilters.statusOngoing ? 'ongoing' : 'all',
+            verified: magazineFilters.verifiedOnly ? 'true' : undefined,
+            multi_issn: magazineFilters.multiIssnOnly ? 'true' : undefined,
+          },
+          paramsSerializer,
+        })
+        .then((res) => setMagazineResults(res.data.results ?? []))
+        .catch(() => setMagazineResults([]))
+        .finally(() => setIsLoadingMagazines(false));
+    } else {
+      setMagazineResults([]);
+    }
   }, [
     query,
     bookEnabled,
@@ -476,6 +552,8 @@ const Search = () => {
     gameEnabled,
     mangaEnabled,
     comicEnabled,
+    magazineEnabled,
+    magazineFilters,
   ]);
 
   // Publish a combined "any active fetch" boolean to SearchLoadingContext
@@ -491,7 +569,8 @@ const Search = () => {
       (audiobookEnabled && isLoadingAudiobooks) ||
       (gameEnabled && isLoadingGames) ||
       (mangaEnabled && isLoadingManga) ||
-      (comicEnabled && isLoadingComics));
+      (comicEnabled && isLoadingComics) ||
+      (magazineEnabled && isLoadingMagazines));
   useEffect(() => {
     setIsSearching(isAnySearching);
     // Reset on unmount so navigating away from /search doesn't strand
@@ -565,6 +644,16 @@ const Search = () => {
           },
         ]
       : []),
+    ...(magazineEnabled
+      ? [
+          {
+            key: 'magazines' as MediaTab,
+            label: intl.formatMessage(messages.tabMagazines),
+            count: isLoadingMagazines ? null : magazineResults.length,
+            loading: isLoadingMagazines,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -605,6 +694,33 @@ const Search = () => {
           </button>
         ))}
       </div>
+
+      {/* Admin notices targeted to the active search tab. Picks
+          the right media-type bucket for each tab; global
+          notices (no specific scope) render here too. */}
+      {(() => {
+        const tabToMediaType: Record<
+          MediaTab,
+          Parameters<typeof NoticesAlert>[0]['mediaType'] | null
+        > = {
+          all: null, // Movies & TV is dual-typed — keep this slot clean.
+          books: 'book',
+          audiobooks: 'audiobook',
+          games: 'game',
+          manga: 'manga',
+          comics: 'comic',
+          magazines: 'magazine',
+        };
+        const mediaType = tabToMediaType[activeTab];
+        if (!mediaType) return null;
+        return (
+          <NoticesAlert
+            mediaType={mediaType}
+            context="search"
+            className="mb-4"
+          />
+        );
+      })()}
 
       {/* Movies & TV (existing) */}
       {activeTab === 'all' && (
@@ -806,6 +922,92 @@ const Search = () => {
               ))}
             </ul>
           )}
+        </div>
+      )}
+
+      {/* Magazines — backed by the ISSN-first cascade (ZDB + Wikidata
+          + BnF + ISSN Portal via pressarr). Each MagazineCard's id is
+          the cascade key (issn:NNNN-NNNN / wd:Q123 / pressarr:…) which
+          the detail route at /magazine/[id] handles uniformly. */}
+      {activeTab === 'magazines' && (
+        <div>
+          {/* Filters Button + SlideOver — same visual rhythm as
+              the discover pages. Each magazine-specific filter
+              lives inside the slideover; the button shows the
+              active-filter count next to the funnel icon. */}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <MagazineSearchFilterSlideover
+              show={showMagazineFilters}
+              onClose={() => setShowMagazineFilters(false)}
+              currentFilters={magazineFilters}
+              onChange={setMagazineFilters}
+            />
+            <Button onClick={() => setShowMagazineFilters(true)}>
+              <FunnelIcon />
+              <span>
+                {intl.formatMessage(
+                  {
+                    id: 'components.Search.magazineActiveFilters',
+                    defaultMessage:
+                      '{count, plural, one {# Active Filter} other {# Active Filters}}',
+                  },
+                  { count: countMagazineActiveFilters(magazineFilters) }
+                )}
+              </span>
+            </Button>
+            {/* Escape hatch — when the cascade can't find the
+                operator's magazine (very local title, defunct, etc.)
+                they can dispatch a manual entry instead. Sits next
+                to Filters because that's where the "I can't find what
+                I want" eye-flow lands. */}
+            <Button
+              buttonType="primary"
+              onClick={() => setShowMagazineManualRequest(true)}
+            >
+              <PlusIcon />
+              <span>
+                {intl.formatMessage({
+                  id: 'components.Search.magazineManualRequest',
+                  defaultMessage: 'Request a magazine not listed',
+                })}
+              </span>
+            </Button>
+          </div>
+          {isLoadingMagazines ? (
+            <LoadingSpinner />
+          ) : magazineResults.length === 0 ? (
+            <p className="py-8 text-center text-gray-400">
+              {intl.formatMessage(messages.noResults)}
+            </p>
+          ) : (
+            <ul className="cards-vertical">
+              {magazineResults.map((m) => (
+                <li key={m.id}>
+                  <MagazineCard
+                    id={m.id}
+                    title={m.title}
+                    publisher={m.publisher}
+                    issn={m.issn}
+                    coverUrl={m.coverUrl}
+                    coverIsLogo={m.coverIsLogo}
+                    year={m.year}
+                    language={m.language}
+                    country={m.country}
+                    categories={m.categories}
+                    description={m.description}
+                    frequency={m.frequency}
+                    firstIssued={m.firstIssued}
+                    ceasedAt={m.ceasedAt}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+          <MagazineManualRequestModal
+            show={showMagazineManualRequest}
+            onCancel={() => setShowMagazineManualRequest(false)}
+            onComplete={() => setShowMagazineManualRequest(false)}
+          />
         </div>
       )}
     </>

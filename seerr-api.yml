@@ -3395,6 +3395,112 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ServiceProfile'
+  /settings/livrarr:
+    get:
+      summary: Get Livrarr settings
+      description: Returns all Livrarr instances configured for download
+        dispatch of books and audiobooks.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+    post:
+      summary: Create Livrarr instance
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /settings/livrarr/test:
+    post:
+      summary: Test Livrarr configuration
+      description: Pings /api/v1/system/status on the candidate Livrarr
+        instance, then enumerates its configured root folders.
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname: { type: string }
+                port: { type: number }
+                apiKey: { type: string }
+                useSsl: { type: boolean }
+                baseUrl: { type: string }
+              required: [hostname, port, apiKey]
+      responses:
+        '200':
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /settings/livrarr/{livrarrId}:
+    put:
+      summary: Update Livrarr instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: livrarrId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    delete:
+      summary: Delete Livrarr instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: livrarrId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
   /settings/romarr:
     get:
       summary: Get Romarr settings
@@ -5899,6 +6005,83 @@ paths:
             application/json:
               schema:
                 type: object
+  /settings/notices:
+    get:
+      summary: List admin-defined notices
+      description: |
+        Returns every NoticeEntry stored by the operator. Empty
+        array when no notices are configured. Each entry carries
+        its message, severity, media-type scope, list of contexts
+        (detail/search/discover), enabled flag, and optional
+        admin-only label.
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+    post:
+      summary: Create a new notice
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /settings/notices/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      summary: Update an existing notice
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: Not found
+    delete:
+      summary: Delete a notice
+      tags:
+        - settings
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
   /settings/media-types:
     get:
       summary: Get the master on/off toggles for non-TMDB media types
@@ -8710,6 +8893,240 @@ paths:
       responses:
         '200':
           description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /discover/magazines:
+    get:
+      summary: Magazines discover via the ISSN-first cascade
+      description: Returns a merged list — pressarr's cascade
+        (ZDB + Wikidata + BnF + Google Books + Internet Archive,
+        ISSN-deduped) when a default pressarr instance is
+        configured; Google Books printType=magazines otherwise.
+        Curated default set covers FR + worldwide press when no
+        ``query`` is given. Returns 503 when the ``magazine``
+        media type is disabled.
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: query
+          schema:
+            type: string
+        - in: query
+          name: locale
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: number
+            default: 1
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /magazine/search:
+    get:
+      summary: Free-text magazine search via the ISSN-first cascade
+      description: Forwards to pressarr's /magazine/lookup (cascade-aggregated)
+        when a default instance is configured; falls back to Google
+        Books printType=magazines otherwise. Optional locale biases
+        ranking server-side; optional status filters by publication
+        state (ongoing / ceased / all).
+      tags:
+        - search
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: locale
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [ongoing, ceased, all]
+        - in: query
+          name: verified
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: multi_issn
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /magazine/{id}:
+    get:
+      summary: Single magazine detail
+      description: id is either issn:NNNN-NNNN, wd:Q123, pressarr:..., or a Google Books volume id.
+      tags:
+        - search
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: locale
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Magazine
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          description: Not found
+  /magazine/request:
+    post:
+      summary: Create a magazine request
+      tags:
+        - request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Bad request
+        '403':
+          description: Forbidden
+        '409':
+          description: Duplicate request
+  /settings/pressarr:
+    get:
+      summary: Get Pressarr settings
+      tags:
+        - settings
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+    post:
+      summary: Create Pressarr instance
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /settings/pressarr/test:
+    post:
+      summary: Test Pressarr configuration
+      tags:
+        - settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname: { type: string }
+                port: { type: number }
+                apiKey: { type: string }
+                useSsl: { type: boolean }
+                baseUrl: { type: string }
+              required: [hostname, port, apiKey]
+      responses:
+        '200':
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /settings/pressarr/{pressarrId}:
+    put:
+      summary: Update Pressarr instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: pressarrId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    delete:
+      summary: Delete Pressarr instance
+      tags:
+        - settings
+      parameters:
+        - in: path
+          name: pressarrId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Deleted
           content:
             application/json:
               schema:

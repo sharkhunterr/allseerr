@@ -1516,6 +1516,166 @@ discoverRoutes.get('/comics', requireMediaType('comic'), async (req, res) => {
   }
 });
 
+// ----- Magazines discover -------------------------------------
+// Magazines have no native ``trending`` feed, so we surface a
+// curated default list of well-known periodicals when no query
+// is provided. Discovery delegates to pressarr's ISSN-first
+// cascade (ZDB + Wikidata + BnF + GoogleBooks + InternetArchive
+// merged + ISSN-deduped) so the cards land with proper covers
+// and country info regardless of where each title is catalogued.
+// Falls back to Google Books printType=magazines when no
+// pressarr instance is configured.
+//
+// Curated set spans regions and registers so a fresh stack shows
+// breadth: international flagships, French press the operator
+// asked us to cover, and a couple of consumer titles.
+const MAGAZINES_DISCOVER_DEFAULTS = [
+  'Time',
+  'The Economist',
+  'Nature',
+  'Le Monde',
+  'Le Figaro',
+  '60 millions de consommateurs',
+  'Picsou Magazine',
+];
+
+interface DiscoverMagazineCard {
+  id: string;
+  googleBooksId?: string;
+  title: string;
+  publisher?: string;
+  issn?: string;
+  coverUrl?: string;
+  // Drives the tile's "contained-on-light-bg" treatment when the
+  // cascade resolved a brand logo (Wikidata P154) rather than a
+  // real cover. Same flag MagazineCard consumes on the search tab.
+  coverIsLogo?: boolean;
+  year?: number;
+  language?: string;
+  country?: string;
+  description?: string;
+  categories?: string[];
+  mediaType: 'magazine';
+}
+
+discoverRoutes.get(
+  '/magazines',
+  requireMediaType('magazine'),
+  async (req, res) => {
+    try {
+      const settings = getSettings();
+      const pressarr = settings.pressarr.find(
+        (p) => p.mediaType === 'magazine' && p.isDefault
+      );
+      const query =
+        typeof req.query.query === 'string' && req.query.query.trim()
+          ? req.query.query.trim()
+          : undefined;
+      const locale =
+        typeof req.query.locale === 'string' && req.query.locale.trim()
+          ? req.query.locale.trim()
+          : undefined;
+      const queries = query ? [query] : MAGAZINES_DISCOVER_DEFAULTS;
+
+      const merged: DiscoverMagazineCard[] = [];
+      const seen = new Set<string>();
+      const push = (card: DiscoverMagazineCard) => {
+        const key = card.issn ? `issn:${card.issn}` : card.id;
+        if (seen.has(key)) return;
+        seen.add(key);
+        merged.push(card);
+      };
+
+      if (pressarr) {
+        // Primary: pressarr cascade. Already ISSN-merged + ranked
+        // upstream so we just stitch the per-query top-6 together
+        // and dedupe across queries by ISSN.
+        const { default: PressarrAPI } = await import(
+          '@server/api/servarr/pressarr'
+        );
+        const api = new PressarrAPI({
+          apiKey: pressarr.apiKey,
+          url: PressarrAPI.buildUrl(pressarr, '/api/v1'),
+        });
+        const batches = await Promise.all(
+          queries.map((q) => api.lookupMagazine(q, { locale }))
+        );
+        for (const hits of batches) {
+          for (const h of hits.slice(0, 6)) {
+            push({
+              id: h.issn
+                ? `issn:${h.issn}`
+                : h.wikidataQid
+                  ? `wd:${h.wikidataQid}`
+                  : `pressarr:${h.providerId}`,
+              title: h.title,
+              publisher: h.publisher ?? undefined,
+              issn: h.issn ?? undefined,
+              coverUrl: h.coverUrl ?? undefined,
+              coverIsLogo: h.coverIsLogo ?? undefined,
+              year: h.firstIssued
+                ? Number.parseInt(h.firstIssued, 10) || undefined
+                : undefined,
+              language: h.language ?? undefined,
+              country: h.country ?? undefined,
+              description: h.description ?? undefined,
+              categories: h.categories ?? undefined,
+              mediaType: 'magazine',
+            });
+            if (merged.length >= 40) break;
+          }
+          if (merged.length >= 40) break;
+        }
+      } else {
+        // Fallback: Google Books printType=magazines.
+        const { searchMagazines } = await import(
+          '@server/api/googlebooks/magazines'
+        );
+        const apiKey =
+          settings.book?.metadataProviders?.googleBooksApiKey || undefined;
+        const batches = await Promise.all(
+          queries.map((q) => searchMagazines(q, { apiKey, maxResults: 6 }))
+        );
+        for (const hits of batches) {
+          for (const h of hits) {
+            push({
+              id: h.id,
+              googleBooksId: h.id,
+              title: h.title,
+              publisher: h.publisher,
+              issn: h.issn,
+              coverUrl: h.coverUrl,
+              year: h.year,
+              language: h.language,
+              description: h.description,
+              mediaType: 'magazine',
+            });
+            if (merged.length >= 40) break;
+          }
+          if (merged.length >= 40) break;
+        }
+      }
+      return res.status(200).json({
+        page: 1,
+        totalPages: 1,
+        totalResults: merged.length,
+        results: merged,
+      });
+    } catch (e) {
+      logger.error('discover.magazines failed', {
+        label: 'discover',
+        error: e instanceof Error ? e.message : String(e),
+      });
+      return res.status(200).json({
+        page: 1,
+        totalPages: 1,
+        totalResults: 0,
+        results: [],
+      });
+    }
+  }
+);
+
 // Helper for the books / audiobooks year-range filter. Applied
 // post-fetch because no provider supports a clean ``year`` range
 // filter; we already have the year per row. Returns the array

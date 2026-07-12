@@ -32,6 +32,8 @@ mediaTypeSettingsRoutes.put('/', async (req, res) => {
       game: typeof body.game === 'boolean' ? body.game : current.game,
       manga: typeof body.manga === 'boolean' ? body.manga : current.manga,
       comic: typeof body.comic === 'boolean' ? body.comic : current.comic,
+      magazine:
+        typeof body.magazine === 'boolean' ? body.magazine : current.magazine,
     };
 
     settings.mediaTypes = next;

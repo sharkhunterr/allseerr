@@ -31,6 +31,18 @@ export class AudiobookMedia {
   @Column({ type: 'varchar', nullable: true })
   public asin?: string | null;
 
+  // ISBN of the parent print edition (when known). Audiobooks are
+  // identified primarily by ASIN, but downstream services that key
+  // off OpenLibrary Works (Bindery, Bookshelf, Livrarr) need an
+  // ISBN to bridge from a Hardcover-shaped foreignBookId to their
+  // canonical OL Work ID. Hardcover surfaces both fields on its
+  // edition records so we capture them at discovery time.
+  @Column({ type: 'varchar', nullable: true })
+  public isbn13?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  public isbn10?: string | null;
+
   @Index({ unique: true })
   @Column({ type: 'varchar' })
   public foreignBookId: string;

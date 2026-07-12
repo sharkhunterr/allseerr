@@ -42,22 +42,60 @@ export async function submitToBindery(
       url: BinderyAPI.buildUrl(instance, '/api/v1'),
     });
 
-    // Bindery's /author/book endpoint requires foreignAuthorId. If the
-    // media entity doesn't have one stored (e.g. pre-existing requests
-    // created before we plumbed author_key through OpenLibrary), resolve
-    // via Bindery's author search as a best-effort fallback.
+    // Bindery's only supported primary metadata providers are openlibrary
+    // and dnb — both keyed by OpenLibrary-shaped IDs (OL...W, OL...A).
+    // When allseerr's book metadata provider is anything else (e.g.
+    // Hardcover), media.foreignBookId is in that other provider's
+    // dialect (e.g. "hardcover:428506") which Bindery's primary
+    // pipeline can't resolve. Bridge through ISBN → Bindery's own
+    // /book/lookup so we hand it the OpenLibrary IDs it expects.
+    //
+    // Both BookMedia and AudiobookMedia carry an optional isbn13
+    // column. For audiobooks Audible itself doesn't surface ISBN,
+    // so we rely on the discovery flow's Hardcover enrichment to
+    // capture a print/ebook edition's ISBN at create-time. The
+    // bridge is identical for either type whenever the field is set.
+    let foreignBookId = media.foreignBookId;
     let foreignAuthorId = media.foreignAuthorId ?? undefined;
+    let resolvedAuthorName = media.authorName;
+
+    const looksLikeOpenLibraryWork = (id?: string | null) =>
+      !!id && /^OL\d+W$/i.test(id.replace(/^\/works\//, ''));
+
+    // AudiobookMedia gained isbn13 in 1776900000000-AddIsbnToAudiobookMedia
+    // so we can read it uniformly here regardless of media variant.
+    const bridgeIsbn = (media as { isbn13?: string | null }).isbn13 ?? undefined;
+
+    if (!looksLikeOpenLibraryWork(foreignBookId) && bridgeIsbn) {
+      const looked = await api.lookupBookByIsbn(bridgeIsbn);
+      if (looked?.foreignBookId) {
+        logger.info(
+          `Bridged Bindery IDs via ISBN ${bridgeIsbn}: ${media.foreignBookId} → ${looked.foreignBookId}`,
+          { label: 'bindery' }
+        );
+        foreignBookId = looked.foreignBookId;
+        foreignAuthorId = looked.foreignAuthorId ?? foreignAuthorId;
+        resolvedAuthorName = looked.authorName ?? resolvedAuthorName;
+      } else {
+        logger.warn(
+          `Bindery ISBN lookup returned nothing for ${media.title}; will try authorName fallback`,
+          { label: 'bindery', isbn13: bridgeIsbn }
+        );
+      }
+    }
+
+    // Fallback for authorId still unresolved: try Bindery's author search.
     if (
       !foreignAuthorId &&
-      media.authorName &&
-      media.authorName.toLowerCase() !== 'unknown' &&
-      media.authorName.toLowerCase() !== 'unknown author'
+      resolvedAuthorName &&
+      resolvedAuthorName.toLowerCase() !== 'unknown' &&
+      resolvedAuthorName.toLowerCase() !== 'unknown author'
     ) {
-      const matches = await api.searchAuthor(media.authorName);
+      const matches = await api.searchAuthor(resolvedAuthorName);
       foreignAuthorId = matches[0]?.foreignAuthorId;
       if (foreignAuthorId) {
         logger.info(
-          `Resolved foreignAuthorId via Bindery author search: ${media.authorName} → ${foreignAuthorId}`,
+          `Resolved foreignAuthorId via Bindery author search: ${resolvedAuthorName} → ${foreignAuthorId}`,
           { label: 'bindery' }
         );
       }
@@ -67,8 +105,8 @@ export async function submitToBindery(
       logger.warn(`Cannot dispatch to Bindery: no foreignAuthorId resolvable`, {
         label: 'bindery',
         title: media.title,
-        authorName: media.authorName,
-        foreignBookId: media.foreignBookId,
+        authorName: resolvedAuthorName,
+        foreignBookId,
       });
       return {
         success: false,
@@ -77,23 +115,54 @@ export async function submitToBindery(
     }
 
     let binderyBookId: number;
-    try {
-      const book = await api.addBook({
-        foreignBookId: media.foreignBookId,
+    const addBookOnce = () =>
+      api.addBook({
+        foreignBookId,
         foreignAuthorId,
-        authorName: media.authorName,
+        authorName: resolvedAuthorName,
         searchNow: !instance.preventSearch,
       });
-      binderyBookId = book.id;
+
+    const is404 = (err: unknown) => {
+      const axErr =
+        ((err as { cause?: { response?: { status?: number } } })?.cause as {
+          response?: { status?: number };
+        }) ??
+        (err as { response?: { status?: number } });
+      return axErr?.response?.status === 404;
+    };
+
+    try {
+      // Bindery's internal author-then-book sync can outlast its own poll
+      // window for slow upstream metadata sources. When it 404s with
+      // "try again shortly", retry a few times before falling back —
+      // by then the author + book records have usually landed.
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      let added;
+      try {
+        added = await addBookOnce();
+      } catch (e1) {
+        if (!is404(e1)) throw e1;
+        logger.info(
+          `Bindery sync incomplete for ${media.title}; retrying after 10s`,
+          { label: 'bindery' }
+        );
+        await sleep(10_000);
+        try {
+          added = await addBookOnce();
+        } catch (e2) {
+          if (!is404(e2)) throw e2;
+          logger.info(
+            `Bindery sync still incomplete for ${media.title}; final retry after 20s`,
+            { label: 'bindery' }
+          );
+          await sleep(20_000);
+          added = await addBookOnce();
+        }
+      }
+      binderyBookId = added.id;
     } catch (e) {
-      // Fallback for 404 "book not found after author sync": Bindery dedups
-      // author catalogues by title and may drop the canonical OpenLibrary
-      // Work. Look up the author's catalogue in Bindery and monitor the
-      // closest title match instead. The axios response may be one or two
-      // levels deep depending on whether addBook re-wraps the error.
-      const axErr = (e?.cause as { response?: { status?: number } }) ?? e;
-      const status = axErr?.response?.status;
-      if (status !== 404) {
+      if (!is404(e)) {
         throw e;
       }
 
@@ -135,6 +204,30 @@ export async function submitToBindery(
     }
 
     media.downloadManagerExternalId = String(binderyBookId);
+
+    // Bindery's POST /author/book always creates with mediaType="ebook".
+    // The book/audiobook distinction is a per-record flag the caller
+    // sets after the fact — otherwise an audiobook request lands as
+    // an ebook in Bindery and the searcher hits the wrong indexer
+    // category. The targetType already drives the instance lookup
+    // above, so it's the source of truth for which format the
+    // operator asked for.
+    try {
+      await api.setBookMediaType(
+        binderyBookId,
+        targetType === 'audiobook' ? 'audiobook' : 'ebook'
+      );
+    } catch (e) {
+      logger.warn(
+        `Bindery setBookMediaType failed for book ${binderyBookId}; download may target wrong format`,
+        {
+          label: 'bindery',
+          binderyBookId,
+          targetType,
+          error: e instanceof Error ? e.message : String(e),
+        }
+      );
+    }
 
     logger.info(
       `Dispatched to Bindery (${instance.name}): ${media.title}`,
