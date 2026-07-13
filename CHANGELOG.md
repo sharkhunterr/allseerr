@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.7](https://github.com/seerr-team/seerr/-/compare/v0.2.6...v0.2.7) (2026-07-13)
+
+
+### Features
+
+* **audiobook:** plumb ISBN13/10 through audiobook discovery so dispatchers can bridge ([8076fdc](https://github.com/seerr-team/seerr/-/commit/8076fdc67fdf2e8709af3136b45ef27073773ed2))
+* **livrarr:** integrate kkodecs/livrarr as a book / audiobook DM ([f58193f](https://github.com/seerr-team/seerr/-/commit/f58193fd17b364b852b27f3a4682998f8dfa531d))
+* **magazine, notices:** MagazineRequestModal + manual entry + revamped notice list ([52cdd9d](https://github.com/seerr-team/seerr/-/commit/52cdd9da554e3d067aa5945ca17d7e9df4334558))
+* **magazine:** apply logo treatment on the detail-page poster ([ffab874](https://github.com/seerr-team/seerr/-/commit/ffab87431734de38b6cd463f793547867812be4a))
+* **magazine:** cascade-first via pressarr — search + detail + discover ([a93a915](https://github.com/seerr-team/seerr/-/commit/a93a9157ed08b9fbbe58267edd224d9c38d1d26b))
+* **magazine:** detail page + request route + cascade-id propagation ([942cffa](https://github.com/seerr-team/seerr/-/commit/942cffa4803c15f5179499b88f227f97adaf7f51))
+* **magazine:** discover + search via Google Books printType=magazines ([cf74f8f](https://github.com/seerr-team/seerr/-/commit/cf74f8f6caef970c454ab580da10382749c0e6c6))
+* **magazine:** logo-aware card rendering + multi-ISSN search filter ([b2ff606](https://github.com/seerr-team/seerr/-/commit/b2ff606e8dc57fcd8ebb3f459f935b56eb75de0a))
+* **magazine:** new MAGAZINE media type — entity + migrations + foundation ([915574c](https://github.com/seerr-team/seerr/-/commit/915574cb3b26b4d7c763b9103ef8ea4eb77122ba))
+* **magazine:** on-card status + frequency badges, ongoing-only filter on /search ([c81ea1f](https://github.com/seerr-team/seerr/-/commit/c81ea1f56e051810e83493c25c441f1b5e2436e1))
+* **magazine:** Pressarr download-manager integration ([df13c04](https://github.com/seerr-team/seerr/-/commit/df13c04225ac9b06b9a4774fd45b5e61c16440cf))
+* **magazine:** redesign detail page to match book layout + add publication status chip ([414ba1c](https://github.com/seerr-team/seerr/-/commit/414ba1c45a65e8ee3fa633645a54d785f36c1644)), closes [#1](https://github.com/seerr-team/seerr/-/issues/1)
+* **magazine:** render "Related publications" section + plumb first_issued / ceased_at ([aa73d35](https://github.com/seerr-team/seerr/-/commit/aa73d35df73ea4bfd2971082d8d98eb3d3089517))
+* **magazine:** render full ISSN-L sibling list on detail page ([62d2bed](https://github.com/seerr-team/seerr/-/commit/62d2bed8fc09c08c1e566cd0f8f9b65ca38ab63a))
+* **magazine:** scene releases panel on the detail page (list / scan / grab) ([7b457d6](https://github.com/seerr-team/seerr/-/commit/7b457d63aa51699ebadced9250c8f29c9bc6365d))
+* **magazine:** sidebar + SettingsServices Magazines tab + Pressarr UI ([8feae94](https://github.com/seerr-team/seerr/-/commit/8feae94b77fa3e9ddeadb16fe65163d8b0b3bf16))
+* **magazine:** SlideOver-based filter panel + Multi-ISSN default ON ([7a9534c](https://github.com/seerr-team/seerr/-/commit/7a9534c69df6b4da6f75c94ba931065a1ebea0cd))
+* **magazine:** verified-only toggle on /search Magazines tab ([93b227c](https://github.com/seerr-team/seerr/-/commit/93b227cedfda4f97176c16dd92f4eefd5130037d))
+* **pressarr:** forward cascade enrichment to createMagazine ([e837778](https://github.com/seerr-team/seerr/-/commit/e837778b65db72b022fa18744e54fccc02d7c75a))
+* **search:** Magazines tab in global search backed by the cascade ([33990a9](https://github.com/seerr-team/seerr/-/commit/33990a95fbb66efca07e945fcc969421f13a955b))
+
+
+### Bug Fixes
+
+* **bindery:** bridge ISBN for audiobooks too, not just books ([9f59ddd](https://github.com/seerr-team/seerr/-/commit/9f59dddeb6018720dafb580fbe232729ddbddce7))
+* **bindery:** bridge non-OpenLibrary IDs via ISBN + retry author sync ([46ee2ff](https://github.com/seerr-team/seerr/-/commit/46ee2ffeae27be1a3de3d1f0dbd5fb5531db957c))
+* **bindery:** tag the added book as audiobook when requested via audio instance ([a396ac9](https://github.com/seerr-team/seerr/-/commit/a396ac95d85f49e8f5d0ed70196bb4242dd53fc4))
+* **grimmory:** correct auth endpoint + rename email → username ([5cd241a](https://github.com/seerr-team/seerr/-/commit/5cd241a444e70b0de5d01e687d99032e353c5bf1))
+* **livrarr:** switch client + dispatcher payloads to camelCase ([099e1d6](https://github.com/seerr-team/seerr/-/commit/099e1d685d7d0dc367df633b869e325db1590f5b))
+* **magazine:** declare status query param on /magazine/search OpenAPI yaml ([09871cb](https://github.com/seerr-team/seerr/-/commit/09871cb31a6b6228c25e49a326bd8f007e6f4dbd))
+* **magazine:** import getRepository from @server/datasource, not typeorm ([6ce1a79](https://github.com/seerr-team/seerr/-/commit/6ce1a79711d81c05b87d152c5e407b78f3fd9405))
+* **magazine:** include MAGAZINE in isNonTmdbType so dashboard cards stop reading null tmdbId ([3780208](https://github.com/seerr-team/seerr/-/commit/3780208c02cf154048a1bb937b840e566109c9cf))
+* **magazine:** OpenAPI yaml entries + discover-loop optimization ([98c94e1](https://github.com/seerr-team/seerr/-/commit/98c94e1d5ba5a9a1aa21f42193559d32bc7ff932))
+* **test-stack:** bind pressarr /config so credentials survive image rebuilds ([8b27018](https://github.com/seerr-team/seerr/-/commit/8b27018d2101d9b9b73e289bf0697f592a7284fe))
+* **test-stack:** mount JD2 folderwatch at /config/folderwatch (its default) ([a86d6ae](https://github.com/seerr-team/seerr/-/commit/a86d6ae2ed208231f9638376eb4da76fb5a5f5ea))
+* **test-stack:** point pressarr at romarr's real qBit downloads dir ([2f5a571](https://github.com/seerr-team/seerr/-/commit/2f5a5719078c13306ac59ff5c1e3640afadb9fc3))
+
 ### [0.2.6](https://github.com/seerr-team/seerr/-/compare/v0.2.5...v0.2.6) (2026-05-28)
 
 
